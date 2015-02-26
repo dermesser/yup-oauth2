@@ -7,6 +7,7 @@ repository = "https://github.com/Byron/yup/lib/oauth2"
 description = """A partial oauth2 implementation, providing the 'device' authorization flow.
 More information about how it's done can be found here: https://developers.google.com/youtube/v3/guides/authentication#devices
 """
+documentation = "http://byron.github.io/yup-oauth2"
 
 [dependencies]
 chrono = "*"
