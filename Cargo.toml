@@ -1,0 +1,24 @@
+[package]
+
+name = "yup-oauth2"
+version = "0.0.1"
+authors = ["Sebastian Thiel <byronimo@gmail.com>"]
+repository = "https://github.com/Byron/yup/lib/oauth2"
+description = """A partial oauth2 implementation, providing the 'device' authorization flow.
+More information about how it's done can be found here: https://developers.google.com/youtube/v3/guides/authentication#devices
+"""
+
+[dependencies]
+chrono = "*"
+hyper = "*"
+log = "*"
+mime = "*"
+url = "*"
+itertools = "*"
+rustc-serialize = "*"
+
+[dev-dependencies]
+getopts = "*"
+
+[dev-dependencies.yup-hyper-mock]
+path = "../hyper-mock"
