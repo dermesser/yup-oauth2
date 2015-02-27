@@ -330,13 +330,14 @@ impl<'a> DeviceFlowHelper<'a> {
     /// Blocks until a token was retrieved from the server, or the delegate 
     /// decided to abort the attempt, or the user decided not to authorize 
     /// the application.
-    pub fn retrieve_token<'b, NC, T, I>(&mut self,
-                                    client: hyper::Client<NC>, 
+    pub fn retrieve_token<'b, C, NC, T, I>(&mut self,
+                                    client: C, 
                                     client_id: &str, client_secret: &str, scopes: I) 
                                     -> Option<Token>
                                     where T: Str,
                                           I: IntoIterator<Item=&'b T> + Clone,
-                                          NC: hyper::net::NetworkConnector  {
+                                          NC: hyper::net::NetworkConnector,
+                                          C: BorrowMut<hyper::Client<NC>>  {
         let mut flow = DeviceFlow::new(client);
 
         // PHASE 1: REQUEST CODE

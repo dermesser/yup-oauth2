@@ -150,7 +150,7 @@ mod tests {
                                     "bogus", "secret", "bogus_refresh_token") {
             RefreshResult::Success(ref t) => {
                 assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
-                assert!(!t.expired() && !t.invalid());
+                assert!(!t.expired());
             },
             _ => unreachable!()
         }

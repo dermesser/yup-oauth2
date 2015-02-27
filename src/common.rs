@@ -17,7 +17,7 @@ pub trait Flow : MarkerTrait {
 /// for the two fields dealing with expiry - once in relative in and once in 
 /// absolute terms.
 /// 
-/// Utility methods make common queries easier, see `invalid()` or `expired()`.
+/// Utility methods make common queries easier, see `expired()`.
 #[derive(Clone, PartialEq, Debug, RustcDecodable, RustcEncodable)]
 pub struct Token {
     /// used when authenticating calls to oauth2 enabled services.
@@ -35,13 +35,6 @@ pub struct Token {
 }
 
 impl Token {
-
-    /// Returns true if the access token is expired or unset.
-    pub fn invalid(&self) -> bool {
-        self.access_token.len() == 0
-        || self.refresh_token.len() == 0
-        || self.expired()
-    }
 
     /// Returns true if we are expired.
     ///

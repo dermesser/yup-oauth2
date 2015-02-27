@@ -4,8 +4,6 @@
 
 It is implemented such that it makes no assumptions about the front-end, allowing more uses than just in yup.
 
-Architecturally, it may never be implementing more than device authentication, yet is set up not to constrain itself.
-
 ### Usage
 
 Please have a look at the [API landing page][API-docs] for all the examples you will ever need.
