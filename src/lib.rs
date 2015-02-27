@@ -51,8 +51,7 @@
 //! use oauth2::{RefreshFlow, AuthenticationType, RefreshResult};
 //!
 //! # #[test] fn refresh() {
-//! let mut c = hyper::Client::new();
-//! let mut f = RefreshFlow::new(&mut c);
+//! let mut f = RefreshFlow::new(hyper::Client::new());
 //! let new_token = match *f.refresh_token(AuthenticationType::Device,
 //!                                        "my_client_id", "my_secret",
 //!                                        "my_refresh_token") {

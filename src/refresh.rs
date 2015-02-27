@@ -6,15 +6,19 @@ use hyper::header::ContentType;
 use rustc_serialize::json;
 use url::form_urlencoded;
 use super::Token;
+use std::borrow::BorrowMut;
+use std::marker::PhantomData;
 
 /// Implements the [Outh2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
 /// 
 /// Refresh an expired access token, as obtained by any other authentication flow.
 /// This flow is useful when your `Token` is expired and allows to obtain a new
 /// and valid access token.
-pub struct RefreshFlow<'a, NC> where NC: 'a {
-    client: &'a mut hyper::Client<NC>,
+pub struct RefreshFlow<C, NC> 
+    where  C: BorrowMut<hyper::Client<NC>> {
+    client: C,
     result: RefreshResult,
+    _m: PhantomData<NC>,
 }
 
 
@@ -28,13 +32,15 @@ pub enum RefreshResult {
     Success(Token),
 }
 
-impl<'a, NC> RefreshFlow<'a, NC>
-    where NC: hyper::net::NetworkConnector {
+impl<C, NC> RefreshFlow<C, NC>
+    where NC: hyper::net::NetworkConnector,
+           C: BorrowMut<hyper::Client<NC>> {
 
-    pub fn new(client: &'a mut hyper::Client<NC>) -> RefreshFlow<NC> {
+    pub fn new(client: C) -> RefreshFlow<C, NC> {
         RefreshFlow {
             client: client,
             result: RefreshResult::Error(hyper::HttpError::HttpStatusError),
+            _m: PhantomData,
         }
     }
 
@@ -67,7 +73,7 @@ impl<'a, NC> RefreshFlow<'a, NC>
                                 .iter().cloned());
 
         let json_str = 
-            match self.client.post(auth_type.as_slice())
+            match self.client.borrow_mut().post(auth_type.as_slice())
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                .body(req.as_slice())
                .send() {
