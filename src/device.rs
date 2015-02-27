@@ -150,7 +150,7 @@ impl<NC> DeviceFlow<NC>
                                    .collect::<String>()
                                    .as_slice())].iter().cloned());
 
-        match self.client.post(AuthenticationType::Device.url())
+        match self.client.post(AuthenticationType::Device.as_slice())
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                .body(req.as_slice())
                .send() {

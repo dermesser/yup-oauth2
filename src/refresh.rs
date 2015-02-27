@@ -68,7 +68,7 @@ impl<NC> RefreshFlow<NC>
                                 .iter().cloned());
 
         let json_str = 
-            match self.client.post(auth_type.url())
+            match self.client.post(auth_type.as_slice())
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                .body(req.as_slice())
                .send() {

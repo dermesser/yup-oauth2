@@ -23,9 +23,9 @@ pub enum AuthenticationType {
     Device,
 }
 
-impl AuthenticationType {
+impl Str for AuthenticationType {
     /// Converts itself into a URL string
-    pub fn url(&self) -> &'static str {
+    fn as_slice(&self) -> &'static str {
         match *self {
             AuthenticationType::Device => "https://accounts.google.com/o/oauth2/device/code",
         }
