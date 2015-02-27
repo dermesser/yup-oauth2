@@ -262,14 +262,6 @@ impl<NC> DeviceFlow<NC>
                 };
 
                 #[derive(RustcDecodable)]
-                struct JsonToken {
-                    access_token: String,
-                    refresh_token: String,
-                    token_type: String,
-                    expires_in: i64,
-                }
-
-                #[derive(RustcDecodable)]
                 struct JsonError {
                     error: String
                 }
@@ -288,13 +280,9 @@ impl<NC> DeviceFlow<NC>
                 }
 
                 // yes, we expect that !
-                let t: JsonToken = json::decode(&json_str).unwrap();
-                self.state = PollResult::AccessGranted(Token {
-                    access_token: t.access_token,
-                    refresh_token: t.refresh_token,
-                    token_type: t.token_type,
-                    expires_at: UTC::now() + Duration::seconds(t.expires_in)
-                });
+                let mut t: Token = json::decode(&json_str).unwrap();
+                t.set_expiry_absolute();
+                self.state = PollResult::AccessGranted(t);
             },
             // In any other state, we will bail out and do nothing
             _ => {}

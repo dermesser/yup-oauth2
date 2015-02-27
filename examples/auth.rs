@@ -1,3 +1,4 @@
+#![feature(env, collections)]
 extern crate "yup-oauth2" as oauth2;
 extern crate "yup-hyper-mock" as mock;
 extern crate hyper;
@@ -6,14 +7,12 @@ extern crate getopts;
 
 use chrono::{Local};
 use getopts::{HasArg,Options,Occur,Fail};
-use std::os;
-use std::old_io::{File, FileMode, FileAccess};
-use std::old_path::Path;
+use std::env;
 
 fn usage(program: &str, opts: &Options, err: Option<Fail>) {
     if err.is_some() {
         println!("{}", err.unwrap());
-        os::set_exit_status(1);
+        env::set_exit_status(1);
     }
     println!("{}", opts.short_usage(program) + " SCOPE [SCOPE ...]");
     println!("{}", opts.usage("A program to authenticate against oauthv2 services.\n\
@@ -22,7 +21,7 @@ fn usage(program: &str, opts: &Options, err: Option<Fail>) {
 }
 
 fn main() {
-    let args = os::args();
+    let args: Vec<String> = env::args().collect();
     let prog = args[0].clone();
 
     let mut opts = Options::new();
@@ -70,6 +69,6 @@ fn main() {
             println!("{:?}", t);
     } else {
         println!("Invalid client id, invalid scope, user denied access or request expired");
-        os::set_exit_status(10);
+        env::set_exit_status(10);
     }
 }

@@ -1,20 +1,70 @@
-use chrono::{DateTime, UTC};
+use chrono::{DateTime, UTC, TimeZone};
 
 /// Represents a token as returned by OAuth2 servers.
 ///
 /// It is produced by all authentication flows.
 /// It authenticates certain operations, and must be refreshed once 
-/// it reached it's expirey date.
-#[derive(Clone, PartialEq, Debug)]
+/// it reached it's expiry date.
+///
+/// The type is tuned to be suitable for direct de-serialization from server
+/// replies, as well as for serialization for later reuse. This is the reason
+/// for the two fields dealing with expiry - once in relative in and once in 
+/// absolute terms.
+/// 
+/// Utility methods make common queries easier, see `invalid()` or `expired()`.
+#[derive(Clone, PartialEq, Debug, RustcDecodable, RustcEncodable)]
 pub struct Token {
-    /// used when authenticating calls to oauth2 enabled services
+    /// used when authenticating calls to oauth2 enabled services.
     pub access_token: String,
-    /// used to refresh an expired access_token
+    /// used to refresh an expired access_token.
     pub refresh_token: String,
-    /// The token type as string - usually 'Bearer'
+    /// The token type as string - usually 'Bearer'.
     pub token_type: String,
-    /// access_token is not valid for use after this date
-    pub expires_at: DateTime<UTC>
+    /// access_token will expire after this amount of time.
+    /// Prefer using expiry_date()
+    pub expires_in: Option<i64>,
+
+    /// timestamp is seconds since epoch indicating when the token will expire in absolute terms.
+    /// use expiry_date() to convert to DateTime.
+    pub expires_in_timestamp: Option<i64>,
+}
+
+impl Token {
+
+    /// Returns true if the access token is expired or unset.
+    pub fn invalid(&self) -> bool {
+        self.access_token.len() == 0
+        || self.refresh_token.len() == 0
+        || self.expired()
+    }
+
+    /// Returns true if we are expired.
+    ///
+    /// # Panics
+    /// * if our access_token is unset
+    pub fn expired(&self) -> bool {
+        if self.access_token.len() == 0 || self.refresh_token.len() == 0 {
+            panic!("called expired() on unset token");
+        }
+        self.expiry_date() <= UTC::now()
+    }
+
+    /// Returns a DateTime object representing our expiry date.
+    pub fn expiry_date(&self) -> DateTime<UTC> {
+        UTC.timestamp(self.expires_in_timestamp.unwrap(), 0)
+    }
+
+    /// Adjust our stored expiry format to be absolute, using the current time.
+    pub fn set_expiry_absolute(&mut self) -> &mut Token {
+        if self.expires_in_timestamp.is_some() {
+            assert!(self.expires_in.is_none());
+            return self
+        }
+
+        self.expires_in_timestamp = Some(UTC::now().timestamp() + self.expires_in.unwrap());
+        self.expires_in = None;
+        self
+    }
 }
 
 /// All known authentication types, for suitable constants
@@ -74,7 +124,7 @@ mod tests {
     fn console_secret() {
         use rustc_serialize::json;
         match json::decode::<ConsoleApplicationSecret>(SECRET) {
-            Ok(s) => assert!(s.installed.is_some()),
+            Ok(s) => assert!(s.installed.is_some() && s.web.is_none()),
             Err(err) => panic!(err),
         }
     }

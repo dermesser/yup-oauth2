@@ -1,6 +1,5 @@
 use common::AuthenticationType;
 
-use std::time::Duration;
 use chrono::UTC;
 use hyper;
 use hyper::header::ContentType;
@@ -106,7 +105,8 @@ impl<NC> RefreshFlow<NC>
             access_token: t.access_token,
             token_type: t.token_type,
             refresh_token: refresh_token.to_string(),
-            expires_at: UTC::now() + Duration::seconds(t.expires_in)
+            expires_in: None,
+            expires_in_timestamp: Some(UTC::now().timestamp() + t.expires_in),
         });
 
         &self.result
@@ -142,8 +142,10 @@ mod tests {
 
         match *flow.refresh_token(AuthenticationType::Device, 
                                     "bogus", "secret", "bogus_refresh_token") {
-            RefreshResult::Success(ref t) => assert_eq!(t.access_token, 
-                                                        "1/fFAGRNJru1FTz70BzhT3Zg"),
+            RefreshResult::Success(ref t) => {
+                assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
+                assert!(!t.expired() && !t.invalid());
+            },
             _ => unreachable!()
         }
     }
