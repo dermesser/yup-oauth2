@@ -21,6 +21,5 @@ rustc-serialize = "*"
 
 [dev-dependencies]
 getopts = "*"
+yup-hyper-mock = "*"
 
-[dev-dependencies.yup-hyper-mock]
-git = "https://github.com/Byron/yup-hyper-mock"
