@@ -82,5 +82,5 @@ mod common;
 pub use device::{DeviceFlow, PollInformation, PollResult, DeviceFlowHelper, 
                  DeviceFlowHelperDelegate, Retry};
 pub use refresh::{RefreshFlow, RefreshResult};
-pub use common::{Token, AuthenticationType};
+pub use common::{Token, AuthenticationType, ApplicationSecret, ConsoleApplicationSecret};
 
