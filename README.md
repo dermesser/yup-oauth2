@@ -16,7 +16,6 @@ The video below shows the *auth* example in action. It's meant to be used as uti
 
 ![usage][auth-usage]
 
-
 [API-docs]: http://byron.github.io/yup-oauth2
 [examples]: https://github.com/Byron/yup-oauth2/tree/master/examples
 [auth-usage]: https://raw.githubusercontent.com/Byron/yup-oauth2/master/examples/auth.rs-usage.gif
