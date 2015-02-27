@@ -1,8 +1,10 @@
 extern crate "yup-oauth2" as oauth2;
 extern crate "yup-hyper-mock" as mock;
 extern crate hyper;
+extern crate chrono;
 extern crate getopts;
 
+use chrono::{Local};
 use getopts::{HasArg,Options,Occur,Fail};
 use std::os;
 use std::old_io::{File, FileMode, FileAccess};
@@ -53,7 +55,7 @@ fn main() {
                       given scopes. This is not a test !\n\
                       You have time until {} to do that.
                       Do not terminate the program until you deny or grant access !",
-                      pi.user_code, pi.verification_url, pi.expires_at);
+                      pi.user_code, pi.verification_url, pi.expires_at.with_timezone(&Local));
         }
     }
 
@@ -64,6 +66,7 @@ fn main() {
                     .retrieve_token(client, &client_id, &client_secret, &m.free) {
             println!("Authentication granted !");
             println!("You should store the following information for use, or revoke it.");
+            println!("All dates are given in UTC.");
             println!("{:?}", t);
     } else {
         println!("Invalid client id, invalid scope, user denied access or request expired");

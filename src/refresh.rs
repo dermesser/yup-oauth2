@@ -4,7 +4,7 @@ use std::time::Duration;
 use chrono::UTC;
 use hyper;
 use hyper::header::ContentType;
-use rustc_serialize::{self, json};
+use rustc_serialize::json;
 use url::form_urlencoded;
 use super::Token;
 

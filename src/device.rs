@@ -8,7 +8,7 @@ use hyper;
 use hyper::header::ContentType;
 use url::form_urlencoded;
 use itertools::Itertools;
-use rustc_serialize::{self, json};
+use rustc_serialize::json;
 use chrono::{DateTime,UTC};
 
 use common::{Token, AuthenticationType};
