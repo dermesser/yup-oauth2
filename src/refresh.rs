@@ -14,10 +14,10 @@ use std::marker::PhantomData;
 /// Refresh an expired access token, as obtained by any other authentication flow.
 /// This flow is useful when your `Token` is expired and allows to obtain a new
 /// and valid access token.
-pub struct RefreshFlow<C, NC> 
-    where  C: BorrowMut<hyper::Client<NC>> {
+pub struct RefreshFlow<C, NC> {
     client: C,
     result: RefreshResult,
+
     _m: PhantomData<NC>,
 }
 

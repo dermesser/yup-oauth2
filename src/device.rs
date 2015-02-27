@@ -10,6 +10,8 @@ use url::form_urlencoded;
 use itertools::Itertools;
 use rustc_serialize::json;
 use chrono::{DateTime,UTC};
+use std::borrow::BorrowMut;
+use std::marker::PhantomData;
 
 use common::{Token, AuthenticationType, Flow};
 
@@ -19,15 +21,17 @@ pub const GOOGLE_TOKEN_URL: &'static str = "https://accounts.google.com/o/oauth2
 /// It operates in two steps:
 /// * obtain a code to show to the user
 /// * (repeatedly) poll for the user to authenticate your application
-pub struct DeviceFlow<NC> {
-    client: hyper::Client<NC>,
+pub struct DeviceFlow<C, NC> {
+    client: C,
     device_code: String,
     state: PollResult,
     secret: String,
     id: String,
+
+    _m: PhantomData<NC>,
 }
 
-impl<NC> Flow for DeviceFlow<NC> {
+impl<C, NC> Flow for DeviceFlow<C, NC> {
     fn type_id() -> AuthenticationType {
         AuthenticationType::Device
     }
@@ -99,8 +103,9 @@ impl Default for PollResult {
     }
 }
 
-impl<NC> DeviceFlow<NC> 
-    where NC: hyper::net::NetworkConnector {
+impl<C, NC> DeviceFlow<C, NC> 
+    where   C: BorrowMut<hyper::Client<NC>>,
+            NC: hyper::net::NetworkConnector {
 
     /// # Examples
     /// ```test_harness
@@ -112,13 +117,14 @@ impl<NC> DeviceFlow<NC>
     /// let mut f = DeviceFlow::new(hyper::Client::new());
     /// # }
     /// ```
-    pub fn new(client: hyper::Client<NC>) -> DeviceFlow<NC> {
+    pub fn new(client: C) -> DeviceFlow<C, NC> {
         DeviceFlow {
             client: client,
             device_code: Default::default(),
             secret: Default::default(),
             id: Default::default(),
             state: Default::default(),
+            _m: PhantomData,
         }
     }
 
@@ -156,7 +162,7 @@ impl<NC> DeviceFlow<NC>
                                    .collect::<String>()
                                    .as_slice())].iter().cloned());
 
-        match self.client.post(AuthenticationType::Device.as_slice())
+        match self.client.borrow_mut().post(AuthenticationType::Device.as_slice())
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                .body(req.as_slice())
                .send() {
@@ -255,7 +261,7 @@ impl<NC> DeviceFlow<NC>
                                 .iter().cloned());
 
                 let json_str = 
-                    match self.client.post(GOOGLE_TOKEN_URL)
+                    match self.client.borrow_mut().post(GOOGLE_TOKEN_URL)
                        .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                        .body(req.as_slice())
                        .send() {
