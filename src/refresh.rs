@@ -12,8 +12,8 @@ use super::Token;
 /// Refresh an expired access token, as obtained by any other authentication flow.
 /// This flow is useful when your `Token` is expired and allows to obtain a new
 /// and valid access token.
-pub struct RefreshFlow<NC> {
-    client: hyper::Client<NC>,
+pub struct RefreshFlow<'a, NC> where NC: 'a {
+    client: &'a mut hyper::Client<NC>,
     result: RefreshResult,
 }
 
@@ -28,10 +28,10 @@ pub enum RefreshResult {
     Success(Token),
 }
 
-impl<NC> RefreshFlow<NC>
+impl<'a, NC> RefreshFlow<'a, NC>
     where NC: hyper::net::NetworkConnector {
 
-    pub fn new(client: hyper::Client<NC>) -> RefreshFlow<NC> {
+    pub fn new(client: &'a mut hyper::Client<NC>) -> RefreshFlow<NC> {
         RefreshFlow {
             client: client,
             result: RefreshResult::Error(hyper::HttpError::HttpStatusError),
@@ -135,9 +135,9 @@ mod tests {
 
     #[test]
     fn refresh_flow() {
+        let mut c = hyper::Client::with_connector(<MockGoogleRefresh as Default>::default());
         let mut flow = RefreshFlow::new(
-                            hyper::Client::with_connector(
-                                    <MockGoogleRefresh as Default>::default()));
+                            &mut c);
 
 
         match *flow.refresh_token(AuthenticationType::Device, 

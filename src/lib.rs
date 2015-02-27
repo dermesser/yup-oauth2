@@ -51,7 +51,8 @@
 //! use oauth2::{RefreshFlow, AuthenticationType, RefreshResult};
 //!
 //! # #[test] fn refresh() {
-//! let mut f = RefreshFlow::new(hyper::Client::new());
+//! let mut c = hyper::Client::new();
+//! let mut f = RefreshFlow::new(&mut c);
 //! let new_token = match *f.refresh_token(AuthenticationType::Device,
 //!                                        "my_client_id", "my_secret",
 //!                                        "my_refresh_token") {
@@ -78,9 +79,10 @@ extern crate "rustc-serialize" as rustc_serialize;
 mod device;
 mod refresh;
 mod common;
+mod util;
 
 pub use device::{DeviceFlow, PollInformation, PollResult, DeviceFlowHelper, 
                  DeviceFlowHelperDelegate, Retry};
 pub use refresh::{RefreshFlow, RefreshResult};
 pub use common::{Token, AuthenticationType, ApplicationSecret, ConsoleApplicationSecret};
-
+pub use util::TokenStorage;

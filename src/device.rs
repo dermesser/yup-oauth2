@@ -11,7 +11,7 @@ use itertools::Itertools;
 use rustc_serialize::json;
 use chrono::{DateTime,UTC};
 
-use common::{Token, AuthenticationType};
+use common::{Token, AuthenticationType, Flow};
 
 pub const GOOGLE_TOKEN_URL: &'static str = "https://accounts.google.com/o/oauth2/token";
 
@@ -25,6 +25,12 @@ pub struct DeviceFlow<NC> {
     state: PollResult,
     secret: String,
     id: String,
+}
+
+impl<NC> Flow for DeviceFlow<NC> {
+    fn type_id() -> AuthenticationType {
+        AuthenticationType::Device
+    }
 }
 
 

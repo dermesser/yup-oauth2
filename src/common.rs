@@ -1,4 +1,10 @@
 use chrono::{DateTime, UTC, TimeZone};
+use std::marker::MarkerTrait;
+
+/// A marker trait for all Flows
+pub trait Flow : MarkerTrait {
+    fn type_id() -> AuthenticationType;
+}
 
 /// Represents a token as returned by OAuth2 servers.
 ///
@@ -23,7 +29,6 @@ pub struct Token {
     /// access_token will expire after this amount of time.
     /// Prefer using expiry_date()
     pub expires_in: Option<i64>,
-
     /// timestamp is seconds since epoch indicating when the token will expire in absolute terms.
     /// use expiry_date() to convert to DateTime.
     pub expires_in_timestamp: Option<i64>,
