@@ -410,7 +410,7 @@ pub trait DeviceFlowHelperDelegate {
     /// 
     /// Return retry information.
     fn connection_error(&mut self, hyper::HttpError) -> Retry {
-        Retry::After(Duration::seconds(5))
+        Retry::Abort
     }
 
     /// The server denied the attempt to obtain a request code
