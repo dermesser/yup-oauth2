@@ -21,4 +21,4 @@ rustc-serialize = "*"
 [dev-dependencies]
 getopts = "*"
 yup-hyper-mock = "*"
-
+open = "*"

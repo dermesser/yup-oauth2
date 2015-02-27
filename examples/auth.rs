@@ -1,13 +1,17 @@
-#![feature(env, collections)]
+#![feature(env, collections, old_io, std_misc)]
 extern crate "yup-oauth2" as oauth2;
 extern crate "yup-hyper-mock" as mock;
 extern crate hyper;
 extern crate chrono;
 extern crate getopts;
+extern crate open;
 
 use chrono::{Local};
 use getopts::{HasArg,Options,Occur,Fail};
 use std::env;
+use std::time::Duration;
+use std::old_io::timer::sleep;
+
 
 fn usage(program: &str, opts: &Options, err: Option<Fail>) {
     if err.is_some() {
@@ -55,6 +59,11 @@ fn main() {
                       You have time until {} to do that.
                       Do not terminate the program until you deny or grant access !",
                       pi.user_code, pi.verification_url, pi.expires_at.with_timezone(&Local));
+            let delay = Duration::seconds(5);
+            println!("Browser opens automatically in {} seconds", delay);
+            sleep(delay);
+            open::that(&pi.verification_url).ok();
+            println!("DONE - waiting for authorization ...");
         }
     }
 
