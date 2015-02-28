@@ -1,4 +1,4 @@
-use common::AuthenticationType;
+use common::FlowType;
 
 use chrono::UTC;
 use hyper;
@@ -58,7 +58,7 @@ impl<C, NC> RefreshFlow<C, NC>
     /// 
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub fn refresh_token(&mut self, auth_type: AuthenticationType, 
+    pub fn refresh_token(&mut self, flow_type: FlowType, 
                                     client_id: &str, client_secret: &str, 
                                     refresh_token: &str) -> &RefreshResult {
         if let RefreshResult::Success(_) = self.result {
@@ -73,7 +73,7 @@ impl<C, NC> RefreshFlow<C, NC>
                                 .iter().cloned());
 
         let json_str = 
-            match self.client.borrow_mut().post(auth_type.as_slice())
+            match self.client.borrow_mut().post(flow_type.as_slice())
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                .body(req.as_slice())
                .send() {
@@ -126,7 +126,7 @@ mod tests {
     use hyper;
     use std::default::Default;
     use super::*;
-    use super::super::AuthenticationType;
+    use super::super::FlowType;
 
     mock_connector_in_order!(MockGoogleRefresh { 
                                 "HTTP/1.1 200 OK\r\n\
@@ -146,7 +146,7 @@ mod tests {
                             &mut c);
 
 
-        match *flow.refresh_token(AuthenticationType::Device, 
+        match *flow.refresh_token(FlowType::Device, 
                                     "bogus", "secret", "bogus_refresh_token") {
             RefreshResult::Success(ref t) => {
                 assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");

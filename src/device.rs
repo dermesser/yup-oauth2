@@ -13,7 +13,7 @@ use chrono::{DateTime,UTC};
 use std::borrow::BorrowMut;
 use std::marker::PhantomData;
 
-use common::{Token, AuthenticationType, Flow};
+use common::{Token, FlowType, Flow};
 
 pub const GOOGLE_TOKEN_URL: &'static str = "https://accounts.google.com/o/oauth2/token";
 
@@ -32,8 +32,8 @@ pub struct DeviceFlow<C, NC> {
 }
 
 impl<C, NC> Flow for DeviceFlow<C, NC> {
-    fn type_id() -> AuthenticationType {
-        AuthenticationType::Device
+    fn type_id() -> FlowType {
+        FlowType::Device
     }
 }
 
@@ -162,7 +162,7 @@ impl<C, NC> DeviceFlow<C, NC>
                                    .collect::<String>()
                                    .as_slice())].iter().cloned());
 
-        match self.client.borrow_mut().post(AuthenticationType::Device.as_slice())
+        match self.client.borrow_mut().post(FlowType::Device.as_slice())
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                .body(req.as_slice())
                .send() {

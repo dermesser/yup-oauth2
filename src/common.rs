@@ -3,7 +3,7 @@ use std::marker::MarkerTrait;
 
 /// A marker trait for all Flows
 pub trait Flow : MarkerTrait {
-    fn type_id() -> AuthenticationType;
+    fn type_id() -> FlowType;
 }
 
 /// Represents a token as returned by OAuth2 servers.
@@ -66,23 +66,24 @@ impl Token {
 }
 
 /// All known authentication types, for suitable constants
-pub enum AuthenticationType {
+#[derive(Copy)]
+pub enum FlowType {
     /// [device authentication](https://developers.google.com/youtube/v3/guides/authentication#devices)
     Device,
 }
 
-impl Str for AuthenticationType {
+impl Str for FlowType {
     /// Converts itself into a URL string
     fn as_slice(&self) -> &'static str {
         match *self {
-            AuthenticationType::Device => "https://accounts.google.com/o/oauth2/device/code",
+            FlowType::Device => "https://accounts.google.com/o/oauth2/device/code",
         }
     }
 }
 
 /// Represents either 'installed' or 'web' applications in a json secrets file.
 /// See `ConsoleApplicationSecret` for more information
-#[derive(RustcDecodable, RustcEncodable)]
+#[derive(RustcDecodable, RustcEncodable, Clone)]
 pub struct ApplicationSecret {
     /// The client ID.
     pub client_id: String,

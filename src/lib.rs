@@ -48,11 +48,11 @@
 //! ```test_harness,no_run
 //! extern crate hyper;
 //! extern crate "yup-oauth2" as oauth2;
-//! use oauth2::{RefreshFlow, AuthenticationType, RefreshResult};
+//! use oauth2::{RefreshFlow, FlowType, RefreshResult};
 //!
 //! # #[test] fn refresh() {
 //! let mut f = RefreshFlow::new(hyper::Client::new());
-//! let new_token = match *f.refresh_token(AuthenticationType::Device,
+//! let new_token = match *f.refresh_token(FlowType::Device,
 //!                                        "my_client_id", "my_secret",
 //!                                        "my_refresh_token") {
 //!                        RefreshResult::Success(ref t) => t,
@@ -78,10 +78,9 @@ extern crate "rustc-serialize" as rustc_serialize;
 mod device;
 mod refresh;
 mod common;
-mod util;
+mod helper;
 
 pub use device::{DeviceFlow, PollInformation, PollResult, DeviceFlowHelper, 
                  DeviceFlowHelperDelegate, Retry};
 pub use refresh::{RefreshFlow, RefreshResult};
-pub use common::{Token, AuthenticationType, ApplicationSecret, ConsoleApplicationSecret};
-pub use util::TokenStorage;
+pub use common::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret};
