@@ -1,4 +1,4 @@
-use common::AuthenticationType;
+use common::FlowType;
 
 use chrono::UTC;
 use hyper;
@@ -6,15 +6,19 @@ use hyper::header::ContentType;
 use rustc_serialize::json;
 use url::form_urlencoded;
 use super::Token;
+use std::borrow::BorrowMut;
+use std::marker::PhantomData;
 
 /// Implements the [Outh2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
 /// 
 /// Refresh an expired access token, as obtained by any other authentication flow.
 /// This flow is useful when your `Token` is expired and allows to obtain a new
 /// and valid access token.
-pub struct RefreshFlow<NC> {
-    client: hyper::Client<NC>,
+pub struct RefreshFlow<C, NC> {
+    client: C,
     result: RefreshResult,
+
+    _m: PhantomData<NC>,
 }
 
 
@@ -28,13 +32,15 @@ pub enum RefreshResult {
     Success(Token),
 }
 
-impl<NC> RefreshFlow<NC>
-    where NC: hyper::net::NetworkConnector {
+impl<C, NC> RefreshFlow<C, NC>
+    where NC: hyper::net::NetworkConnector,
+           C: BorrowMut<hyper::Client<NC>> {
 
-    pub fn new(client: hyper::Client<NC>) -> RefreshFlow<NC> {
+    pub fn new(client: C) -> RefreshFlow<C, NC> {
         RefreshFlow {
             client: client,
             result: RefreshResult::Error(hyper::HttpError::HttpStatusError),
+            _m: PhantomData,
         }
     }
 
@@ -52,7 +58,7 @@ impl<NC> RefreshFlow<NC>
     /// 
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub fn refresh_token(&mut self, auth_type: AuthenticationType, 
+    pub fn refresh_token(&mut self, flow_type: FlowType, 
                                     client_id: &str, client_secret: &str, 
                                     refresh_token: &str) -> &RefreshResult {
         if let RefreshResult::Success(_) = self.result {
@@ -67,7 +73,7 @@ impl<NC> RefreshFlow<NC>
                                 .iter().cloned());
 
         let json_str = 
-            match self.client.post(auth_type.as_slice())
+            match self.client.borrow_mut().post(flow_type.as_slice())
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                .body(req.as_slice())
                .send() {
@@ -120,7 +126,7 @@ mod tests {
     use hyper;
     use std::default::Default;
     use super::*;
-    use super::super::AuthenticationType;
+    use super::super::FlowType;
 
     mock_connector_in_order!(MockGoogleRefresh { 
                                 "HTTP/1.1 200 OK\r\n\
@@ -135,16 +141,16 @@ mod tests {
 
     #[test]
     fn refresh_flow() {
+        let mut c = hyper::Client::with_connector(<MockGoogleRefresh as Default>::default());
         let mut flow = RefreshFlow::new(
-                            hyper::Client::with_connector(
-                                    <MockGoogleRefresh as Default>::default()));
+                            &mut c);
 
 
-        match *flow.refresh_token(AuthenticationType::Device, 
+        match *flow.refresh_token(FlowType::Device, 
                                     "bogus", "secret", "bogus_refresh_token") {
             RefreshResult::Success(ref t) => {
                 assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
-                assert!(!t.expired() && !t.invalid());
+                assert!(!t.expired());
             },
             _ => unreachable!()
         }

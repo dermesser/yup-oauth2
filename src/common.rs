@@ -1,4 +1,10 @@
 use chrono::{DateTime, UTC, TimeZone};
+use std::marker::MarkerTrait;
+
+/// A marker trait for all Flows
+pub trait Flow : MarkerTrait {
+    fn type_id() -> FlowType;
+}
 
 /// Represents a token as returned by OAuth2 servers.
 ///
@@ -11,7 +17,7 @@ use chrono::{DateTime, UTC, TimeZone};
 /// for the two fields dealing with expiry - once in relative in and once in 
 /// absolute terms.
 /// 
-/// Utility methods make common queries easier, see `invalid()` or `expired()`.
+/// Utility methods make common queries easier, see `expired()`.
 #[derive(Clone, PartialEq, Debug, RustcDecodable, RustcEncodable)]
 pub struct Token {
     /// used when authenticating calls to oauth2 enabled services.
@@ -23,20 +29,12 @@ pub struct Token {
     /// access_token will expire after this amount of time.
     /// Prefer using expiry_date()
     pub expires_in: Option<i64>,
-
     /// timestamp is seconds since epoch indicating when the token will expire in absolute terms.
     /// use expiry_date() to convert to DateTime.
     pub expires_in_timestamp: Option<i64>,
 }
 
 impl Token {
-
-    /// Returns true if the access token is expired or unset.
-    pub fn invalid(&self) -> bool {
-        self.access_token.len() == 0
-        || self.refresh_token.len() == 0
-        || self.expired()
-    }
 
     /// Returns true if we are expired.
     ///
@@ -68,23 +66,24 @@ impl Token {
 }
 
 /// All known authentication types, for suitable constants
-pub enum AuthenticationType {
+#[derive(Copy)]
+pub enum FlowType {
     /// [device authentication](https://developers.google.com/youtube/v3/guides/authentication#devices)
     Device,
 }
 
-impl Str for AuthenticationType {
+impl Str for FlowType {
     /// Converts itself into a URL string
     fn as_slice(&self) -> &'static str {
         match *self {
-            AuthenticationType::Device => "https://accounts.google.com/o/oauth2/device/code",
+            FlowType::Device => "https://accounts.google.com/o/oauth2/device/code",
         }
     }
 }
 
 /// Represents either 'installed' or 'web' applications in a json secrets file.
 /// See `ConsoleApplicationSecret` for more information
-#[derive(RustcDecodable, RustcEncodable)]
+#[derive(RustcDecodable, RustcEncodable, Clone)]
 pub struct ApplicationSecret {
     /// The client ID.
     pub client_id: String,
@@ -109,16 +108,16 @@ pub struct ApplicationSecret {
 /// as returned by the [google developer console](https://code.google.com/apis/console)
 #[derive(RustcDecodable, RustcEncodable)]
 pub struct ConsoleApplicationSecret {
-    web: Option<ApplicationSecret>,
-    installed: Option<ApplicationSecret>
+    pub web: Option<ApplicationSecret>,
+    pub installed: Option<ApplicationSecret>
 }
 
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
 
-    const SECRET: &'static str = "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.googleusercontent.com\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\"}}";
+    pub const SECRET: &'static str = "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.googleusercontent.com\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\"}}";
 
     #[test]
     fn console_secret() {

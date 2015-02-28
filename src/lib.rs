@@ -1,4 +1,4 @@
-#![feature(old_io, std_misc, core)]
+#![feature(old_io, std_misc, core, hash)]
 //! This library can be used to acquire oauth2.0 authentication for services.
 //! At the time of writing, only one way of doing so is implemented, the [device flow](https://developers.google.com/youtube/v3/guides/authentication#devices), along with a flow 
 //! for [refreshing tokens](https://developers.google.com/youtube/v3/guides/authentication#devices)
@@ -16,27 +16,26 @@
 //! ```test_harness,no_run
 //! extern crate hyper;
 //! extern crate "yup-oauth2" as oauth2;
-//! use oauth2::{DeviceFlowHelper, DeviceFlowHelperDelegate, PollInformation};
+//! extern crate "rustc-serialize" as rustc_serialize;
+//! 
+//! use oauth2::{Authenticator, DefaultAuthenticatorDelegate, PollInformation, ConsoleApplicationSecret, MemoryStorage};
+//! use rustc_serialize::json;
+//! use std::default::Default;
+//! # const SECRET: &'static str = "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.googleusercontent.com\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\"}}";
 //!
 //! # #[test] fn device() {
-//! struct PrintHandler;
-//! impl DeviceFlowHelperDelegate for PrintHandler {
-//!     fn present_user_code(&mut self, pi: PollInformation) {
-//!          println!{"Please enter {} at {} and grant access to this application", 
-//!                    pi.user_code, pi.verification_url}
-//!          println!("Do not close this application until you either denied or granted access");
-//!     }
-//! }
-//! if let Some(t) = DeviceFlowHelper::new(&mut PrintHandler)
-//!                  .retrieve_token(hyper::Client::new(),
-//!                                  "your_client_id",
-//!                                  "your_secret",
-//!                                  &["https://www.googleapis.com/auth/youtube.upload"]) {
+//! let secret = json::decode::<ConsoleApplicationSecret>(SECRET).unwrap().installed.unwrap();
+//! let res = Authenticator::new(&secret, DefaultAuthenticatorDelegate,
+//!                         hyper::Client::new(),
+//!                         <MemoryStorage as Default>::default(), None)
+//!                         .token(&["https://www.googleapis.com/auth/youtube.upload"]);
+//! match res {
+//!     Some(t) => {
 //!     // now you can use t.access_token to authenticate API calls within your
 //!     // given scopes. It will not be valid forever, which is when you have to 
 //!     // refresh it using the `RefreshFlow`
-//! } else {
-//!     println!("user declined");
+//!     },
+//!     None => println!("user declined"),
 //! }
 //! # }
 //! ```
@@ -48,11 +47,11 @@
 //! ```test_harness,no_run
 //! extern crate hyper;
 //! extern crate "yup-oauth2" as oauth2;
-//! use oauth2::{RefreshFlow, AuthenticationType, RefreshResult};
+//! use oauth2::{RefreshFlow, FlowType, RefreshResult};
 //!
 //! # #[test] fn refresh() {
 //! let mut f = RefreshFlow::new(hyper::Client::new());
-//! let new_token = match *f.refresh_token(AuthenticationType::Device,
+//! let new_token = match *f.refresh_token(FlowType::Device,
 //!                                        "my_client_id", "my_secret",
 //!                                        "my_refresh_token") {
 //!                        RefreshResult::Success(ref t) => t,
@@ -78,9 +77,10 @@ extern crate "rustc-serialize" as rustc_serialize;
 mod device;
 mod refresh;
 mod common;
+mod helper;
 
-pub use device::{DeviceFlow, PollInformation, PollResult, DeviceFlowHelper, 
-                 DeviceFlowHelperDelegate, Retry};
+pub use device::{DeviceFlow, PollInformation, PollResult};
 pub use refresh::{RefreshFlow, RefreshResult};
-pub use common::{Token, AuthenticationType, ApplicationSecret, ConsoleApplicationSecret};
-
+pub use common::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret};
+pub use helper::{TokenStorage, NullStorage, MemoryStorage, Authenticator, 
+                 AuthenticatorDelegate, Retry, DefaultAuthenticatorDelegate};
