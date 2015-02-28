@@ -24,6 +24,7 @@ pub trait TokenStorage {
 }
 
 /// A storage that remembers nothing.
+#[derive(Default)]
 pub struct NullStorage;
 
 impl TokenStorage for NullStorage {
@@ -32,6 +33,7 @@ impl TokenStorage for NullStorage {
 }
 
 /// A storage that remembers values for one session only.
+#[derive(Default)]
 pub struct MemoryStorage {
     pub tokens: HashMap<u64, Token>
 }
@@ -68,7 +70,7 @@ pub struct Authenticator<D, S, C, NC> {
 
 impl<D, S, C, NC> Authenticator<D, S, C, NC>
     where  D: AuthenticatorDelegate,
-           S: BorrowMut<TokenStorage>,
+           S: TokenStorage,
           NC: hyper::net::NetworkConnector,
            C: BorrowMut<hyper::Client<NC>> {
 
@@ -86,7 +88,7 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
     /// * `flow_type` - the kind of authentication to use to obtain a token for the 
     ///                 required scopes. If unset, it will be derived from the secret.
     /// [dev-con]: https://console.developers.google.com
-    fn new(secret: &ApplicationSecret, 
+    pub fn new(secret: &ApplicationSecret, 
            delegate: D, client: C, storage: S, flow_type: Option<FlowType>)
                                                      -> Authenticator<D, S, C, NC> {
         Authenticator {
@@ -103,7 +105,7 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
     /// decided to abort the attempt, or the user decided not to authorize the application.
     /// In any failure case, the returned token will be None, otherwise it is guaranteed to be 
     /// valid for the given scopes.
-    fn token<'b, I, T>(&mut self, scopes: I) -> Option<Token>
+    pub fn token<'b, I, T>(&mut self, scopes: I) -> Option<Token>
         where   T: Str + Ord,
                 I: IntoIterator<Item=&'b T> {
         let (scope_key, scope, scopes) = {
@@ -120,7 +122,7 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
         };
 
         // Get cached token. Yes, let's do an explicit return
-        return match self.storage.borrow().get(scope_key) {
+        return match self.storage.get(scope_key) {
             Some(mut t) => {
                 // t needs refresh ?
                 if t.expired() {
@@ -142,7 +144,7 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
                             },
                             RefreshResult::Success(ref new_t) => {
                                 t = new_t.clone();
-                                self.storage.borrow_mut().set(scope_key, Some(t.clone()));
+                                self.storage.set(scope_key, Some(t.clone()));
                             }
                         }// RefreshResult handling
                     }// refresh loop
@@ -156,7 +158,7 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
                 };
                 // store it, no matter what. If tokens have become invalid, it's ok
                 // to indicate that to the storage.
-                self.storage.borrow_mut().set(scope_key, ot.clone());
+                self.storage.set(scope_key, ot.clone());
                 ot
             },
         }
@@ -270,4 +272,38 @@ pub enum Retry {
     Abort,
     /// Signals you want to retry after the given duration
     After(Duration)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::device::tests::MockGoogleAuth;
+    use super::super::common::tests::SECRET;
+    use super::super::common::{ConsoleApplicationSecret, Token};
+    use super::super::device::PollInformation;
+    use std::default::Default;
+    use hyper;
+
+    #[test]
+    fn flow() {
+        use rustc_serialize::json;
+
+        struct TestHandler;
+        impl AuthenticatorDelegate for TestHandler {
+            fn present_user_code(&mut self, pi: PollInformation) {
+                println!("{:?}", pi);
+            }
+        }
+        let secret = json::decode::<ConsoleApplicationSecret>(SECRET).unwrap().installed.unwrap();
+        let res = Authenticator::new(&secret, TestHandler,
+                        hyper::Client::with_connector(<MockGoogleAuth as Default>::default()),
+                        <MemoryStorage as Default>::default(), None)
+                        .token(&["https://www.googleapis.com/auth/youtube.upload"]);
+
+        match res {
+            Some(t) => assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg"),
+            _ => panic!("Expected to retrieve token in one go"),
+        }
+    }
 }

@@ -442,7 +442,7 @@ pub trait DeviceFlowHelperDelegate {
 
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use std::default::Default;
     use hyper;
@@ -504,25 +504,5 @@ mod tests {
         // from now on, all calls will yield the same result
         // As our mock has only 3 items, we would panic on this call
         flow.poll_token();
-    }
-
-    #[test]
-    fn authenticator() {
-        struct TestHandler;
-        impl DeviceFlowHelperDelegate for TestHandler {
-            fn present_user_code(&mut self, pi: PollInformation) {
-                println!("{:?}", pi);
-            }
-        }
-        if let Some(t) = DeviceFlowHelper::new(&mut TestHandler)
-                        .retrieve_token(hyper::Client::with_connector(
-                                            <MockGoogleAuth as Default>::default()),
-                                         "bogus_client_id",
-                                         "bogus_secret",
-                                         &["https://www.googleapis.com/auth/youtube.upload"]) {
-            assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg")
-        } else {
-            panic!("Expected to retrieve token in one go");
-        }
     }
 }
