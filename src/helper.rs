@@ -1,5 +1,5 @@
 use std::iter::IntoIterator;
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::BorrowMut;
 use std::marker::PhantomData;
 use std::collections::HashMap;
 use std::hash::{SipHasher, Hash, Hasher};
@@ -9,7 +9,7 @@ use std::cmp::min;
 use common::{Token, FlowType, ApplicationSecret};
 use device::{PollInformation, RequestResult, DeviceFlow, PollResult};
 use refresh::{RefreshResult, RefreshFlow};
-use chrono::{DateTime, UTC, Duration};
+use chrono::{DateTime, UTC, Duration, Local};
 use hyper;
 
 
@@ -58,6 +58,18 @@ impl TokenStorage for MemoryStorage {
 ///
 /// It is the go-to helper to deal with any kind of supported authentication flow,
 /// which will be kept valid and usable.
+///
+/// # Device Flow
+/// This involves polling the authentication server in the given intervals
+/// until there is a definitive result.
+///
+/// These results will be passed the `DeviceFlowHelperDelegate` implementation to deal with
+/// * presenting the user code
+/// * inform the user about the progress or errors
+/// * abort the operation
+/// 
+/// # Usage
+/// Please have a look at the library's landing page.
 pub struct Authenticator<D, S, C, NC> {
     flow_type: FlowType,
     delegate: D,
@@ -89,7 +101,7 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
     ///                 required scopes. If unset, it will be derived from the secret.
     /// [dev-con]: https://console.developers.google.com
     pub fn new(secret: &ApplicationSecret, 
-           delegate: D, client: C, storage: S, flow_type: Option<FlowType>)
+               delegate: D, client: C, storage: S, flow_type: Option<FlowType>)
                                                      -> Authenticator<D, S, C, NC> {
         Authenticator {
             flow_type: flow_type.unwrap_or(FlowType::Device),
@@ -108,7 +120,7 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
     pub fn token<'b, I, T>(&mut self, scopes: I) -> Option<Token>
         where   T: Str + Ord,
                 I: IntoIterator<Item=&'b T> {
-        let (scope_key, scope, scopes) = {
+        let (scope_key, scopes) = {
             let mut sv: Vec<&str> = scopes.into_iter()
                                   .map(|s|s.as_slice())
                                   .collect::<Vec<&str>>();
@@ -118,7 +130,7 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
             let mut sh = SipHasher::new();
             s.hash(&mut sh);
             let sv = sv;
-            (sh.finish(), s, sv)
+            (sh.finish(), sv)
         };
 
         // Get cached token. Yes, let's do an explicit return
@@ -263,8 +275,18 @@ pub trait AuthenticatorDelegate {
     /// # Notes
     /// * Will be called exactly once, provided we didn't abort during `request_code` phase.
     /// * Will only be called if the Authenticator's flow_type is `FlowType::Device`.
-    fn present_user_code(&mut self, PollInformation);
+    fn present_user_code(&mut self, pi: PollInformation) {
+        println!{"Please enter {} at {} and grant access to this application", 
+                  pi.user_code, pi.verification_url}
+        println!("Do not close this application until you either denied or granted access.");
+        println!("You have time until {}.", pi.expires_at.with_timezone(&Local));
+    }
 }
+
+/// Uses all default implementations by AuthenticatorDelegate, and makes the trait's
+/// implementation usable in the first place.
+pub struct DefaultAuthenticatorDelegate;
+impl AuthenticatorDelegate for DefaultAuthenticatorDelegate {}
 
 /// A utility type to indicate how operations DeviceFlowHelper operations should be retried
 pub enum Retry {
@@ -280,8 +302,7 @@ mod tests {
     use super::*;
     use super::super::device::tests::MockGoogleAuth;
     use super::super::common::tests::SECRET;
-    use super::super::common::{ConsoleApplicationSecret, Token};
-    use super::super::device::PollInformation;
+    use super::super::common::{ConsoleApplicationSecret};
     use std::default::Default;
     use hyper;
 
@@ -289,14 +310,8 @@ mod tests {
     fn flow() {
         use rustc_serialize::json;
 
-        struct TestHandler;
-        impl AuthenticatorDelegate for TestHandler {
-            fn present_user_code(&mut self, pi: PollInformation) {
-                println!("{:?}", pi);
-            }
-        }
         let secret = json::decode::<ConsoleApplicationSecret>(SECRET).unwrap().installed.unwrap();
-        let res = Authenticator::new(&secret, TestHandler,
+        let res = Authenticator::new(&secret, DefaultAuthenticatorDelegate,
                         hyper::Client::with_connector(<MockGoogleAuth as Default>::default()),
                         <MemoryStorage as Default>::default(), None)
                         .token(&["https://www.googleapis.com/auth/youtube.upload"]);

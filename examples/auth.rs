@@ -9,6 +9,7 @@ extern crate open;
 use chrono::{Local};
 use getopts::{HasArg,Options,Occur,Fail};
 use std::env;
+use std::default::Default;
 use std::time::Duration;
 use std::old_io::timer::sleep;
 
@@ -46,13 +47,21 @@ fn main() {
         return
     }
 
-    let client_id = m.opt_str("c").unwrap();
-    let client_secret = m.opt_str("s").unwrap();
+    let secret = oauth2::ApplicationSecret {
+        client_id: m.opt_str("c").unwrap(),
+        client_secret: m.opt_str("s").unwrap(),
+        token_uri: Default::default(),
+        auth_uri: Default::default(),
+        redirect_uris: Default::default(),
+        client_email: None,
+        auth_provider_x509_cert_url: None,
+        client_x509_cert_url: None
+    };
 
     println!("THIS PROGRAM PRINTS ALL COMMUNICATION TO STDERR !!!");
 
     struct StdoutHandler;
-    impl oauth2::DeviceFlowHelperDelegate for StdoutHandler {
+    impl oauth2::AuthenticatorDelegate for StdoutHandler {
         fn present_user_code(&mut self, pi: oauth2::PollInformation) {
             println!("Please enter '{}' at {} and authenticate the application for the\n\
                       given scopes. This is not a test !\n\
@@ -70,8 +79,10 @@ fn main() {
     let client = hyper::Client::with_connector(mock::TeeConnector {
                         connector: hyper::net::HttpConnector(None) 
                     });
-    if let Some(t) = oauth2::DeviceFlowHelper::new(&mut StdoutHandler)
-                    .retrieve_token(client, &client_id, &client_secret, &m.free) {
+
+    if let Some(t) = oauth2::Authenticator::new(&secret, StdoutHandler, client, 
+                        oauth2::NullStorage, None)
+                    .token(&m.free) {
             println!("Authentication granted !");
             println!("You should store the following information for use, or revoke it.");
             println!("All dates are given in UTC.");
