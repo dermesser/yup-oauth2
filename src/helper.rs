@@ -80,6 +80,13 @@ pub struct Authenticator<D, S, C, NC> {
     _m: PhantomData<NC>
 }
 
+/// A provider for authorization tokens, yielding tokens valid for a given scope.
+pub trait GetToken {
+    fn token<'b, I, T>(&mut self, scopes: I) -> Option<Token>
+        where   T: Str + Ord,
+                I: IntoIterator<Item=&'b T>;
+}
+
 impl<D, S, C, NC> Authenticator<D, S, C, NC>
     where  D: AuthenticatorDelegate,
            S: TokenStorage,
@@ -110,69 +117,6 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
             client: client,
             secret: secret.clone(),
             _m: PhantomData
-        }
-    }
-
-    /// Blocks until a token was retrieved from storage, from the server, or until the delegate 
-    /// decided to abort the attempt, or the user decided not to authorize the application.
-    /// In any failure case, the returned token will be None, otherwise it is guaranteed to be 
-    /// valid for the given scopes.
-    pub fn token<'b, I, T>(&mut self, scopes: I) -> Option<Token>
-        where   T: Str + Ord,
-                I: IntoIterator<Item=&'b T> {
-        let (scope_key, scopes) = {
-            let mut sv: Vec<&str> = scopes.into_iter()
-                                  .map(|s|s.as_slice())
-                                  .collect::<Vec<&str>>();
-            sv.sort();
-            let s = sv.connect(" ");
-
-            let mut sh = SipHasher::new();
-            s.hash(&mut sh);
-            let sv = sv;
-            (sh.finish(), sv)
-        };
-
-        // Get cached token. Yes, let's do an explicit return
-        return match self.storage.get(scope_key) {
-            Some(mut t) => {
-                // t needs refresh ?
-                if t.expired() {
-                    let mut rf = RefreshFlow::new(self.client.borrow_mut());
-                    loop {
-                        match *rf.refresh_token(self.flow_type,
-                                               &self.secret.client_id, 
-                                               &self.secret.client_secret, 
-                                               &t.refresh_token) {
-                            RefreshResult::Error(ref err) => {
-                                match self.delegate.connection_error(err.clone()) {
-                                    Retry::Abort => return None,
-                                    Retry::After(d) => sleep(d),
-                                }
-                            },
-                            RefreshResult::Refused(_) => {
-                                self.delegate.denied();
-                                return None
-                            },
-                            RefreshResult::Success(ref new_t) => {
-                                t = new_t.clone();
-                                self.storage.set(scope_key, Some(t.clone()));
-                            }
-                        }// RefreshResult handling
-                    }// refresh loop
-                }// handle expiration
-                Some(t)
-            }
-            None => {
-                // get new token. The respective sub-routine will do all the logic.
-                let ot = match self.flow_type {
-                    FlowType::Device => self.retrieve_device_token(&scopes),
-                };
-                // store it, no matter what. If tokens have become invalid, it's ok
-                // to indicate that to the storage.
-                self.storage.set(scope_key, ot.clone());
-                ot
-            },
         }
     }
 
@@ -229,6 +173,76 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
                     return Some(token)
                 },
             }
+        }
+    }
+}
+
+impl<D, S, C, NC> GetToken for Authenticator<D, S, C, NC>
+    where  D: AuthenticatorDelegate,
+           S: TokenStorage,
+          NC: hyper::net::NetworkConnector,
+           C: BorrowMut<hyper::Client<NC>> {
+
+    /// Blocks until a token was retrieved from storage, from the server, or until the delegate 
+    /// decided to abort the attempt, or the user decided not to authorize the application.
+    /// In any failure case, the returned token will be None, otherwise it is guaranteed to be 
+    /// valid for the given scopes.
+    fn token<'b, I, T>(&mut self, scopes: I) -> Option<Token>
+        where   T: Str + Ord,
+                I: IntoIterator<Item=&'b T> {
+        let (scope_key, scopes) = {
+            let mut sv: Vec<&str> = scopes.into_iter()
+                                  .map(|s|s.as_slice())
+                                  .collect::<Vec<&str>>();
+            sv.sort();
+            let s = sv.connect(" ");
+
+            let mut sh = SipHasher::new();
+            s.hash(&mut sh);
+            let sv = sv;
+            (sh.finish(), sv)
+        };
+
+        // Get cached token. Yes, let's do an explicit return
+        return match self.storage.get(scope_key) {
+            Some(mut t) => {
+                // t needs refresh ?
+                if t.expired() {
+                    let mut rf = RefreshFlow::new(self.client.borrow_mut());
+                    loop {
+                        match *rf.refresh_token(self.flow_type,
+                                               &self.secret.client_id, 
+                                               &self.secret.client_secret, 
+                                               &t.refresh_token) {
+                            RefreshResult::Error(ref err) => {
+                                match self.delegate.connection_error(err.clone()) {
+                                    Retry::Abort => return None,
+                                    Retry::After(d) => sleep(d),
+                                }
+                            },
+                            RefreshResult::Refused(_) => {
+                                self.delegate.denied();
+                                return None
+                            },
+                            RefreshResult::Success(ref new_t) => {
+                                t = new_t.clone();
+                                self.storage.set(scope_key, Some(t.clone()));
+                            }
+                        }// RefreshResult handling
+                    }// refresh loop
+                }// handle expiration
+                Some(t)
+            }
+            None => {
+                // get new token. The respective sub-routine will do all the logic.
+                let ot = match self.flow_type {
+                    FlowType::Device => self.retrieve_device_token(&scopes),
+                };
+                // store it, no matter what. If tokens have become invalid, it's ok
+                // to indicate that to the storage.
+                self.storage.set(scope_key, ot.clone());
+                ot
+            },
         }
     }
 }
