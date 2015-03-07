@@ -83,7 +83,7 @@ impl Str for FlowType {
 
 /// Represents either 'installed' or 'web' applications in a json secrets file.
 /// See `ConsoleApplicationSecret` for more information
-#[derive(RustcDecodable, RustcEncodable, Clone)]
+#[derive(RustcDecodable, RustcEncodable, Clone, Default)]
 pub struct ApplicationSecret {
     /// The client ID.
     pub client_id: String,
@@ -106,7 +106,7 @@ pub struct ApplicationSecret {
 
 /// A type to facilitate reading and writing the json secret file
 /// as returned by the [google developer console](https://code.google.com/apis/console)
-#[derive(RustcDecodable, RustcEncodable)]
+#[derive(RustcDecodable, RustcEncodable, Default)]
 pub struct ConsoleApplicationSecret {
     pub web: Option<ApplicationSecret>,
     pub installed: Option<ApplicationSecret>

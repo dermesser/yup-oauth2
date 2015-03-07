@@ -6,6 +6,7 @@ extern crate chrono;
 extern crate getopts;
 extern crate open;
 
+use oauth2::GetToken;
 use chrono::{Local};
 use getopts::{HasArg,Options,Occur,Fail};
 use std::env;

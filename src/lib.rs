@@ -1,4 +1,4 @@
-#![feature(old_io, std_misc, core, hash)]
+#![feature(io, old_io, std_misc, core, hash)]
 //! This library can be used to acquire oauth2.0 authentication for services.
 //! At the time of writing, only one way of doing so is implemented, the [device flow](https://developers.google.com/youtube/v3/guides/authentication#devices), along with a flow 
 //! for [refreshing tokens](https://developers.google.com/youtube/v3/guides/authentication#devices)
@@ -18,7 +18,7 @@
 //! extern crate "yup-oauth2" as oauth2;
 //! extern crate "rustc-serialize" as rustc_serialize;
 //! 
-//! use oauth2::{Authenticator, DefaultAuthenticatorDelegate, PollInformation, ConsoleApplicationSecret, MemoryStorage};
+//! use oauth2::{Authenticator, DefaultAuthenticatorDelegate, PollInformation, ConsoleApplicationSecret, MemoryStorage, GetToken};
 //! use rustc_serialize::json;
 //! use std::default::Default;
 //! # const SECRET: &'static str = "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.googleusercontent.com\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\"}}";
@@ -83,4 +83,4 @@ pub use device::{DeviceFlow, PollInformation, PollResult};
 pub use refresh::{RefreshFlow, RefreshResult};
 pub use common::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret};
 pub use helper::{TokenStorage, NullStorage, MemoryStorage, Authenticator, 
-                 AuthenticatorDelegate, Retry, DefaultAuthenticatorDelegate};
+                 AuthenticatorDelegate, Retry, DefaultAuthenticatorDelegate, GetToken};
