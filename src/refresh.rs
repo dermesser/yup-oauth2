@@ -8,6 +8,7 @@ use url::form_urlencoded;
 use super::Token;
 use std::borrow::BorrowMut;
 use std::marker::PhantomData;
+use std::io::Read;
 
 /// Implements the [Outh2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
 /// 
@@ -82,7 +83,9 @@ impl<C, NC> RefreshFlow<C, NC>
                 return &self.result;
             }
             Ok(mut res) => {
-                String::from_utf8(res.read_to_end().unwrap()).unwrap()
+                let mut json_str = String::new();
+                res.read_to_string(&mut json_str).ok().expect("string decode must work");
+                json_str
             }
         };
 

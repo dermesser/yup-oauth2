@@ -10,6 +10,7 @@ use rustc_serialize::json;
 use chrono::{DateTime,UTC};
 use std::borrow::BorrowMut;
 use std::marker::PhantomData;
+use std::io::Read;
 
 use common::{Token, FlowType, Flow};
 
@@ -192,7 +193,8 @@ impl<C, NC> DeviceFlow<C, NC>
                 //                         json::Json::from_reader(&mut res)
                 //                                     .ok()
                 //                                     .expect("decode must work!"))).unwrap();
-                let json_str = String::from_utf8(res.read_to_end().unwrap()).unwrap();
+                let mut json_str = String::new();
+                res.read_to_string(&mut json_str).ok().expect("string decode must work");
 
                 // check for error
                 match json::decode::<JsonError>(&json_str) {
@@ -267,7 +269,9 @@ impl<C, NC> DeviceFlow<C, NC>
                         return PollResult::Error(err);
                     }
                     Ok(mut res) => {
-                        String::from_utf8(res.read_to_end().unwrap()).unwrap()
+                        let mut json_str = String::new();
+                        res.read_to_string(&mut json_str).ok().expect("string decode must work");
+                        json_str
                     }
                 };
 
