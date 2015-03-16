@@ -81,10 +81,14 @@ pub struct Authenticator<D, S, C, NC> {
 }
 
 /// A provider for authorization tokens, yielding tokens valid for a given scope.
+/// The `api_key()` method is an alternative in case there are no scopes or
+/// if no user is involved.
 pub trait GetToken {
     fn token<'b, I, T>(&mut self, scopes: I) -> Option<Token>
         where   T: Str + Ord,
                 I: IntoIterator<Item=&'b T>;
+
+    fn api_key(&mut self) -> Option<String>;
 }
 
 impl<D, S, C, NC> Authenticator<D, S, C, NC>
@@ -244,6 +248,13 @@ impl<D, S, C, NC> GetToken for Authenticator<D, S, C, NC>
                 ot
             },
         }
+    }
+
+    fn api_key(&mut self) -> Option<String> {
+        if self.secret.client_id.len() == 0 {
+            return None
+        }
+        Some(self.secret.client_id.clone())
     }
 }
 
