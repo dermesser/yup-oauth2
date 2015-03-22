@@ -82,6 +82,6 @@ mod helper;
 
 pub use device::{DeviceFlow, PollInformation, PollResult};
 pub use refresh::{RefreshFlow, RefreshResult};
-pub use common::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret};
+pub use common::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret, Scheme, TokenType};
 pub use helper::{TokenStorage, NullStorage, MemoryStorage, Authenticator, 
                  AuthenticatorDelegate, Retry, DefaultAuthenticatorDelegate, GetToken};
