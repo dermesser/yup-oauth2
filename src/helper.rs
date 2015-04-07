@@ -133,7 +133,7 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
                                         &self.secret.client_secret, scopes.iter());
             match res {
                 RequestResult::Error(err) => {
-                    match self.delegate.connection_error(err) {
+                    match self.delegate.connection_error(&*err) {
                         Retry::Abort => return None,
                         Retry::After(d) => sleep(d),
                     }
@@ -154,7 +154,7 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
         loop {
             match flow.poll_token() {
                 PollResult::Error(err) => {
-                    match self.delegate.connection_error(err) {
+                    match self.delegate.connection_error(&*err) {
                         Retry::Abort => return None,
                         Retry::After(d) => sleep(d),
                     }
@@ -269,7 +269,7 @@ pub trait AuthenticatorDelegate {
     /// Called whenever there is an HttpError, usually if there are network problems.
     /// 
     /// Return retry information.
-    fn connection_error(&mut self, hyper::HttpError) -> Retry {
+    fn connection_error(&mut self, &hyper::HttpError) -> Retry {
         Retry::Abort
     }
 

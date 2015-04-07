@@ -1,9 +1,71 @@
 use chrono::{DateTime, UTC, TimeZone};
 use std::marker::MarkerTrait;
+use std::fmt;
+use std::str::FromStr;
+use hyper;
 
 /// A marker trait for all Flows
 pub trait Flow : MarkerTrait {
     fn type_id() -> FlowType;
+}
+
+/// Represents all implemented token types
+#[derive(Clone, PartialEq, Debug)]
+pub enum TokenType {
+    /// Means that whoever bears the access token will be granted access
+    Bearer,
+}
+
+impl Str for TokenType {
+    fn as_slice(&self) -> &'static str {
+        match *self {
+            TokenType::Bearer => "Bearer"
+        }
+    }
+}
+
+impl FromStr for TokenType {
+    type Err = ();
+    fn from_str(s: &str) -> Result<TokenType, ()> {
+        match s {
+            "Bearer" => Ok(TokenType::Bearer),
+            _ => Err(())
+        }
+    }
+}
+
+
+/// A scheme for use in `hyper::header::Authorization`
+#[derive(Clone, PartialEq, Debug)]
+pub struct Scheme {
+    /// The type of our access token
+    pub token_type: TokenType,
+    /// The token returned by one of the Authorization Flows
+    pub access_token: String
+}
+
+impl hyper::header::Scheme for Scheme {
+    fn scheme() -> Option<&'static str> {
+        None
+    }
+
+    fn fmt_scheme(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {}", self.token_type.as_slice(), self.access_token)
+    }
+}
+
+impl FromStr for Scheme {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Scheme, &'static str> {
+        let parts: Vec<&str> = s.split(' ').collect();
+        if parts.len() != 2 {
+            return Err("Expected two parts: <token_type> <token>")
+        }
+        match <TokenType as FromStr>::from_str(parts[0]) {
+            Ok(t) => Ok(Scheme { token_type: t, access_token: parts[1].to_string() }),
+            Err(_) => Err("Couldn't parse token type")
+        }
+    }
 }
 
 /// Represents a token as returned by OAuth2 servers.
@@ -66,7 +128,7 @@ impl Token {
 }
 
 /// All known authentication types, for suitable constants
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 pub enum FlowType {
     /// [device authentication](https://developers.google.com/youtube/v3/guides/authentication#devices)
     Device,
@@ -116,6 +178,7 @@ pub struct ConsoleApplicationSecret {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use hyper;
 
     pub const SECRET: &'static str = "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.googleusercontent.com\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\"}}";
 
@@ -126,5 +189,20 @@ pub mod tests {
             Ok(s) => assert!(s.installed.is_some() && s.web.is_none()),
             Err(err) => panic!(err),
         }
+    }
+
+    #[test]
+    fn schema() {
+        let s = Scheme {token_type: TokenType::Bearer, access_token: "foo".to_string() };
+        let mut headers = hyper::header::Headers::new();
+        headers.set(hyper::header::Authorization(s));
+        assert_eq!(headers.to_string(), "Authorization: Bearer foo\r\n".to_string());
+    }
+
+    #[test]
+    fn parse_schema() {
+        let auth: hyper::header::Authorization<Scheme> = hyper::header::Header::parse_header(&[b"Bearer foo".to_vec()]).unwrap();
+        assert_eq!(auth.0.token_type, TokenType::Bearer);
+        assert_eq!(auth.0.access_token, "foo".to_string());
     }
 }
