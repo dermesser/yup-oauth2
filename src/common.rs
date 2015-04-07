@@ -45,7 +45,7 @@ pub struct Scheme {
 }
 
 impl hyper::header::Scheme for Scheme {
-    fn scheme(_: Option<Scheme>) -> Option<&'static str> {
+    fn scheme() -> Option<&'static str> {
         None
     }
 
@@ -128,7 +128,7 @@ impl Token {
 }
 
 /// All known authentication types, for suitable constants
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 pub enum FlowType {
     /// [device authentication](https://developers.google.com/youtube/v3/guides/authentication#devices)
     Device,

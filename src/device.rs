@@ -1,6 +1,7 @@
 use std::iter::IntoIterator;
 use std::time::Duration;
 use std::default::Default;
+use std::rc::Rc;
 
 use hyper;
 use hyper::header::ContentType;
@@ -61,7 +62,7 @@ pub struct PollInformation {
 #[derive(Clone)]
 pub enum RequestResult {
     /// Indicates connection failure
-    Error(hyper::HttpError),
+    Error(Rc<hyper::HttpError>),
     /// The OAuth client was not found
     InvalidClient,
     /// Some requested scopes were invalid. String contains the scopes as part of 
@@ -85,7 +86,7 @@ impl RequestResult {
 #[derive(Clone)]
 pub enum PollResult {
     /// Connection failure - retry if you think it's worth it
-    Error(hyper::HttpError),
+    Error(Rc<hyper::HttpError>),
     /// See `PollInformation`
     AuthorizationPending(PollInformation),
     /// indicates we are expired, including the expiration date
@@ -98,7 +99,7 @@ pub enum PollResult {
 
 impl Default for PollResult {
     fn default() -> PollResult {
-        PollResult::Error(hyper::HttpError::HttpStatusError)
+        PollResult::Error(Rc::new(hyper::HttpError::HttpStatusError))
     }
 }
 
@@ -166,7 +167,7 @@ impl<C, NC> DeviceFlow<C, NC>
                .body(req.as_slice())
                .send() {
             Err(err) => {
-                return RequestResult::Error(err);
+                return RequestResult::Error(Rc::new(err));
             }
             Ok(mut res) => {
 
@@ -266,7 +267,7 @@ impl<C, NC> DeviceFlow<C, NC>
                        .body(req.as_slice())
                        .send() {
                     Err(err) => { 
-                        return PollResult::Error(err);
+                        return PollResult::Error(Rc::new(err));
                     }
                     Ok(mut res) => {
                         let mut json_str = String::new();
