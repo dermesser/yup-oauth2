@@ -16,8 +16,8 @@
 //!
 //! ```test_harness,no_run
 //! extern crate hyper;
-//! extern crate "yup-oauth2" as oauth2;
-//! extern crate "rustc-serialize" as rustc_serialize;
+//! extern crate yup_oauth2 as oauth2;
+//! extern crate rustc_serialize;
 //! 
 //! use oauth2::{Authenticator, DefaultAuthenticatorDelegate, PollInformation, ConsoleApplicationSecret, MemoryStorage, GetToken};
 //! use rustc_serialize::json;
@@ -47,7 +47,7 @@
 //!
 //! ```test_harness,no_run
 //! extern crate hyper;
-//! extern crate "yup-oauth2" as oauth2;
+//! extern crate yup_oauth2 as oauth2;
 //! use oauth2::{RefreshFlow, FlowType, RefreshResult};
 //!
 //! # #[test] fn refresh() {

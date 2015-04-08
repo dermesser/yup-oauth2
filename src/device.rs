@@ -10,7 +10,6 @@ use itertools::Itertools;
 use rustc_serialize::json;
 use chrono::{DateTime,UTC};
 use std::borrow::BorrowMut;
-use std::marker::PhantomData;
 use std::io::Read;
 
 use common::{Token, FlowType, Flow};
@@ -21,17 +20,15 @@ pub const GOOGLE_TOKEN_URL: &'static str = "https://accounts.google.com/o/oauth2
 /// It operates in two steps:
 /// * obtain a code to show to the user
 /// * (repeatedly) poll for the user to authenticate your application
-pub struct DeviceFlow<C, NC> {
+pub struct DeviceFlow<C> {
     client: C,
     device_code: String,
     state: PollResult,
     secret: String,
     id: String,
-
-    _m: PhantomData<NC>,
 }
 
-impl<C, NC> Flow for DeviceFlow<C, NC> {
+impl<C> Flow for DeviceFlow<C> {
     fn type_id() -> FlowType {
         FlowType::Device
     }
@@ -103,28 +100,26 @@ impl Default for PollResult {
     }
 }
 
-impl<C, NC> DeviceFlow<C, NC> 
-    where   C: BorrowMut<hyper::Client<NC>>,
-            NC: hyper::net::NetworkConnector {
+impl<C> DeviceFlow<C> 
+    where   C: BorrowMut<hyper::Client> {
 
     /// # Examples
     /// ```test_harness
     /// extern crate hyper;
-    /// extern crate "yup-oauth2" as oauth2;
+    /// extern crate yup_oauth2 as oauth2;
     /// use oauth2::DeviceFlow;
     /// 
     /// # #[test] fn new() {
     /// let mut f = DeviceFlow::new(hyper::Client::new());
     /// # }
     /// ```
-    pub fn new(client: C) -> DeviceFlow<C, NC> {
+    pub fn new(client: C) -> DeviceFlow<C> {
         DeviceFlow {
             client: client,
             device_code: Default::default(),
             secret: Default::default(),
             id: Default::default(),
             state: Default::default(),
-            _m: PhantomData,
         }
     }
 

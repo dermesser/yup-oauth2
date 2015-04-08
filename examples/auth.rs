@@ -1,7 +1,7 @@
 #![feature(collections, old_io, std_misc, exit_status)]
 #![allow(deprecated)]
-extern crate "yup-oauth2" as oauth2;
-extern crate "yup-hyper-mock" as mock;
+extern crate yup_oauth2 as oauth2;
+extern crate yup_hyper_mock as mock;
 extern crate hyper;
 extern crate chrono;
 extern crate getopts;

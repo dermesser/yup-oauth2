@@ -1,6 +1,5 @@
 use std::iter::IntoIterator;
 use std::borrow::BorrowMut;
-use std::marker::PhantomData;
 use std::collections::HashMap;
 use std::hash::{SipHasher, Hash, Hasher};
 use std::old_io::timer::sleep;
@@ -70,14 +69,12 @@ impl TokenStorage for MemoryStorage {
 /// 
 /// # Usage
 /// Please have a look at the library's landing page.
-pub struct Authenticator<D, S, C, NC> {
+pub struct Authenticator<D, S, C> {
     flow_type: FlowType,
     delegate: D,
     storage: S,
     client: C,
     secret: ApplicationSecret,
-
-    _m: PhantomData<NC>
 }
 
 /// A provider for authorization tokens, yielding tokens valid for a given scope.
@@ -91,11 +88,10 @@ pub trait GetToken {
     fn api_key(&mut self) -> Option<String>;
 }
 
-impl<D, S, C, NC> Authenticator<D, S, C, NC>
+impl<D, S, C> Authenticator<D, S, C>
     where  D: AuthenticatorDelegate,
            S: TokenStorage,
-          NC: hyper::net::NetworkConnector,
-           C: BorrowMut<hyper::Client<NC>> {
+           C: BorrowMut<hyper::Client> {
 
     
     /// Returns a new `Authenticator` instance
@@ -113,14 +109,13 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
     /// [dev-con]: https://console.developers.google.com
     pub fn new(secret: &ApplicationSecret, 
                delegate: D, client: C, storage: S, flow_type: Option<FlowType>)
-                                                     -> Authenticator<D, S, C, NC> {
+                                                     -> Authenticator<D, S, C> {
         Authenticator {
             flow_type: flow_type.unwrap_or(FlowType::Device),
             delegate: delegate,
             storage: storage,
             client: client,
             secret: secret.clone(),
-            _m: PhantomData
         }
     }
 
@@ -181,11 +176,10 @@ impl<D, S, C, NC> Authenticator<D, S, C, NC>
     }
 }
 
-impl<D, S, C, NC> GetToken for Authenticator<D, S, C, NC>
+impl<D, S, C> GetToken for Authenticator<D, S, C>
     where  D: AuthenticatorDelegate,
            S: TokenStorage,
-          NC: hyper::net::NetworkConnector,
-           C: BorrowMut<hyper::Client<NC>> {
+           C: BorrowMut<hyper::Client> {
 
     /// Blocks until a token was retrieved from storage, from the server, or until the delegate 
     /// decided to abort the attempt, or the user decided not to authorize the application.

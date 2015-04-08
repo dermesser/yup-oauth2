@@ -7,7 +7,6 @@ use rustc_serialize::json;
 use url::form_urlencoded;
 use super::Token;
 use std::borrow::BorrowMut;
-use std::marker::PhantomData;
 use std::io::Read;
 
 /// Implements the [Outh2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
@@ -15,11 +14,9 @@ use std::io::Read;
 /// Refresh an expired access token, as obtained by any other authentication flow.
 /// This flow is useful when your `Token` is expired and allows to obtain a new
 /// and valid access token.
-pub struct RefreshFlow<C, NC> {
+pub struct RefreshFlow<C> {
     client: C,
     result: RefreshResult,
-
-    _m: PhantomData<NC>,
 }
 
 
@@ -33,15 +30,13 @@ pub enum RefreshResult {
     Success(Token),
 }
 
-impl<C, NC> RefreshFlow<C, NC>
-    where NC: hyper::net::NetworkConnector,
-           C: BorrowMut<hyper::Client<NC>> {
+impl<C> RefreshFlow<C>
+    where C: BorrowMut<hyper::Client> {
 
-    pub fn new(client: C) -> RefreshFlow<C, NC> {
+    pub fn new(client: C) -> RefreshFlow<C> {
         RefreshFlow {
             client: client,
             result: RefreshResult::Error(hyper::HttpError::HttpStatusError),
-            _m: PhantomData,
         }
     }
 
