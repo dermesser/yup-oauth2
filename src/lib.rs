@@ -1,4 +1,4 @@
-#![feature(old_io, std_misc, core)]
+#![feature(std_misc, thread_sleep)]
 #![allow(deprecated)]
 //! This library can be used to acquire oauth2.0 authentication for services.
 //! At the time of writing, only one way of doing so is implemented, the [device flow](https://developers.google.com/youtube/v3/guides/authentication#devices), along with a flow 
@@ -60,7 +60,6 @@
 //!                };
 //! # }
 //! ```
-
 extern crate chrono;
 
 #[macro_use]

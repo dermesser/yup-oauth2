@@ -69,9 +69,9 @@ impl<C> RefreshFlow<C>
                                 .iter().cloned());
 
         let json_str = 
-            match self.client.borrow_mut().post(flow_type.as_slice())
+            match self.client.borrow_mut().post(flow_type.as_ref())
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
-               .body(req.as_slice())
+               .body(&*req)
                .send() {
             Err(err) => { 
                 self.result = RefreshResult::Error(err);

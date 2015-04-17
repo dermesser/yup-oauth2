@@ -2,7 +2,7 @@ use std::iter::IntoIterator;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::hash::{SipHasher, Hash, Hasher};
-use std::old_io::timer::sleep;
+use std::thread::sleep;
 use std::cmp::min;
 
 use common::{Token, FlowType, ApplicationSecret};
@@ -82,7 +82,7 @@ pub struct Authenticator<D, S, C> {
 /// if no user is involved.
 pub trait GetToken {
     fn token<'b, I, T>(&mut self, scopes: I) -> Option<Token>
-        where   T: Str + Ord,
+        where   T: AsRef<str> + Ord,
                 I: IntoIterator<Item=&'b T>;
 
     fn api_key(&mut self) -> Option<String>;
@@ -186,11 +186,11 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
     /// In any failure case, the returned token will be None, otherwise it is guaranteed to be 
     /// valid for the given scopes.
     fn token<'b, I, T>(&mut self, scopes: I) -> Option<Token>
-        where   T: Str + Ord,
+        where   T: AsRef<str> + Ord,
                 I: IntoIterator<Item=&'b T> {
         let (scope_key, scopes) = {
             let mut sv: Vec<&str> = scopes.into_iter()
-                                  .map(|s|s.as_slice())
+                                  .map(|s|s.as_ref())
                                   .collect::<Vec<&str>>();
             sv.sort();
             let s = sv.connect(" ");

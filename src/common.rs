@@ -16,8 +16,8 @@ pub enum TokenType {
     Bearer,
 }
 
-impl Str for TokenType {
-    fn as_slice(&self) -> &'static str {
+impl AsRef<str> for TokenType {
+    fn as_ref(&self) -> &'static str {
         match *self {
             TokenType::Bearer => "Bearer"
         }
@@ -50,7 +50,7 @@ impl hyper::header::Scheme for Scheme {
     }
 
     fn fmt_scheme(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {}", self.token_type.as_slice(), self.access_token)
+        write!(f, "{} {}", self.token_type.as_ref(), self.access_token)
     }
 }
 
@@ -134,9 +134,9 @@ pub enum FlowType {
     Device,
 }
 
-impl Str for FlowType {
+impl AsRef<str> for FlowType {
     /// Converts itself into a URL string
-    fn as_slice(&self) -> &'static str {
+    fn as_ref(&self) -> &'static str {
         match *self {
             FlowType::Device => "https://accounts.google.com/o/oauth2/device/code",
         }

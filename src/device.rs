@@ -141,7 +141,7 @@ impl<C> DeviceFlow<C>
     /// See test-cases in source code for a more complete example.
     pub fn request_code<'b, T, I>(&mut self, client_id: &str, client_secret: &str, scopes: I)
                                     -> RequestResult
-                                    where T: Str,
+                                    where T: AsRef<str>,
                                           I: IntoIterator<Item=&'b T> {
         if self.device_code.len() > 0 {
             panic!("Must not be called after we have obtained a token and have no error");
@@ -152,14 +152,14 @@ impl<C> DeviceFlow<C>
         let req = form_urlencoded::serialize(
                   [("client_id", client_id),
                    ("scope", scopes.into_iter()
-                                   .map(|s| s.as_slice())
+                                   .map(|s| s.as_ref())
                                    .intersperse(" ")
                                    .collect::<String>()
-                                   .as_slice())].iter().cloned());
+                                   .as_ref())].iter().cloned());
 
-        match self.client.borrow_mut().post(FlowType::Device.as_slice())
+        match self.client.borrow_mut().post(FlowType::Device.as_ref())
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
-               .body(req.as_slice())
+               .body(&*req)
                .send() {
             Err(err) => {
                 return RequestResult::Error(Rc::new(err));
@@ -250,7 +250,7 @@ impl<C> DeviceFlow<C>
 
                 // We should be ready for a new request
                 let req = form_urlencoded::serialize(
-                                [("client_id", self.id.as_slice()),
+                                [("client_id", &self.id[..]),
                                  ("client_secret", &self.secret),
                                  ("code", &self.device_code),
                                  ("grant_type", "http://oauth.net/grant_type/device/1.0")]
@@ -259,7 +259,7 @@ impl<C> DeviceFlow<C>
                 let json_str = 
                     match self.client.borrow_mut().post(GOOGLE_TOKEN_URL)
                        .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
-                       .body(req.as_slice())
+                       .body(&*req)
                        .send() {
                     Err(err) => { 
                         return PollResult::Error(Rc::new(err));
@@ -280,7 +280,7 @@ impl<C> DeviceFlow<C>
                     Err(_) => {}, // ignore, move on, it's not an error
                     Ok(res) => {
                         pi.server_message = res.error;
-                        self.state = match pi.server_message.as_slice() {
+                        self.state = match pi.server_message.as_ref() {
                             "access_denied" => PollResult::AccessDenied,
                             "authorization_pending" => PollResult::AuthorizationPending(pi),
                             _ => panic!("server message '{}' not understood", pi.server_message),
