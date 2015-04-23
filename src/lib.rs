@@ -31,12 +31,12 @@
 //!                         <MemoryStorage as Default>::default(), None)
 //!                         .token(&["https://www.googleapis.com/auth/youtube.upload"]);
 //! match res {
-//!     Some(t) => {
+//!     Ok(t) => {
 //!     // now you can use t.access_token to authenticate API calls within your
 //!     // given scopes. It will not be valid forever, which is when you have to 
 //!     // refresh it using the `RefreshFlow`
 //!     },
-//!     None => println!("user declined"),
+//!     Err(err) => println!("Failed to acquire token: {}", err),
 //! }
 //! # }
 //! ```
@@ -54,7 +54,8 @@
 //! let mut f = RefreshFlow::new(hyper::Client::new());
 //! let new_token = match *f.refresh_token(FlowType::Device,
 //!                                        "my_client_id", "my_secret",
-//!                                        "my_refresh_token") {
+//!                                        "my_refresh_token",
+//!                                        &["https://scope.url"]) {
 //!                        RefreshResult::Success(ref t) => t,
 //!                        _ => panic!("bad luck ;)")
 //!                };

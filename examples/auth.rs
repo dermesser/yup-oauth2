@@ -1,4 +1,4 @@
-#![feature(collections, old_io, std_misc, exit_status)]
+#![feature(collections, thread_sleep, std_misc, exit_status)]
 #![allow(deprecated)]
 extern crate yup_oauth2 as oauth2;
 extern crate yup_hyper_mock as mock;
@@ -13,7 +13,7 @@ use getopts::{HasArg,Options,Occur,Fail};
 use std::env;
 use std::default::Default;
 use std::time::Duration;
-use std::old_io::timer::sleep;
+use std::thread::sleep;
 
 
 fn usage(program: &str, opts: &Options, err: Option<Fail>) {
@@ -82,15 +82,17 @@ fn main() {
                         connector: hyper::net::HttpConnector(None) 
                     });
 
-    if let Some(t) = oauth2::Authenticator::new(&secret, StdoutHandler, client, 
-                        oauth2::NullStorage, None)
-                    .token(&m.free) {
+    match oauth2::Authenticator::new(&secret, StdoutHandler, client, 
+                                        oauth2::NullStorage, None).token(&m.free) {
+        Ok(t) => {
             println!("Authentication granted !");
             println!("You should store the following information for use, or revoke it.");
             println!("All dates are given in UTC.");
             println!("{:?}", t);
-    } else {
-        println!("Invalid client id, invalid scope, user denied access or request expired");
-        env::set_exit_status(10);
+        },
+        Err(err) => {
+            println!("Access token wasn't obtained: {}", err);
+            env::set_exit_status(10);
+        }
     }
 }

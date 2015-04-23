@@ -2,6 +2,7 @@ use std::iter::IntoIterator;
 use std::time::Duration;
 use std::default::Default;
 use std::rc::Rc;
+use std::fmt;
 
 use hyper;
 use hyper::header::ContentType;
@@ -12,7 +13,7 @@ use chrono::{DateTime,UTC};
 use std::borrow::BorrowMut;
 use std::io::Read;
 
-use common::{Token, FlowType, Flow};
+use common::{Token, FlowType, Flow, JsonError};
 
 pub const GOOGLE_TOKEN_URL: &'static str = "https://accounts.google.com/o/oauth2/token";
 
@@ -55,6 +56,12 @@ pub struct PollInformation {
     pub server_message: String,
 }
 
+impl fmt::Display for PollInformation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        writeln!(f, "Poll result was: '{}'", self.server_message)
+    }
+}
+
 /// Encapsulates all possible results of the `request_token(...)` operation
 #[derive(Clone)]
 pub enum RequestResult {
@@ -65,22 +72,47 @@ pub enum RequestResult {
     /// Some requested scopes were invalid. String contains the scopes as part of 
     /// the server error message
     InvalidScope(String),
+    /// A 'catch-all' variant containing the server error and description
+    /// First string is the error code, the second may be a more detailed description
+    NegativeServerResponse(String, Option<String>),
     /// Indicates we may enter the next phase
     ProceedWithPolling(PollInformation),
 }
 
-impl RequestResult {
-    fn from_server_message(msg: &str, desc: &str) -> RequestResult {
-        match msg {
+impl From<JsonError> for RequestResult {
+    fn from(value: JsonError) -> RequestResult {
+        match &*value.error {
             "invalid_client" => RequestResult::InvalidClient,
-            "invalid_scope" => RequestResult::InvalidScope(desc.to_string()),
-            _ => panic!("'{}' not understood", msg)
+            "invalid_scope" => RequestResult::InvalidScope(
+                        value.error_description.unwrap_or("no description provided".to_string())
+                               ),
+            _ => RequestResult::NegativeServerResponse(value.error, value.error_description),
+        }
+    }
+}
+
+impl fmt::Display for RequestResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            RequestResult::Error(ref err) => err.fmt(f),
+            RequestResult::InvalidClient => "Invalid Client".fmt(f),
+            RequestResult::InvalidScope(ref scope) 
+                => writeln!(f, "Invalid Scope: '{}'", scope),
+            RequestResult::NegativeServerResponse(ref error, ref desc) => {
+                try!(error.fmt(f));
+                if let &Some(ref desc) = desc {
+                    try!(write!(f, ": {}", desc));
+                }
+                "\n".fmt(f)
+            },
+            RequestResult::ProceedWithPolling(ref pi) 
+                => write!(f, "Proceed with polling: {}", pi),
         }
     }
 }
 
 /// Encapsulates all possible results of a `poll_token(...)` operation
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum PollResult {
     /// Connection failure - retry if you think it's worth it
     Error(Rc<hyper::HttpError>),
@@ -94,11 +126,26 @@ pub enum PollResult {
     AccessGranted(Token),
 }
 
+impl fmt::Display for PollResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            PollResult::Error(ref err) => err.fmt(f),
+            PollResult::AuthorizationPending(ref pi) => pi.fmt(f),
+            PollResult::Expired(ref date)
+                => writeln!(f, "Authentication expired at {}", date),
+            PollResult::AccessDenied => "Access denied by user".fmt(f),
+            PollResult::AccessGranted(ref token) 
+                => writeln!(f, "Access granted by user, expires at {}", token.expiry_date()),
+        }
+    }
+}
+
 impl Default for PollResult {
     fn default() -> PollResult {
         PollResult::Error(Rc::new(hyper::HttpError::HttpStatusError))
     }
 }
+
 
 impl<C> DeviceFlow<C> 
     where   C: BorrowMut<hyper::Client> {
@@ -176,13 +223,6 @@ impl<C> DeviceFlow<C>
                     interval: i64,
                 }
 
-
-                #[derive(RustcDecodable)]
-                struct JsonError {
-                    error: String,
-                    error_description: String
-                }
-
                 // This will work once hyper uses std::io::Reader
                 // let decoded: JsonData = rustc_serialize::Decodable::decode(
                 //                     &mut json::Decoder::new(
@@ -196,8 +236,7 @@ impl<C> DeviceFlow<C>
                 match json::decode::<JsonError>(&json_str) {
                     Err(_) => {}, // ignore, move on
                     Ok(res) => {
-                        return RequestResult::from_server_message(&res.error, 
-                                                                  &res.error_description)
+                        return RequestResult::from(res)
                     }
                 }
 

@@ -1,4 +1,4 @@
-use common::FlowType;
+use common::{FlowType, JsonError};
 
 use chrono::UTC;
 use hyper;
@@ -6,8 +6,10 @@ use hyper::header::ContentType;
 use rustc_serialize::json;
 use url::form_urlencoded;
 use super::Token;
+use itertools::Itertools;
 use std::borrow::BorrowMut;
 use std::io::Read;
+use std::iter::IntoIterator;
 
 /// Implements the [Outh2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
 /// 
@@ -25,7 +27,7 @@ pub enum RefreshResult {
     /// Indicates connection failure
     Error(hyper::HttpError),
     /// The server did not answer with a new token, providing the server message
-    Refused(String),
+    RefreshError(String, Option<String>),
     /// The refresh operation finished successfully, providing a new `Token`
     Success(Token),
 }
@@ -42,7 +44,7 @@ impl<C> RefreshFlow<C>
 
     /// Attempt to refresh the given token, and obtain a new, valid one.
     /// If the `RefreshResult` is `RefreshResult::Error`, you may retry within an interval
-    /// of your choice. If it is `RefreshResult::Refused`, your refresh token is invalid
+    /// of your choice. If it is `RefreshResult:RefreshError`, your refresh token is invalid
     /// or your authorization was revoked. Therefore no further attempt shall be made, 
     /// and you will have to re-authorize using the `DeviceFlow`
     ///
@@ -54,9 +56,15 @@ impl<C> RefreshFlow<C>
     /// 
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub fn refresh_token(&mut self, flow_type: FlowType, 
-                                    client_id: &str, client_secret: &str, 
-                                    refresh_token: &str) -> &RefreshResult {
+    pub fn refresh_token<'b, I, T>( &mut self, 
+                                    flow_type: FlowType, 
+                                    client_id: &str, 
+                                    client_secret: &str, 
+                                    refresh_token: &str,
+                                    scopes: I)
+                                            -> &RefreshResult 
+                                            where   T: AsRef<str> + Ord,
+                                                    I: IntoIterator<Item=&'b T> {
         if let RefreshResult::Success(_) = self.result {
             return &self.result;
         }
@@ -65,7 +73,12 @@ impl<C> RefreshFlow<C>
                                 [("client_id", client_id),
                                  ("client_secret", client_secret),
                                  ("refresh_token", refresh_token),
-                                 ("grant_type", "refresh_token")]
+                                 ("grant_type", "refresh_token"),
+                                 ("scope",  scopes.into_iter()
+                                                  .map(|s| s.as_ref())
+                                                  .intersperse(" ")
+                                                  .collect::<String>()
+                                                  .as_ref())]
                                 .iter().cloned());
 
         let json_str = 
@@ -85,11 +98,6 @@ impl<C> RefreshFlow<C>
         };
 
         #[derive(RustcDecodable)]
-        struct JsonError {
-            error: String
-        }
-
-        #[derive(RustcDecodable)]
         struct JsonToken {
             access_token: String,
             token_type: String,
@@ -99,7 +107,7 @@ impl<C> RefreshFlow<C>
         match json::decode::<JsonError>(&json_str) {
             Err(_) => {},
             Ok(res) => {
-                self.result = RefreshResult::Refused(res.error);
+                self.result = RefreshResult::RefreshError(res.error, res.error_description);
                 return &self.result;
             }
         }
@@ -145,7 +153,7 @@ mod tests {
 
 
         match *flow.refresh_token(FlowType::Device, 
-                                    "bogus", "secret", "bogus_refresh_token") {
+                                    "bogus", "secret", "bogus_refresh_token", &["scope.url"]) {
             RefreshResult::Success(ref t) => {
                 assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
                 assert!(!t.expired());

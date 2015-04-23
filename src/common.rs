@@ -9,6 +9,12 @@ pub trait Flow : MarkerTrait {
     fn type_id() -> FlowType;
 }
 
+#[derive(RustcDecodable)]
+pub struct JsonError {
+    pub error: String,
+    pub error_description: Option<String>,
+}
+
 /// Represents all implemented token types
 #[derive(Clone, PartialEq, Debug)]
 pub enum TokenType {
