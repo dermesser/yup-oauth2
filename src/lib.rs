@@ -80,7 +80,7 @@ mod refresh;
 mod common;
 mod helper;
 
-pub use device::{DeviceFlow, PollInformation, PollResult};
+pub use device::{DeviceFlow, PollInformation, PollError};
 pub use refresh::{RefreshFlow, RefreshResult};
 pub use common::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret, Scheme, TokenType};
 pub use helper::{TokenStorage, NullStorage, MemoryStorage, Authenticator, 

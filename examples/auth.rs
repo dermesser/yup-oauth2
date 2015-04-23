@@ -64,7 +64,7 @@ fn main() {
 
     struct StdoutHandler;
     impl oauth2::AuthenticatorDelegate for StdoutHandler {
-        fn present_user_code(&mut self, pi: oauth2::PollInformation) {
+        fn present_user_code(&mut self, pi: &oauth2::PollInformation) {
             println!("Please enter '{}' at {} and authenticate the application for the\n\
                       given scopes. This is not a test !\n\
                       You have time until {} to do that.

@@ -9,7 +9,7 @@ use std::fmt;
 use std::convert::From;
 
 use common::{Token, FlowType, ApplicationSecret};
-use device::{PollInformation, RequestResult, DeviceFlow, PollResult};
+use device::{PollInformation, RequestError, DeviceFlow, PollError};
 use refresh::{RefreshResult, RefreshFlow};
 use chrono::{DateTime, UTC, Duration, Local};
 use hyper;
@@ -191,58 +191,68 @@ impl<D, S, C> Authenticator<D, S, C>
         let mut flow = DeviceFlow::new(self.client.borrow_mut());
 
         // PHASE 1: REQUEST CODE
+        let pi: PollInformation;
         loop {
             let res = flow.request_code(&self.secret.client_id, 
                                         &self.secret.client_secret, scopes.iter());
-            match res {
-                RequestResult::Error(err) => {
-                    match self.delegate.connection_error(&*err) {
-                        Retry::Abort|Retry::Skip => return Err(Box::new(StringError::from(&*err as &Error))),
-                        Retry::After(d) => sleep(d),
+
+            pi = match res {
+                    Err(res_err) => {
+                        match res_err {
+                            RequestError::HttpError(err) => {
+                                match self.delegate.connection_error(&err) {
+                                    Retry::Abort|Retry::Skip => return Err(Box::new(StringError::from(&err as &Error))),
+                                    Retry::After(d) => sleep(d),
+                                }
+                            },
+                            RequestError::InvalidClient
+                            |RequestError::NegativeServerResponse(_, _)
+                            |RequestError::InvalidScope(_) => {
+                                let serr = StringError::from(res_err.to_string());
+                                self.delegate.request_failure(res_err);
+                                return Err(Box::new(serr))
+                            }
+                        };
+                        continue
+                    },
+                    Ok(pi) => {
+                        self.delegate.present_user_code(&pi);
+                        pi
                     }
-                },
-                RequestResult::InvalidClient
-                |RequestResult::NegativeServerResponse(_, _)
-                |RequestResult::InvalidScope(_) => {
-                    let serr = StringError::from(res.to_string());
-                    self.delegate.request_failure(res);
-                    return Err(Box::new(serr))
-                }
-                RequestResult::ProceedWithPolling(pi) => {
-                    self.delegate.present_user_code(pi);
-                    break
-                }
-            }
+                };
+            break
         }
 
         // PHASE 1: POLL TOKEN
         loop {
-            let pt = flow.poll_token();
-            let pts = pt.to_string();
-            match pt {
-                PollResult::Error(err) => {
-                    match self.delegate.connection_error(&*err) {
-                        Retry::Abort|Retry::Skip => return Err(Box::new(StringError::from(&*err as &Error))),
-                        Retry::After(d) => sleep(d),
-                    }
+            match flow.poll_token() {
+                Err(ref poll_err) => {
+                    let pts = poll_err.to_string();
+                    match poll_err {
+                        &&PollError::HttpError(ref err) => {
+                            match self.delegate.connection_error(err) {
+                                Retry::Abort|Retry::Skip 
+                                    => return Err(Box::new(StringError::from(err as &Error))),
+                                Retry::After(d) => sleep(d),
+                            }
+                        },
+                        &&PollError::Expired(ref t) => {
+                            self.delegate.expired(t);
+                            return  Err(Box::new(StringError::from(pts)))
+                        },
+                        &&PollError::AccessDenied => {
+                            self.delegate.denied();
+                            return Err(Box::new(StringError::from(pts)))
+                        },
+                    }; // end match poll_err
                 },
-                PollResult::Expired(t) => {
-                    self.delegate.expired(t);
-                    return  Err(Box::new(StringError::from(pts)))
-                },
-                PollResult::AccessDenied => {
-                    self.delegate.denied();
-                    return Err(Box::new(StringError::from(pts)))
-                },
-                PollResult::AuthorizationPending(pi) => {
-                    match self.delegate.pending(&pi) {
-                        Retry::Abort|Retry::Skip => return Err(Box::new(StringError::new(pts, None))),
-                        Retry::After(d) => sleep(min(d, pi.interval)),
-                    }
-                },
-                PollResult::AccessGranted(token) => {
-                    return Ok(token)
-                },
+                Ok(None) => 
+                        match self.delegate.pending(&pi) {
+                            Retry::Abort|Retry::Skip 
+                                => return Err(Box::new(StringError::new("Pending authentication aborted".to_string(), None))),
+                            Retry::After(d) => sleep(min(d, pi.interval)),
+                        },
+                Ok(Some(token)) => return Ok(token)
             }
         }
     }
@@ -395,12 +405,12 @@ pub trait AuthenticatorDelegate {
     }
 
     /// The server denied the attempt to obtain a request code
-    fn request_failure(&mut self, RequestResult) {}
+    fn request_failure(&mut self, RequestError) {}
 
     /// Called if the request code is expired. You will have to start over in this case.
     /// This will be the last call the delegate receives.
     /// Given `DateTime` is the expiration date
-    fn expired(&mut self, DateTime<UTC>) {}
+    fn expired(&mut self, &DateTime<UTC>) {}
 
     /// Called if the user denied access. You would have to start over. 
     /// This will be the last call the delegate receives.
@@ -430,7 +440,7 @@ pub trait AuthenticatorDelegate {
     /// # Notes
     /// * Will be called exactly once, provided we didn't abort during `request_code` phase.
     /// * Will only be called if the Authenticator's flow_type is `FlowType::Device`.
-    fn present_user_code(&mut self, pi: PollInformation) {
+    fn present_user_code(&mut self, pi: &PollInformation) {
         println!{"Please enter {} at {} and grant access to this application", 
                   pi.user_code, pi.verification_url}
         println!("Do not close this application until you either denied or granted access.");

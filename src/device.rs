@@ -1,7 +1,6 @@
 use std::iter::IntoIterator;
 use std::time::Duration;
 use std::default::Default;
-use std::rc::Rc;
 use std::fmt;
 
 use hyper;
@@ -17,6 +16,16 @@ use common::{Token, FlowType, Flow, JsonError};
 
 pub const GOOGLE_TOKEN_URL: &'static str = "https://accounts.google.com/o/oauth2/token";
 
+/// Encapsulates all possible states of the Device Flow
+enum DeviceFlowState {
+    /// We failed to poll a result
+    Error,
+    /// We received poll information and will periodically poll for a token
+    Pending(PollInformation),
+    /// The flow finished successfully, providing token information
+    Success(Token),
+}
+
 /// Implements the [Oauth2 Device Flow](https://developers.google.com/youtube/v3/guides/authentication#devices)
 /// It operates in two steps:
 /// * obtain a code to show to the user
@@ -24,7 +33,8 @@ pub const GOOGLE_TOKEN_URL: &'static str = "https://accounts.google.com/o/oauth2
 pub struct DeviceFlow<C> {
     client: C,
     device_code: String,
-    state: PollResult,
+    state: Option<DeviceFlowState>,
+    error: Option<PollError>,
     secret: String,
     id: String,
 }
@@ -50,23 +60,18 @@ pub struct PollInformation {
     /// The interval in which we may poll for a status change
     /// The server responds with errors of we poll too fast.
     pub interval: Duration,
-
-    /// The message given by the server while polling it,
-    /// usually not relevant to the user or the application
-    pub server_message: String,
 }
 
 impl fmt::Display for PollInformation {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        writeln!(f, "Poll result was: '{}'", self.server_message)
+        writeln!(f, "Proceed with polling until {}", self.expires_at)
     }
 }
 
 /// Encapsulates all possible results of the `request_token(...)` operation
-#[derive(Clone)]
-pub enum RequestResult {
+pub enum RequestError {
     /// Indicates connection failure
-    Error(Rc<hyper::HttpError>),
+    HttpError(hyper::HttpError),
     /// The OAuth client was not found
     InvalidClient,
     /// Some requested scopes were invalid. String contains the scopes as part of 
@@ -75,74 +80,57 @@ pub enum RequestResult {
     /// A 'catch-all' variant containing the server error and description
     /// First string is the error code, the second may be a more detailed description
     NegativeServerResponse(String, Option<String>),
-    /// Indicates we may enter the next phase
-    ProceedWithPolling(PollInformation),
 }
 
-impl From<JsonError> for RequestResult {
-    fn from(value: JsonError) -> RequestResult {
+impl From<JsonError> for RequestError {
+    fn from(value: JsonError) -> RequestError {
         match &*value.error {
-            "invalid_client" => RequestResult::InvalidClient,
-            "invalid_scope" => RequestResult::InvalidScope(
+            "invalid_client" => RequestError::InvalidClient,
+            "invalid_scope" => RequestError::InvalidScope(
                         value.error_description.unwrap_or("no description provided".to_string())
                                ),
-            _ => RequestResult::NegativeServerResponse(value.error, value.error_description),
+            _ => RequestError::NegativeServerResponse(value.error, value.error_description),
         }
     }
 }
 
-impl fmt::Display for RequestResult {
+impl fmt::Display for RequestError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
-            RequestResult::Error(ref err) => err.fmt(f),
-            RequestResult::InvalidClient => "Invalid Client".fmt(f),
-            RequestResult::InvalidScope(ref scope) 
+            RequestError::HttpError(ref err) => err.fmt(f),
+            RequestError::InvalidClient => "Invalid Client".fmt(f),
+            RequestError::InvalidScope(ref scope) 
                 => writeln!(f, "Invalid Scope: '{}'", scope),
-            RequestResult::NegativeServerResponse(ref error, ref desc) => {
+            RequestError::NegativeServerResponse(ref error, ref desc) => {
                 try!(error.fmt(f));
                 if let &Some(ref desc) = desc {
                     try!(write!(f, ": {}", desc));
                 }
                 "\n".fmt(f)
             },
-            RequestResult::ProceedWithPolling(ref pi) 
-                => write!(f, "Proceed with polling: {}", pi),
         }
     }
 }
 
 /// Encapsulates all possible results of a `poll_token(...)` operation
-#[derive(Clone, Debug)]
-pub enum PollResult {
+#[derive(Debug)]
+pub enum PollError {
     /// Connection failure - retry if you think it's worth it
-    Error(Rc<hyper::HttpError>),
-    /// See `PollInformation`
-    AuthorizationPending(PollInformation),
+    HttpError(hyper::HttpError),
     /// indicates we are expired, including the expiration date
     Expired(DateTime<UTC>),
     /// Indicates that the user declined access. String is server response
     AccessDenied,
-    /// Indicates that access is granted, and you are done
-    AccessGranted(Token),
 }
 
-impl fmt::Display for PollResult {
+impl fmt::Display for PollError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
-            PollResult::Error(ref err) => err.fmt(f),
-            PollResult::AuthorizationPending(ref pi) => pi.fmt(f),
-            PollResult::Expired(ref date)
+            PollError::HttpError(ref err) => err.fmt(f),
+            PollError::Expired(ref date)
                 => writeln!(f, "Authentication expired at {}", date),
-            PollResult::AccessDenied => "Access denied by user".fmt(f),
-            PollResult::AccessGranted(ref token) 
-                => writeln!(f, "Access granted by user, expires at {}", token.expiry_date()),
+            PollError::AccessDenied => "Access denied by user".fmt(f),
         }
-    }
-}
-
-impl Default for PollResult {
-    fn default() -> PollResult {
-        PollResult::Error(Rc::new(hyper::HttpError::HttpStatusError))
     }
 }
 
@@ -166,14 +154,15 @@ impl<C> DeviceFlow<C>
             device_code: Default::default(),
             secret: Default::default(),
             id: Default::default(),
-            state: Default::default(),
+            state: None,
+            error: None,
         }
     }
 
     /// The first step involves asking the server for a code that the user
     /// can type into a field at a specified URL. It is called only once, assuming
     /// there was no connection error. Otherwise, it may be called again until 
-    /// the state changes to `PollResult::AuthorizationPending`.
+    /// you receive an `Ok` result.
     /// # Arguments
     /// * `client_id` & `client_secret` - as obtained when [registering your application](https://developers.google.com/youtube/registering_an_application)
     /// * `scopes` - an iterator yielding String-like objects which are URLs defining what your 
@@ -181,16 +170,15 @@ impl<C> DeviceFlow<C>
     ///              only once, with all scopes you will ever require.
     ///              However, you can also manage multiple tokens for different scopes, if your 
     ///              application is providing distinct read-only and write modes.
-    /// # Handling the `PollResult`
-    /// * will panic if called while our state is not `PollResult::Error` 
-    ///   or `PollResult::NeedToken`
+    /// # Panics
+    /// * If called after a successful result was returned at least once.
     /// # Examples
     /// See test-cases in source code for a more complete example.
     pub fn request_code<'b, T, I>(&mut self, client_id: &str, client_secret: &str, scopes: I)
-                                    -> RequestResult
+                                    -> Result<PollInformation, RequestError>
                                     where T: AsRef<str>,
                                           I: IntoIterator<Item=&'b T> {
-        if self.device_code.len() > 0 {
+        if self.state.is_some() {
             panic!("Must not be called after we have obtained a token and have no error");
         }
 
@@ -209,7 +197,7 @@ impl<C> DeviceFlow<C>
                .body(&*req)
                .send() {
             Err(err) => {
-                return RequestResult::Error(Rc::new(err));
+                return Err(RequestError::HttpError(err));
             }
             Ok(mut res) => {
 
@@ -223,12 +211,6 @@ impl<C> DeviceFlow<C>
                     interval: i64,
                 }
 
-                // This will work once hyper uses std::io::Reader
-                // let decoded: JsonData = rustc_serialize::Decodable::decode(
-                //                     &mut json::Decoder::new(
-                //                         json::Json::from_reader(&mut res)
-                //                                     .ok()
-                //                                     .expect("decode must work!"))).unwrap();
                 let mut json_str = String::new();
                 res.read_to_string(&mut json_str).ok().expect("string decode must work");
 
@@ -236,7 +218,7 @@ impl<C> DeviceFlow<C>
                 match json::decode::<JsonError>(&json_str) {
                     Err(_) => {}, // ignore, move on
                     Ok(res) => {
-                        return RequestResult::from(res)
+                        return Err(RequestError::from(res))
                     }
                 }
 
@@ -248,96 +230,102 @@ impl<C> DeviceFlow<C>
                     verification_url: decoded.verification_url,
                     expires_at: UTC::now() + Duration::seconds(decoded.expires_in),
                     interval: Duration::seconds(decoded.interval),
-                    server_message: Default::default(),
                 };
-                self.state = PollResult::AuthorizationPending(pi.clone());
+                self.state = Some(DeviceFlowState::Pending(pi.clone()));
 
                 self.secret = client_secret.to_string();
                 self.id = client_id.to_string();
-                RequestResult::ProceedWithPolling(pi)
+                Ok(pi)
             }
         }
     }
 
-    /// If the first call is successful, which is expected unless there is a network problem,
-    /// the returned `PollResult::AuthorizationPending` variant contains enough information to 
-    /// poll within a given `interval` to at some point obtain a result which is 
-    /// not `PollResult::AuthorizationPending`.
-    /// # Handling the `PollResult`
-    /// * call within `PollResult::AuthorizationPending.interval` until the variant changes. 
-    ///   Keep calling as desired, even after `PollResult::Error`.
-    /// * Do not call after `PollResult::Expired`, `PollResult::AccessDenied` 
-    ///   or `PollResult::AccessGranted` as the flow will do nothing anymore.
-    ///   Thus in any unsuccessful case, you will have to start over the entire flow, which
-    ///   requires a new instance of this type.
+    /// If the first call is successful, this method may be called.
+    /// As long as we are waiting for authentication, it will return `Ok(None)`.
+    /// You should call it within the interval given the previously returned 
+    /// `PollInformation.interval` field.
+    ///
+    /// The operation was successful once you receive an Ok(Some(Token)) for the first time.
+    /// Subsequent calls will return the previous result, which may also be an error state.
+    ///
+    /// Do not call after `PollError::Expired|PollError::AccessDenied` was among the 
+    /// `Err(PollError)` variants as the flow will not do anything anymore.
+    /// Thus in any unsuccessful case which is not `PollError::HttpError`, you will have to start /// over the entire flow, which requires a new instance of this type.
     /// 
     /// > ⚠️ **Warning**: We assume the caller doesn't call faster than `interval` and are not
-    /// > protected against this kind of mis-use. The latter will be indicated in
-    /// > `PollResult::AuthorizationPending.server_message`
+    /// > protected against this kind of mis-use.
     ///
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    pub fn poll_token(&mut self) -> PollResult {
+    pub fn poll_token(&mut self) -> Result<Option<Token>, &PollError> {
         // clone, as we may re-assign our state later
-        let state = self.state.clone();
-        match state {
-            PollResult::AuthorizationPending(mut pi) => {
-                if pi.expires_at <= UTC::now() {
-                    self.state = PollResult::Expired(pi.expires_at);
-                    return self.state.clone();
-                }
+        let pi = match self.state {
+            Some(ref s) => 
+                match *s {
+                    DeviceFlowState::Pending(ref pi) => pi.clone(),
+                    DeviceFlowState::Error => return Err(self.error.as_ref().unwrap()),
+                    DeviceFlowState::Success(ref t) => return Ok(Some(t.clone())),
+                },
+            _ => panic!("You have to call request_code() beforehand"),
+        };
 
-                // We should be ready for a new request
-                let req = form_urlencoded::serialize(
-                                [("client_id", &self.id[..]),
-                                 ("client_secret", &self.secret),
-                                 ("code", &self.device_code),
-                                 ("grant_type", "http://oauth.net/grant_type/device/1.0")]
-                                .iter().cloned());
-
-                let json_str = 
-                    match self.client.borrow_mut().post(GOOGLE_TOKEN_URL)
-                       .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
-                       .body(&*req)
-                       .send() {
-                    Err(err) => { 
-                        return PollResult::Error(Rc::new(err));
-                    }
-                    Ok(mut res) => {
-                        let mut json_str = String::new();
-                        res.read_to_string(&mut json_str).ok().expect("string decode must work");
-                        json_str
-                    }
-                };
-
-                #[derive(RustcDecodable)]
-                struct JsonError {
-                    error: String
-                }
-
-                match json::decode::<JsonError>(&json_str) {
-                    Err(_) => {}, // ignore, move on, it's not an error
-                    Ok(res) => {
-                        pi.server_message = res.error;
-                        self.state = match pi.server_message.as_ref() {
-                            "access_denied" => PollResult::AccessDenied,
-                            "authorization_pending" => PollResult::AuthorizationPending(pi),
-                            _ => panic!("server message '{}' not understood", pi.server_message),
-                        };
-                        return self.state.clone();
-                    }
-                }
-
-                // yes, we expect that !
-                let mut t: Token = json::decode(&json_str).unwrap();
-                t.set_expiry_absolute();
-                self.state = PollResult::AccessGranted(t);
-            },
-            // In any other state, we will bail out and do nothing
-            _ => {}
+        if pi.expires_at <= UTC::now() {
+            self.error = Some(PollError::Expired(pi.expires_at));
+            self.state = Some(DeviceFlowState::Error);
+            return Err(&self.error.as_ref().unwrap())
         }
 
-        self.state.clone()
+        // We should be ready for a new request
+        let req = form_urlencoded::serialize(
+                        [("client_id", &self.id[..]),
+                         ("client_secret", &self.secret),
+                         ("code", &self.device_code),
+                         ("grant_type", "http://oauth.net/grant_type/device/1.0")]
+                        .iter().cloned());
+
+        let json_str = 
+            match self.client.borrow_mut().post(GOOGLE_TOKEN_URL)
+               .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
+               .body(&*req)
+               .send() {
+            Err(err) => {
+                self.error = Some(PollError::HttpError(err));
+                return Err(self.error.as_ref().unwrap());
+            }
+            Ok(mut res) => {
+                let mut json_str = String::new();
+                res.read_to_string(&mut json_str).ok().expect("string decode must work");
+                json_str
+            }
+        };
+
+        #[derive(RustcDecodable)]
+        struct JsonError {
+            error: String
+        }
+
+        match json::decode::<JsonError>(&json_str) {
+            Err(_) => {}, // ignore, move on, it's not an error
+            Ok(res) => {
+                match res.error.as_ref() {
+                    "access_denied" => {
+                        self.error = Some(PollError::AccessDenied);
+                        self.state = Some(DeviceFlowState::Error);
+                        return Err(self.error.as_ref().unwrap())
+                    },
+                    "authorization_pending" => return Ok(None),
+                    _ => panic!("server message '{}' not understood", res.error),
+                };
+            }
+        }
+
+        // yes, we expect that !
+        let mut t: Token = json::decode(&json_str).unwrap();
+        t.set_expiry_absolute();
+
+        let res = Ok(Some(t.clone()));
+        self.state = Some(DeviceFlowState::Success(t));
+        return res
     }
 }
 
@@ -346,6 +334,7 @@ impl<C> DeviceFlow<C>
 pub mod tests {
     use super::*;
     use std::default::Default;
+    use std::time::Duration;
     use hyper;
 
     mock_connector_in_order!(MockGoogleAuth { 
@@ -382,28 +371,28 @@ pub mod tests {
                     hyper::Client::with_connector(<MockGoogleAuth as Default>::default()));
 
         match flow.request_code("bogus_client_id",
-                                    "bogus_secret",
-                                    &["https://www.googleapis.com/auth/youtube.upload"]) {
-                RequestResult::ProceedWithPolling(_) => {},
+                                "bogus_secret",
+                                &["https://www.googleapis.com/auth/youtube.upload"]) {
+            Ok(pi) => assert_eq!(pi.interval, Duration::seconds(0)),
+            _ => unreachable!(),
+        }
+
+        match flow.poll_token() {
+            Ok(None) => {},
+            _ => unreachable!(),
+        }
+
+        let t = 
+            match flow.poll_token() {
+                Ok(Some(t)) => {
+                    assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
+                    t
+                },
                 _ => unreachable!(),
             };
 
-        match flow.poll_token() {
-            PollResult::AuthorizationPending(ref pi) => {
-                assert_eq!(pi.server_message, "authorization_pending");
-            },
-            _ => unreachable!(),
-        }
-
-        match flow.poll_token() {
-            PollResult::AccessGranted(ref t) => {
-                assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
-            },
-            _ => unreachable!(),
-        }
-
         // from now on, all calls will yield the same result
         // As our mock has only 3 items, we would panic on this call
-        flow.poll_token();
+        assert_eq!(flow.poll_token().unwrap(), Some(t));
     }
 }
