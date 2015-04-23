@@ -54,8 +54,7 @@
 //! let mut f = RefreshFlow::new(hyper::Client::new());
 //! let new_token = match *f.refresh_token(FlowType::Device,
 //!                                        "my_client_id", "my_secret",
-//!                                        "my_refresh_token",
-//!                                        &["https://scope.url"]) {
+//!                                        "my_refresh_token") {
 //!                        RefreshResult::Success(ref t) => t,
 //!                        _ => panic!("bad luck ;)")
 //!                };

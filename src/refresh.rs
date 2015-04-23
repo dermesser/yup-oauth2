@@ -1,4 +1,5 @@
 use common::{FlowType, JsonError};
+use device::GOOGLE_TOKEN_URL;
 
 use chrono::UTC;
 use hyper;
@@ -6,10 +7,8 @@ use hyper::header::ContentType;
 use rustc_serialize::json;
 use url::form_urlencoded;
 use super::Token;
-use itertools::Itertools;
 use std::borrow::BorrowMut;
 use std::io::Read;
-use std::iter::IntoIterator;
 
 /// Implements the [Outh2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
 /// 
@@ -56,15 +55,12 @@ impl<C> RefreshFlow<C>
     /// 
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub fn refresh_token<'b, I, T>( &mut self, 
-                                    flow_type: FlowType, 
-                                    client_id: &str, 
-                                    client_secret: &str, 
-                                    refresh_token: &str,
-                                    scopes: I)
-                                            -> &RefreshResult 
-                                            where   T: AsRef<str> + Ord,
-                                                    I: IntoIterator<Item=&'b T> {
+    pub fn refresh_token(&mut self, 
+                         flow_type: FlowType, 
+                         client_id: &str, 
+                         client_secret: &str, 
+                         refresh_token: &str) -> &RefreshResult {
+        let _ = flow_type;
         if let RefreshResult::Success(_) = self.result {
             return &self.result;
         }
@@ -73,16 +69,11 @@ impl<C> RefreshFlow<C>
                                 [("client_id", client_id),
                                  ("client_secret", client_secret),
                                  ("refresh_token", refresh_token),
-                                 ("grant_type", "refresh_token"),
-                                 ("scope",  scopes.into_iter()
-                                                  .map(|s| s.as_ref())
-                                                  .intersperse(" ")
-                                                  .collect::<String>()
-                                                  .as_ref())]
+                                 ("grant_type", "refresh_token")]
                                 .iter().cloned());
 
         let json_str = 
-            match self.client.borrow_mut().post(flow_type.as_ref())
+            match self.client.borrow_mut().post(GOOGLE_TOKEN_URL)
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                .body(&*req)
                .send() {
@@ -153,7 +144,7 @@ mod tests {
 
 
         match *flow.refresh_token(FlowType::Device, 
-                                    "bogus", "secret", "bogus_refresh_token", &["scope.url"]) {
+                                    "bogus", "secret", "bogus_refresh_token") {
             RefreshResult::Success(ref t) => {
                 assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
                 assert!(!t.expired());

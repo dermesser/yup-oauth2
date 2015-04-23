@@ -293,8 +293,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                             match *rf.refresh_token(self.flow_type,
                                                    &self.secret.client_id, 
                                                    &self.secret.client_secret, 
-                                                   &t.refresh_token,
-                                                   scopes.iter()) {
+                                                   &t.refresh_token) {
                                 RefreshResult::Error(ref err) => {
                                     match self.delegate.connection_error(err) {
                                         Retry::Abort|Retry::Skip => 
