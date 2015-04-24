@@ -24,6 +24,7 @@ pub trait TokenStorage {
     type Error: 'static + Error;
 
     /// If `token` is None, it is invalid or revoked and should be removed from storage.
+    /// Otherwise, it should be saved.
     fn set(&mut self, scope_hash: u64, scopes: &Vec<&str>, token: Option<Token>) -> Option<Self::Error>;
     /// A `None` result indicates that there is no token for the given scope_hash.
     fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, Self::Error>;
@@ -305,8 +306,13 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                                 },
                                 RefreshResult::RefreshError(ref err_str, ref err_description) => {
                                     self.delegate.token_refresh_failed(&err_str, &err_description);
+                                    let storage_err = 
+                                        match self.storage.set(scope_key, &scopes, None) {
+                                            None => String::new(),
+                                            Some(err) => err.to_string(),
+                                        };
                                     return Err(Box::new(
-                                        StringError::new(err_str.clone(), err_description.as_ref())))
+                                        StringError::new(storage_err + err_str, err_description.as_ref())))
                                 },
                                 RefreshResult::Success(ref new_t) => {
                                     t = new_t.clone();
