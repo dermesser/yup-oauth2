@@ -2,7 +2,7 @@ use std::iter::IntoIterator;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::hash::{SipHasher, Hash, Hasher};
-use std::thread::sleep;
+use std::thread::sleep_ms;
 use std::cmp::min;
 use std::error::Error;
 use std::fmt;
@@ -203,7 +203,7 @@ impl<D, S, C> Authenticator<D, S, C>
                             RequestError::HttpError(err) => {
                                 match self.delegate.connection_error(&err) {
                                     Retry::Abort|Retry::Skip => return Err(Box::new(StringError::from(&err as &Error))),
-                                    Retry::After(d) => sleep(d),
+                                    Retry::After(d) => sleep_ms(d.num_milliseconds() as u32),
                                 }
                             },
                             RequestError::InvalidClient
@@ -234,7 +234,7 @@ impl<D, S, C> Authenticator<D, S, C>
                             match self.delegate.connection_error(err) {
                                 Retry::Abort|Retry::Skip 
                                     => return Err(Box::new(StringError::from(err as &Error))),
-                                Retry::After(d) => sleep(d),
+                                Retry::After(d) => sleep_ms(d.num_milliseconds() as u32),
                             }
                         },
                         &&PollError::Expired(ref t) => {
@@ -251,7 +251,7 @@ impl<D, S, C> Authenticator<D, S, C>
                         match self.delegate.pending(&pi) {
                             Retry::Abort|Retry::Skip 
                                 => return Err(Box::new(StringError::new("Pending authentication aborted".to_string(), None))),
-                            Retry::After(d) => sleep(min(d, pi.interval)),
+                            Retry::After(d) => sleep_ms(min(d, pi.interval).num_milliseconds() as u32),
                         },
                 Ok(Some(token)) => return Ok(token)
             }
@@ -301,7 +301,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                                             return Err(Box::new(StringError::new(
                                                                     err.description().to_string(),
                                                                     None))),
-                                        Retry::After(d) => sleep(d),
+                                        Retry::After(d) => sleep_ms(d.num_milliseconds() as u32),
                                     }
                                 },
                                 RefreshResult::RefreshError(ref err_str, ref err_description) => {
@@ -322,7 +322,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                                                 Retry::Skip => break,
                                                 Retry::Abort => return Err(Box::new(err)),
                                                 Retry::After(d) => {
-                                                    sleep(d);
+                                                    sleep_ms(d.num_milliseconds() as u32);
                                                     continue;
                                                 }
                                             }
@@ -351,7 +351,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                                         Retry::Skip => break,
                                         Retry::Abort => return Err(Box::new(err)),
                                         Retry::After(d) => {
-                                            sleep(d);
+                                            sleep_ms(d.num_milliseconds() as u32);
                                             continue;
                                         }
                                     }
@@ -367,7 +367,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                     match self.delegate.token_storage_failure(false, &err) {
                         Retry::Abort|Retry::Skip => Err(Box::new(err)),
                         Retry::After(d) => {
-                            sleep(d);
+                            sleep_ms(d.num_milliseconds() as u32);
                             continue
                         }
                     }

@@ -1,4 +1,4 @@
-#![feature(collections, thread_sleep, std_misc, exit_status)]
+#![feature(collections, std_misc, exit_status)]
 #![allow(deprecated)]
 extern crate yup_oauth2 as oauth2;
 extern crate yup_hyper_mock as mock;
@@ -13,7 +13,7 @@ use getopts::{HasArg,Options,Occur,Fail};
 use std::env;
 use std::default::Default;
 use std::time::Duration;
-use std::thread::sleep;
+use std::thread::sleep_ms;
 
 
 fn usage(program: &str, opts: &Options, err: Option<Fail>) {
@@ -72,7 +72,7 @@ fn main() {
                       pi.user_code, pi.verification_url, pi.expires_at.with_timezone(&Local));
             let delay = Duration::seconds(5);
             println!("Browser opens automatically in {} seconds", delay);
-            sleep(delay);
+            sleep_ms(delay.num_milliseconds() as u32);
             open::that(&pi.verification_url).ok();
             println!("DONE - waiting for authorization ...");
         }
