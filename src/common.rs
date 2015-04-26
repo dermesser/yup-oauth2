@@ -1,11 +1,10 @@
 use chrono::{DateTime, UTC, TimeZone};
-use std::marker::MarkerTrait;
 use std::fmt;
 use std::str::FromStr;
 use hyper;
 
 /// A marker trait for all Flows
-pub trait Flow : MarkerTrait {
+pub trait Flow {
     fn type_id() -> FlowType;
 }
 
