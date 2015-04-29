@@ -1,4 +1,3 @@
-#![feature(std_misc)]
 #![allow(deprecated)]
 //! This library can be used to acquire oauth2.0 authentication for services.
 //! At the time of writing, only one way of doing so is implemented, the [device flow](https://developers.google.com/youtube/v3/guides/authentication#devices), along with a flow 
@@ -70,6 +69,7 @@ extern crate log;
 extern crate yup_hyper_mock as hyper_mock;
 extern crate mime;
 extern crate url;
+extern crate time;
 extern crate itertools;
 extern crate rustc_serialize as rustc_serialize;
 

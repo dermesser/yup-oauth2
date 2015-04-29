@@ -1,4 +1,4 @@
-#![feature(collections, std_misc, exit_status)]
+#![feature(collections, exit_status)]
 #![allow(deprecated)]
 extern crate yup_oauth2 as oauth2;
 extern crate yup_hyper_mock as mock;
@@ -6,13 +6,14 @@ extern crate hyper;
 extern crate chrono;
 extern crate getopts;
 extern crate open;
+extern crate time;
 
 use oauth2::GetToken;
 use chrono::{Local};
 use getopts::{HasArg,Options,Occur,Fail};
 use std::env;
 use std::default::Default;
-use std::time::Duration;
+use time::Duration;
 use std::thread::sleep_ms;
 
 

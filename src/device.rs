@@ -1,5 +1,5 @@
 use std::iter::IntoIterator;
-use std::time::Duration;
+use time::Duration;
 use std::default::Default;
 use std::fmt;
 
@@ -334,7 +334,7 @@ impl<C> DeviceFlow<C>
 pub mod tests {
     use super::*;
     use std::default::Default;
-    use std::time::Duration;
+    use time::Duration;
     use hyper;
 
     mock_connector_in_order!(MockGoogleAuth { 
