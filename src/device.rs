@@ -7,7 +7,7 @@ use hyper;
 use hyper::header::ContentType;
 use url::form_urlencoded;
 use itertools::Itertools;
-use rustc_serialize::json;
+use serde::json;
 use chrono::{DateTime,UTC};
 use std::borrow::BorrowMut;
 use std::io::Read;
@@ -202,7 +202,7 @@ impl<C> DeviceFlow<C>
             Ok(mut res) => {
 
 
-                #[derive(RustcDecodable)]
+                #[derive(Deserialize)]
                 struct JsonData {
                     device_code: String,
                     user_code: String,
@@ -212,17 +212,18 @@ impl<C> DeviceFlow<C>
                 }
 
                 let mut json_str = String::new();
-                res.read_to_string(&mut json_str).ok().expect("string decode must work");
+                res.read_to_string(&mut json_str).unwrap();
 
                 // check for error
-                match json::decode::<JsonError>(&json_str) {
+                match json::from_str::<JsonError>(&json_str) {
                     Err(_) => {}, // ignore, move on
                     Ok(res) => {
                         return Err(RequestError::from(res))
                     }
                 }
 
-                let decoded: JsonData = json::decode(&json_str).ok().expect("valid reply thanks to valid client_id and client_secret");
+                println!("{:?}", json_str);
+                let decoded: JsonData = json::from_str(&json_str).unwrap();
 
                 self.device_code = decoded.device_code;
                 let pi = PollInformation {
@@ -294,17 +295,17 @@ impl<C> DeviceFlow<C>
             }
             Ok(mut res) => {
                 let mut json_str = String::new();
-                res.read_to_string(&mut json_str).ok().expect("string decode must work");
+                res.read_to_string(&mut json_str).unwrap();
                 json_str
             }
         };
 
-        #[derive(RustcDecodable)]
+        #[derive(Deserialize)]
         struct JsonError {
             error: String
         }
 
-        match json::decode::<JsonError>(&json_str) {
+        match json::from_str::<JsonError>(&json_str) {
             Err(_) => {}, // ignore, move on, it's not an error
             Ok(res) => {
                 match res.error.as_ref() {
@@ -320,7 +321,7 @@ impl<C> DeviceFlow<C>
         }
 
         // yes, we expect that !
-        let mut t: Token = json::decode(&json_str).unwrap();
+        let mut t: Token = json::from_str(&json_str).unwrap();
         t.set_expiry_absolute();
 
         let res = Ok(Some(t.clone()));
@@ -345,7 +346,7 @@ pub mod tests {
                                   \"device_code\" : \"4/L9fTtLrhY96442SEuf1Rl3KLFg3y\",\r\n\
                                   \"user_code\" : \"a9xfwk9c\",\r\n\
                                   \"verification_url\" : \"http://www.google.com/device\",\r\n\
-                                  \"expires_in\" : \"1800\",\r\n\
+                                  \"expires_in\" : 1800,\r\n\
                                   \"interval\" : 0\r\n\
                                 }"
                                 "HTTP/1.1 200 OK\r\n\

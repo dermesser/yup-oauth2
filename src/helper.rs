@@ -481,9 +481,9 @@ mod tests {
 
     #[test]
     fn flow() {
-        use rustc_serialize::json;
+        use serde::json;
 
-        let secret = json::decode::<ConsoleApplicationSecret>(SECRET).unwrap().installed.unwrap();
+        let secret = json::from_str::<ConsoleApplicationSecret>(SECRET).unwrap().installed.unwrap();
         let res = Authenticator::new(&secret, DefaultAuthenticatorDelegate,
                         hyper::Client::with_connector(<MockGoogleAuth as Default>::default()),
                         <MemoryStorage as Default>::default(), None)

@@ -4,7 +4,7 @@ use device::GOOGLE_TOKEN_URL;
 use chrono::UTC;
 use hyper;
 use hyper::header::ContentType;
-use rustc_serialize::json;
+use serde::json;
 use url::form_urlencoded;
 use super::Token;
 use std::borrow::BorrowMut;
@@ -83,19 +83,19 @@ impl<C> RefreshFlow<C>
             }
             Ok(mut res) => {
                 let mut json_str = String::new();
-                res.read_to_string(&mut json_str).ok().expect("string decode must work");
+                res.read_to_string(&mut json_str).unwrap();
                 json_str
             }
         };
 
-        #[derive(RustcDecodable)]
+        #[derive(Deserialize)]
         struct JsonToken {
             access_token: String,
             token_type: String,
             expires_in: i64,
         }
 
-        match json::decode::<JsonError>(&json_str) {
+        match json::from_str::<JsonError>(&json_str) {
             Err(_) => {},
             Ok(res) => {
                 self.result = RefreshResult::RefreshError(res.error, res.error_description);
@@ -103,7 +103,7 @@ impl<C> RefreshFlow<C>
             }
         }
 
-        let t: JsonToken = json::decode(&json_str).unwrap();
+        let t: JsonToken = json::from_str(&json_str).unwrap();
         self.result = RefreshResult::Success(Token {
             access_token: t.access_token,
             token_type: t.token_type,

@@ -14,17 +14,19 @@
 //! The returned `Token` should be stored permanently to authorize future API requests.
 //!
 //! ```test_harness,no_run
+//! #![feature(custom_derive, plugin)]
+//! #![plugin(serde_macros)]
 //! extern crate hyper;
 //! extern crate yup_oauth2 as oauth2;
-//! extern crate rustc_serialize;
+//! extern crate serde;
 //! 
 //! use oauth2::{Authenticator, DefaultAuthenticatorDelegate, PollInformation, ConsoleApplicationSecret, MemoryStorage, GetToken};
-//! use rustc_serialize::json;
+//! use serde::json;
 //! use std::default::Default;
 //! # const SECRET: &'static str = "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.googleusercontent.com\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\"}}";
 //!
 //! # #[test] fn device() {
-//! let secret = json::decode::<ConsoleApplicationSecret>(SECRET).unwrap().installed.unwrap();
+//! let secret = json::from_str::<ConsoleApplicationSecret>(SECRET).unwrap().installed.unwrap();
 //! let res = Authenticator::new(&secret, DefaultAuthenticatorDelegate,
 //!                         hyper::Client::new(),
 //!                         <MemoryStorage as Default>::default(), None)
@@ -59,6 +61,8 @@
 //!                };
 //! # }
 //! ```
+#![feature(custom_derive, plugin)]
+#![plugin(serde_macros)]
 extern crate chrono;
 
 #[macro_use]
@@ -71,7 +75,7 @@ extern crate mime;
 extern crate url;
 extern crate time;
 extern crate itertools;
-extern crate rustc_serialize as rustc_serialize;
+extern crate serde;
 
 
 mod device;

@@ -8,7 +8,7 @@ pub trait Flow {
     fn type_id() -> FlowType;
 }
 
-#[derive(RustcDecodable)]
+#[derive(Deserialize)]
 pub struct JsonError {
     pub error: String,
     pub error_description: Option<String>,
@@ -85,7 +85,7 @@ impl FromStr for Scheme {
 /// absolute terms.
 /// 
 /// Utility methods make common queries easier, see `expired()`.
-#[derive(Clone, PartialEq, Debug, RustcDecodable, RustcEncodable)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Token {
     /// used when authenticating calls to oauth2 enabled services.
     pub access_token: String,
@@ -150,7 +150,7 @@ impl AsRef<str> for FlowType {
 
 /// Represents either 'installed' or 'web' applications in a json secrets file.
 /// See `ConsoleApplicationSecret` for more information
-#[derive(RustcDecodable, RustcEncodable, Clone, Default)]
+#[derive(Deserialize, Serialize, Clone, Default)]
 pub struct ApplicationSecret {
     /// The client ID.
     pub client_id: String,
@@ -173,7 +173,7 @@ pub struct ApplicationSecret {
 
 /// A type to facilitate reading and writing the json secret file
 /// as returned by the [google developer console](https://code.google.com/apis/console)
-#[derive(RustcDecodable, RustcEncodable, Default)]
+#[derive(Deserialize, Serialize, Default)]
 pub struct ConsoleApplicationSecret {
     pub web: Option<ApplicationSecret>,
     pub installed: Option<ApplicationSecret>
@@ -189,8 +189,8 @@ pub mod tests {
 
     #[test]
     fn console_secret() {
-        use rustc_serialize::json;
-        match json::decode::<ConsoleApplicationSecret>(SECRET) {
+        use serde::json;
+        match json::from_str::<ConsoleApplicationSecret>(SECRET) {
             Ok(s) => assert!(s.installed.is_some() && s.web.is_none()),
             Err(err) => panic!(err),
         }
