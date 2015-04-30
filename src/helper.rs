@@ -25,7 +25,7 @@ pub trait TokenStorage {
 
     /// If `token` is None, it is invalid or revoked and should be removed from storage.
     /// Otherwise, it should be saved.
-    fn set(&mut self, scope_hash: u64, scopes: &Vec<&str>, token: Option<Token>) -> Option<Self::Error>;
+    fn set(&mut self, scope_hash: u64, scopes: &Vec<&str>, token: Option<Token>) -> Result<(), Self::Error>;
     /// A `None` result indicates that there is no token for the given scope_hash.
     fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, Self::Error>;
 }
@@ -50,7 +50,7 @@ impl fmt::Display for NullError {
 
 impl TokenStorage for NullStorage {
     type Error = NullError;
-    fn set(&mut self, _: u64, _: &Vec<&str>, _: Option<Token>) -> Option<NullError> { None }
+    fn set(&mut self, _: u64, _: &Vec<&str>, _: Option<Token>) -> Result<(), NullError> { Ok(()) }
     fn get(&self, _: u64, _: &Vec<&str>) -> Result<Option<Token>, NullError> { Ok(None) }
 }
 
@@ -63,12 +63,12 @@ pub struct MemoryStorage {
 impl TokenStorage for MemoryStorage {
     type Error = NullError;
 
-    fn set(&mut self, scope_hash: u64, _: &Vec<&str>, token: Option<Token>) -> Option<NullError> {
+    fn set(&mut self, scope_hash: u64, _: &Vec<&str>, token: Option<Token>) -> Result<(), NullError> {
         match token {
             Some(t) => self.tokens.insert(scope_hash, t),
             None => self.tokens.remove(&scope_hash),
         };
-        None
+        Ok(())
     }
 
     fn get(&self, scope_hash: u64, _: &Vec<&str>) -> Result<Option<Token>, NullError> {
@@ -308,8 +308,8 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                                     self.delegate.token_refresh_failed(&err_str, &err_description);
                                     let storage_err = 
                                         match self.storage.set(scope_key, &scopes, None) {
-                                            None => String::new(),
-                                            Some(err) => err.to_string(),
+                                            Ok(_) => String::new(),
+                                            Err(err) => err.to_string(),
                                         };
                                     return Err(Box::new(
                                         StringError::new(storage_err + err_str, err_description.as_ref())))
@@ -317,7 +317,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                                 RefreshResult::Success(ref new_t) => {
                                     t = new_t.clone();
                                     loop {
-                                        if let Some(err) = self.storage.set(scope_key, &scopes, Some(t.clone())) {
+                                        if let Err(err) = self.storage.set(scope_key, &scopes, Some(t.clone())) {
                                             match self.delegate.token_storage_failure(true, &err) {
                                                 Retry::Skip => break,
                                                 Retry::Abort => return Err(Box::new(err)),
@@ -346,7 +346,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                     {
                         Ok(token) => {
                             loop {
-                                if let Some(err) = self.storage.set(scope_key, &scopes, Some(token.clone())) {
+                                if let Err(err) = self.storage.set(scope_key, &scopes, Some(token.clone())) {
                                     match self.delegate.token_storage_failure(true, &err) {
                                         Retry::Skip => break,
                                         Retry::Abort => return Err(Box::new(err)),
