@@ -13,12 +13,12 @@
 			],
 		},
 	],
-	 "SublimeLinter":
+	"SublimeLinter":
     {
         "linters":
         {
 			"rust": {
-                "@disable": false,
+                "@disable": true,
                 "args": [],
                 "crate-root": null,
                 "excludes": [],

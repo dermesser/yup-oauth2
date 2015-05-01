@@ -10,8 +10,9 @@ pub trait Flow {
 
 #[derive(Deserialize)]
 pub struct JsonError {
-    pub error: String,
+    pub error: Option<String>,
     pub error_description: Option<String>,
+    pub error_uri: Option<String>,
 }
 
 /// Represents all implemented token types

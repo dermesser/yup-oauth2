@@ -98,8 +98,10 @@ impl<C> RefreshFlow<C>
         match json::from_str::<JsonError>(&json_str) {
             Err(_) => {},
             Ok(res) => {
-                self.result = RefreshResult::RefreshError(res.error, res.error_description);
-                return &self.result;
+                if let Some(err) = res.error {
+                    self.result = RefreshResult::RefreshError(err, res.error_description);
+                    return &self.result;
+                }
             }
         }
 
