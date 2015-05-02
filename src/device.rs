@@ -84,13 +84,12 @@ pub enum RequestError {
 
 impl From<JsonError> for RequestError {
     fn from(value: JsonError) -> RequestError {
-        let err_str = value.error.unwrap();
-        match &*err_str {
+        match &*value.error {
             "invalid_client" => RequestError::InvalidClient,
             "invalid_scope" => RequestError::InvalidScope(
                         value.error_description.unwrap_or("no description provided".to_string())
                                ),
-            _ => RequestError::NegativeServerResponse(err_str, value.error_description),
+            _ => RequestError::NegativeServerResponse(value.error, value.error_description),
         }
     }
 }
@@ -219,9 +218,7 @@ impl<C> DeviceFlow<C>
                 match json::from_str::<JsonError>(&json_str) {
                     Err(_) => {}, // ignore, move on
                     Ok(res) => {
-                        if res.error.is_some() {
-                            return Err(RequestError::from(res))
-                        }
+                        return Err(RequestError::from(res))
                     }
                 }
 

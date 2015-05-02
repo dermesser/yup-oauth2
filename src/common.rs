@@ -10,7 +10,7 @@ pub trait Flow {
 
 #[derive(Deserialize)]
 pub struct JsonError {
-    pub error: Option<String>,
+    pub error: String,
     pub error_description: Option<String>,
     pub error_uri: Option<String>,
 }
