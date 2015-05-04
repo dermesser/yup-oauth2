@@ -1,13 +1,20 @@
 language: rust
-after_success: |
-  [ $TRAVIS_BRANCH = master ] &&
-  [ $TRAVIS_PULL_REQUEST = false ] &&
-  cargo doc &&
-  echo '<meta http-equiv=refresh content=0;url=yup-oauth2/index.html>' > target/doc/index.html &&
-  git shortlog -s -n | cut -c 8- > target/doc/humans.txt &&
-  sudo pip install ghp-import &&
-  ghp-import -n target/doc &&
-  git push -fq https://${TOKEN}@github.com/${TRAVIS_REPO_SLUG}.git gh-pages
+sudo: required
+
+rust:
+  - nightly
+  - beta
+before_script:
+  - pip install 'travis-cargo<0.2' --user && export PATH=$HOME/.local/bin:$PATH
+script:
+  - |
+      travis-cargo build &&
+      travis-cargo test &&
+      travis-cargo doc
+after_success:
+  - travis-cargo doc-upload
+  - travis-cargo coveralls
+
 env:
   global:
     secure: R2TjgAkb9vgibslocKKMQ1fterul/nJJ/Srv8mxbzA/z569ZKFeR8gFlM0bxUkQVeJpGkHKkR6dcNuk6xtafRkm2W5Q04FUqF7/eEzvzMpf0a1kPOld44dZgYbncmk3bend40+fOwDpubozTtuLoimDIIxqdNp39d7w5h0a+s1U=
