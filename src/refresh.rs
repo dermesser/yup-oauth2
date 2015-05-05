@@ -66,11 +66,10 @@ impl<C> RefreshFlow<C>
         }
 
         let req = form_urlencoded::serialize(
-                                [("client_id", client_id),
+                               &[("client_id", client_id),
                                  ("client_secret", client_secret),
                                  ("refresh_token", refresh_token),
-                                 ("grant_type", "refresh_token")]
-                                .iter().cloned());
+                                 ("grant_type", "refresh_token")]);
 
         let json_str = 
             match self.client.borrow_mut().post(GOOGLE_TOKEN_URL)

@@ -185,12 +185,12 @@ impl<C> DeviceFlow<C>
         // note: cloned() shouldn't be needed, see issue
         // https://github.com/servo/rust-url/issues/81
         let req = form_urlencoded::serialize(
-                  [("client_id", client_id),
-                   ("scope", scopes.into_iter()
-                                   .map(|s| s.as_ref())
-                                   .intersperse(" ")
-                                   .collect::<String>()
-                                   .as_ref())].iter().cloned());
+                  &[("client_id", client_id),
+                    ("scope", scopes.into_iter()
+                                    .map(|s| s.as_ref())
+                                    .intersperse(" ")
+                                    .collect::<String>()
+                                    .as_ref())]);
 
         match self.client.borrow_mut().post(FlowType::Device.as_ref())
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
@@ -277,11 +277,10 @@ impl<C> DeviceFlow<C>
 
         // We should be ready for a new request
         let req = form_urlencoded::serialize(
-                        [("client_id", &self.id[..]),
+                       &[("client_id", &self.id[..]),
                          ("client_secret", &self.secret),
                          ("code", &self.device_code),
-                         ("grant_type", "http://oauth.net/grant_type/device/1.0")]
-                        .iter().cloned());
+                         ("grant_type", "http://oauth.net/grant_type/device/1.0")]);
 
         let json_str = 
             match self.client.borrow_mut().post(GOOGLE_TOKEN_URL)
