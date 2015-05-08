@@ -71,7 +71,7 @@ impl fmt::Display for PollInformation {
 /// Encapsulates all possible results of the `request_token(...)` operation
 pub enum RequestError {
     /// Indicates connection failure
-    HttpError(hyper::HttpError),
+    HttpError(hyper::Error),
     /// The OAuth client was not found
     InvalidClient,
     /// Some requested scopes were invalid. String contains the scopes as part of 
@@ -116,7 +116,7 @@ impl fmt::Display for RequestError {
 #[derive(Debug)]
 pub enum PollError {
     /// Connection failure - retry if you think it's worth it
-    HttpError(hyper::HttpError),
+    HttpError(hyper::Error),
     /// indicates we are expired, including the expiration date
     Expired(DateTime<UTC>),
     /// Indicates that the user declined access. String is server response

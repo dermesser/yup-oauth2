@@ -24,7 +24,7 @@ pub struct RefreshFlow<C> {
 /// All possible outcomes of the refresh flow
 pub enum RefreshResult {
     /// Indicates connection failure
-    Error(hyper::HttpError),
+    Error(hyper::Error),
     /// The server did not answer with a new token, providing the server message
     RefreshError(String, Option<String>),
     /// The refresh operation finished successfully, providing a new `Token`
@@ -37,7 +37,7 @@ impl<C> RefreshFlow<C>
     pub fn new(client: C) -> RefreshFlow<C> {
         RefreshFlow {
             client: client,
-            result: RefreshResult::Error(hyper::HttpError::HttpStatusError),
+            result: RefreshResult::Error(hyper::Error::TooLarge),
         }
     }
 

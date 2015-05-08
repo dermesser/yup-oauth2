@@ -395,7 +395,7 @@ pub trait AuthenticatorDelegate {
     /// Called whenever there is an HttpError, usually if there are network problems.
     /// 
     /// Return retry information.
-    fn connection_error(&mut self, &hyper::HttpError) -> Retry {
+    fn connection_error(&mut self, &hyper::Error) -> Retry {
         Retry::Abort
     }
 
