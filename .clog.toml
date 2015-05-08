@@ -1,5 +1,6 @@
 [clog]
 repository = "https://github.com/Byron/yup-oauth2"
+from-latest-tag = true
 
 [sections]
 Improvements = ["imp"]

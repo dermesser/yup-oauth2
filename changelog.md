@@ -1,3 +1,17 @@
+<a name="v0.4.4"></a>
+## v0.4.4 (2015-05-08)
+
+
+#### Features
+
+* **testing**  use travis-cargo ([dd711b6e](https://github.com/Byron/yup-oauth2/commit/dd711b6e8065bb699aa244cd6a51f21bdb4e05e9))
+
+#### Bug Fixes
+
+* **hyper**  update to hyper v0.4.0 ([7383f5ef](https://github.com/Byron/yup-oauth2/commit/7383f5efb60fabdb797a71cc5288068b3095c294))
+
+
+
 <a name="v0.4.3"></a>
 ## v0.4.3 (2015-05-02)
 
