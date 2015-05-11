@@ -1,3 +1,12 @@
+<a name="v0.4.5"></a>
+## v0.4.5 (2015-05-11)
+
+
+#### Bug Fixes
+
+* **rustup**  workaround rustlang bug ([47b68cf4](https://github.com/Byron/yup-oauth2/commit/47b68cf4010974b1ea834b292d9b9101d15a6c46))
+
+
 <a name="v0.4.4"></a>
 ## v0.4.4 (2015-05-08)
 
