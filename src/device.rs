@@ -192,7 +192,9 @@ impl<C> DeviceFlow<C>
                                     .collect::<String>()
                                     .as_ref())]);
 
-        match self.client.borrow_mut().post(FlowType::Device.as_ref())
+        // note: works around bug in rustlang
+        // https://github.com/rust-lang/rust/issues/22252
+        let ret = match self.client.borrow_mut().post(FlowType::Device.as_ref())
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                .body(&*req)
                .send() {
@@ -237,7 +239,9 @@ impl<C> DeviceFlow<C>
                 self.id = client_id.to_string();
                 Ok(pi)
             }
-        }
+        };
+
+        ret
     }
 
     /// If the first call is successful, this method may be called.
