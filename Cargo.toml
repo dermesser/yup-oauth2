@@ -12,7 +12,7 @@ license = "MIT"
 [dependencies]
 chrono = "*"
 time = "*"
-hyper = ">= 0.4.0"
+hyper = ">= 0.5.0"
 log = "*"
 mime = "*"
 url = "*"
