@@ -8,6 +8,7 @@ description = "A partial oauth2 implementation, providing the 'device' authoriza
 documentation = "http://byron.github.io/yup-oauth2"
 keywords = ["google", "oauth", "v2"]
 license = "MIT"
+build = "build.rs"
 
 [dependencies]
 chrono = "*"
@@ -18,7 +19,16 @@ url = "*"
 hyper = ">= 0.5.0"
 itertools = "*"
 serde = "*"
-serde_macros = "*"
+serde_macros = { version = "*", optional = true }
+
+[features]
+default = ["with_syntex"]
+nightly = ["serde_macros"]
+with_syntex = ["serde_codegen", "syntex"]
+
+[build-dependencies]
+syntex = { version = "*", optional = true }
+serde_codegen = { version = "*", optional = true }
 
 [dev-dependencies]
 getopts = "*"
