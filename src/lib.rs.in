@@ -1,11 +1,15 @@
+#[cfg_attr(feature = "nightly", feature(plugin))]
+#[cfg_attr(feature = "nightly", plugin(serde_macros))]
+extern crate serde;
+
 extern crate chrono;
 
 #[macro_use]
 extern crate hyper;
 #[macro_use]
 extern crate log;
-#[cfg(test)] #[macro_use]
-extern crate yup_hyper_mock as hyper_mock;
+#[macro_use] #[cfg(test)]
+extern crate yup_hyper_mock;
 extern crate mime;
 extern crate url;
 extern crate time;

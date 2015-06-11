@@ -60,10 +60,7 @@
 //!                };
 //! # }
 //! ```
-#[cfg_attr(feature = "nightly", feature(plugin))]
-#[cfg_attr(feature = "nightly", plugin(serde_macros))]
-
-extern crate serde;
+#![cfg_attr(feature = "nightly", feature(custom_derive))]
 
 #[cfg(feature = "nightly")]
 include!("lib.rs.in");

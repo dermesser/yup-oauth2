@@ -446,9 +446,8 @@ pub trait AuthenticatorDelegate {
     /// * Will be called exactly once, provided we didn't abort during `request_code` phase.
     /// * Will only be called if the Authenticator's flow_type is `FlowType::Device`.
     fn present_user_code(&mut self, pi: &PollInformation) {
-        // TODO(ST): If this line is commnented in again, syntex fails to work !
-        // println!{"Please enter {} at {} and grant access to this application", 
-        //           pi.user_code, pi.verification_url}
+        println!("Please enter {} at {} and grant access to this application", 
+                  pi.user_code, pi.verification_url);
         println!("Do not close this application until you either denied or granted access.");
         println!("You have time until {}.", pi.expires_at.with_timezone(&Local));
     }
