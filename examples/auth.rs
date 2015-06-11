@@ -1,5 +1,3 @@
-#![feature(collections, exit_status)]
-#![allow(deprecated)]
 extern crate yup_oauth2 as oauth2;
 extern crate yup_hyper_mock as mock;
 extern crate hyper;
@@ -17,15 +15,17 @@ use time::Duration;
 use std::thread::sleep_ms;
 
 
-fn usage(program: &str, opts: &Options, err: Option<Fail>) {
+fn usage(program: &str, opts: &Options, err: Option<Fail>) -> ! {
     if err.is_some() {
         println!("{}", err.unwrap());
-        env::set_exit_status(1);
+        std::process::exit(1);
     }
     println!("{}", opts.short_usage(program) + " SCOPE [SCOPE ...]");
     println!("{}", opts.usage("A program to authenticate against oauthv2 services.\n\
               See https://developers.google.com/youtube/registering_an_application\n\
               and https://developers.google.com/youtube/v3/guides/authentication#devices"));
+
+    std::process::exit(0);
 }
 
 fn main() {
@@ -36,18 +36,16 @@ fn main() {
     opts.opt("c", "id", "oauthv2 ID of your application", "CLIENT_ID", HasArg::Yes, Occur::Req)
         .opt("s", "secret", "oauthv2 secret of your application", "CLIENT_SECRET", HasArg::Yes, Occur::Req);
 
-    let m = match opts.parse(args.tail()) {
+    let m = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(e) => {
             usage(&prog, &opts, Some(e));
-            return
         }
     };
 
     if m.free.len() == 0 {
         let msg = Fail::ArgumentMissing("you must provide one or more authorization scopes as free options".to_string());
         usage(&prog, &opts, Some(msg));
-        return
     }
 
     let secret = oauth2::ApplicationSecret {
@@ -93,7 +91,7 @@ fn main() {
         },
         Err(err) => {
             println!("Access token wasn't obtained: {}", err);
-            env::set_exit_status(10);
+            std::process::exit(10);
         }
     }
 }

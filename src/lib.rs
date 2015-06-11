@@ -60,7 +60,8 @@
 //!                };
 //! # }
 //! ```
-#![cfg_attr(feature = "nightly", feature(custom_derive))]
+#![cfg_attr(feature = "nightly", feature(custom_derive, custom_attribute, plugin))]
+#![cfg_attr(feature = "nightly", plugin(serde_macros))]
 
 #[cfg(feature = "nightly")]
 include!("lib.rs.in");

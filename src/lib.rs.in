@@ -1,12 +1,28 @@
-#[cfg_attr(feature = "nightly", feature(plugin))]
-#[cfg_attr(feature = "nightly", plugin(serde_macros))]
+/// NOTE: This makes `cargo build` work, but `cargo test` still fails as these
+/// override the macros that should come from `yup_hyper_mock`
+#[cfg(not(test))]
+macro_rules! mock_connector (
+    ($name:ident {
+        $($url:expr => $res:expr)*
+    }) => (
+    )
+);
+
+#[cfg(not(test))]
+macro_rules! mock_connector_in_order (
+    ($name:ident {
+        $( $res:expr )*
+    }) => (
+    )
+);
+
+
 extern crate serde;
 
 extern crate chrono;
 
-#[macro_use]
 extern crate hyper;
-#[macro_use]
+#[macro_use] #[cfg(test)]
 extern crate log;
 #[macro_use] #[cfg(test)]
 extern crate yup_hyper_mock;
