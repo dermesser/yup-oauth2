@@ -1,26 +1,36 @@
 [package]
 
 name = "yup-oauth2"
-version = "0.4.5"
+version = "0.5.0"
 authors = ["Sebastian Thiel <byronimo@gmail.com>"]
 repository = "https://github.com/Byron/yup-oauth2"
 description = "A partial oauth2 implementation, providing the 'device' authorization flow"
 documentation = "http://byron.github.io/yup-oauth2"
 keywords = ["google", "oauth", "v2"]
 license = "MIT"
+build = "build.rs"
 
 [dependencies]
 chrono = "*"
 time = "*"
-hyper = ">= 0.4.0"
 log = "*"
 mime = "*"
 url = "*"
+hyper = ">= 0.5.0"
 itertools = "*"
 serde = "*"
-serde_macros = "*"
+serde_macros = { version = "*", optional = true }
+
+[features]
+default = ["with_syntex"]
+nightly = ["serde_macros"]
+with_syntex = ["serde_codegen", "syntex"]
+
+[build-dependencies]
+syntex = { version = "*", optional = true }
+serde_codegen = { version = "*", optional = true }
 
 [dev-dependencies]
 getopts = "*"
-yup-hyper-mock = ">= 0.1.4"
 open = "*"
+yup-hyper-mock = ">= 1.0.0"

@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 //! This library can be used to acquire oauth2.0 authentication for services.
 //! At the time of writing, only one way of doing so is implemented, the [device flow](https://developers.google.com/youtube/v3/guides/authentication#devices), along with a flow 
 //! for [refreshing tokens](https://developers.google.com/youtube/v3/guides/authentication#devices)
@@ -14,8 +13,8 @@
 //! The returned `Token` should be stored permanently to authorize future API requests.
 //!
 //! ```test_harness,no_run
-//! #![feature(custom_derive, plugin)]
-//! #![plugin(serde_macros)]
+//! #![cfg_attr(feature = "nightly", feature(custom_derive, custom_attribute, plugin))]
+//! #![cfg_attr(feature = "nightly", plugin(serde_macros))]
 //! extern crate hyper;
 //! extern crate yup_oauth2 as oauth2;
 //! extern crate serde;
@@ -61,30 +60,11 @@
 //!                };
 //! # }
 //! ```
-#![feature(custom_derive, plugin)]
-#![plugin(serde_macros)]
-extern crate chrono;
+#![cfg_attr(feature = "nightly", feature(custom_derive, custom_attribute, plugin))]
+#![cfg_attr(feature = "nightly", plugin(serde_macros))]
 
-#[macro_use]
-extern crate hyper;
-#[macro_use]
-extern crate log;
-#[cfg(test)] #[macro_use]
-extern crate yup_hyper_mock as hyper_mock;
-extern crate mime;
-extern crate url;
-extern crate time;
-extern crate itertools;
-extern crate serde;
+#[cfg(feature = "nightly")]
+include!("lib.rs.in");
 
-
-mod device;
-mod refresh;
-mod common;
-mod helper;
-
-pub use device::{DeviceFlow, PollInformation, PollError};
-pub use refresh::{RefreshFlow, RefreshResult};
-pub use common::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret, Scheme, TokenType};
-pub use helper::{TokenStorage, NullStorage, MemoryStorage, Authenticator, 
-                 AuthenticatorDelegate, Retry, DefaultAuthenticatorDelegate, GetToken};
+#[cfg(feature = "with_syntex")]
+include!(concat!(env!("OUT_DIR"), "/lib.rs"));
