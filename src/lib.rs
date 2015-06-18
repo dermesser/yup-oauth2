@@ -13,8 +13,8 @@
 //! The returned `Token` should be stored permanently to authorize future API requests.
 //!
 //! ```test_harness,no_run
-//! #![feature(custom_derive, plugin)]
-//! #![plugin(serde_macros)]
+//! #![cfg_attr(feature = "nightly", feature(custom_derive, custom_attribute, plugin))]
+//! #![cfg_attr(feature = "nightly", plugin(serde_macros))]
 //! extern crate hyper;
 //! extern crate yup_oauth2 as oauth2;
 //! extern crate serde;

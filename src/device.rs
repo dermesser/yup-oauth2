@@ -339,9 +339,14 @@ pub mod tests {
     use std::default::Default;
     use time::Duration;
     use hyper;
+    use yup_hyper_mock::{SequentialConnector, MockStream};
 
-    mock_connector_in_order!(MockGoogleAuth { 
-                                "HTTP/1.1 200 OK\r\n\
+    pub struct MockGoogleAuth(SequentialConnector);
+
+    impl Default for MockGoogleAuth {
+        fn default() -> MockGoogleAuth {
+            let mut c = MockGoogleAuth(Default::default());
+            c.0.content.push("HTTP/1.1 200 OK\r\n\
                                  Server: BOGUS\r\n\
                                  \r\n\
                                 {\r\n\
@@ -350,23 +355,38 @@ pub mod tests {
                                   \"verification_url\" : \"http://www.google.com/device\",\r\n\
                                   \"expires_in\" : 1800,\r\n\
                                   \"interval\" : 0\r\n\
-                                }"
-                                "HTTP/1.1 200 OK\r\n\
-                                 Server: BOGUS\r\n\
-                                 \r\n\
-                                {\r\n\
-                                    \"error\" : \"authorization_pending\"\r\n\
-                                }"
-                                "HTTP/1.1 200 OK\r\n\
-                                 Server: BOGUS\r\n\
-                                 \r\n\
-                                {\r\n\
-                                  \"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\r\n\
-                                  \"expires_in\":3920,\r\n\
-                                  \"token_type\":\"Bearer\",\r\n\
-                                  \"refresh_token\":\"1/6BMfW9j53gdGImsixUH6kU5RsR4zwI9lUVX-tqf8JXQ\"\r\n\
-                                }"
-                                 });
+                                }".to_string());
+
+            c.0.content.push("HTTP/1.1 200 OK\r\n\
+                             Server: BOGUS\r\n\
+                             \r\n\
+                            {\r\n\
+                                \"error\" : \"authorization_pending\"\r\n\
+                            }".to_string());
+
+            c.0.content.push("HTTP/1.1 200 OK\r\n\
+                             Server: BOGUS\r\n\
+                             \r\n\
+                            {\r\n\
+                              \"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\r\n\
+                              \"expires_in\":3920,\r\n\
+                              \"token_type\":\"Bearer\",\r\n\
+                              \"refresh_token\":\"1/6BMfW9j53gdGImsixUH6kU5RsR4zwI9lUVX-tqf8JXQ\"\r\n\
+                            }".to_string());
+            c
+
+        }
+    }
+
+    impl hyper::net::NetworkConnector for MockGoogleAuth {
+        type Stream = MockStream;
+
+        fn connect(&self, host: &str, port: u16, scheme: &str) -> ::hyper::Result<MockStream> {
+            self.0.connect(host, port, scheme)
+        }
+
+        fn set_ssl_verifier(&mut self, _: hyper::net::ContextVerifier) {}
+    }
 
     #[test]
     fn working_flow() {
