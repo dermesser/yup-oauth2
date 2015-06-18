@@ -1,3 +1,21 @@
+<a name="v0.5.0"></a>
+## v0.5.0 (2015-06-18)
+
+This release essentially make yup-oauth2 work on rustc *stable*.
+
+#### Features
+
+* **syntex**  basic infrastructure ([9b2f9e77](https://github.com/Byron/yup-oauth2/commit/9b2f9e77be8189e6cc9ef196f49e764011ca9519))
+
+#### Bug Fixes
+
+* **lib**
+  *  remove macro usage to work on stable ([6a5915d7](https://github.com/Byron/yup-oauth2/commit/6a5915d7d64820ecaf6aed30c92f2f7fbe28d72f))
+  *  setup nightly crate meta data correctly ([a260b138](https://github.com/Byron/yup-oauth2/commit/a260b13868aaf667ef5379e4223ec0c94b78e26b))
+* **syntex**  cleanup, build works on stable ([0901497d](https://github.com/Byron/yup-oauth2/commit/0901497d8984ac5cd02aa1a0c21d463dce9a1edf))
+
+
+
 <a name="v0.4.5"></a>
 ## v0.4.5 (2015-05-11)
 
