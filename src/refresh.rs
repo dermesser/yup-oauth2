@@ -123,17 +123,35 @@ mod tests {
     use std::default::Default;
     use super::*;
     use super::super::FlowType;
+    use yup_hyper_mock::{MockStream, SequentialConnector};
 
-    mock_connector_in_order!(MockGoogleRefresh { 
-                                "HTTP/1.1 200 OK\r\n\
-                                 Server: BOGUS\r\n\
-                                 \r\n\
-                                {\r\n\
-                                  \"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\r\n\
-                                  \"expires_in\":3920,\r\n\
-                                  \"token_type\":\"Bearer\"\r\n\
-                                }"
-                            });
+    struct MockGoogleRefresh(SequentialConnector);
+
+    impl Default for MockGoogleRefresh {
+        fn default() -> MockGoogleRefresh {
+            let mut c = MockGoogleRefresh(Default::default());
+            c.0.content.push("HTTP/1.1 200 OK\r\n\
+                             Server: BOGUS\r\n\
+                             \r\n\
+                            {\r\n\
+                              \"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\r\n\
+                              \"expires_in\":3920,\r\n\
+                              \"token_type\":\"Bearer\"\r\n\
+                            }".to_string());
+
+            c
+        }
+    }
+
+    impl hyper::net::NetworkConnector for MockGoogleRefresh {
+        type Stream = MockStream;
+
+        fn connect(&self, host: &str, port: u16, scheme: &str) -> ::hyper::Result<MockStream> {
+            self.0.connect(host, port, scheme)
+        }
+
+        fn set_ssl_verifier(&mut self, _: hyper::net::ContextVerifier) {}
+    }
 
     #[test]
     fn refresh_flow() {
