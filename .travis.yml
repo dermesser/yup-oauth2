@@ -14,5 +14,5 @@ after_success:
 - travis-cargo coveralls
 env:
   global:
-    TRAVIS_CARGO_NIGHTLY_FEATURE: nightly
-    secure: Es8/QExA+XfWaTi2wQqpJL+yc4d3yU9/dfCpVFhyWpu+2XXIvbPbdqFuiZG6QVGaYOmwjlFJ5gCsAqxliG2wzVHkv+KhA1yeVn4ia41Vmx1mJlEU+O7ZNldfgjWemWKTD5kTEFtTBItswKUFH9LsFQ5sztV6/7I9kZZJAxWiXjs=
+    - TRAVIS_CARGO_NIGHTLY_FEATURE=nightly
+    - secure: Es8/QExA+XfWaTi2wQqpJL+yc4d3yU9/dfCpVFhyWpu+2XXIvbPbdqFuiZG6QVGaYOmwjlFJ5gCsAqxliG2wzVHkv+KhA1yeVn4ia41Vmx1mJlEU+O7ZNldfgjWemWKTD5kTEFtTBItswKUFH9LsFQ5sztV6/7I9kZZJAxWiXjs=
