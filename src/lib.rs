@@ -18,6 +18,7 @@
 //! extern crate hyper;
 //! extern crate yup_oauth2 as oauth2;
 //! extern crate serde;
+//! extern crate serde_json;
 //! 
 //! use oauth2::{Authenticator, DefaultAuthenticatorDelegate, PollInformation, ConsoleApplicationSecret, MemoryStorage, GetToken};
 //! use serde_json as json;

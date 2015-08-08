@@ -78,7 +78,7 @@ fn main() {
     }
 
     let client = hyper::Client::with_connector(mock::TeeConnector {
-                        connector: hyper::net::HttpConnector(None) 
+                        connector: hyper::net::HttpConnector
                     });
 
     match oauth2::Authenticator::new(&secret, StdoutHandler, client, 

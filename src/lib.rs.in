@@ -4,9 +4,9 @@ extern crate serde_json;
 extern crate chrono;
 
 extern crate hyper;
-#[macro_use] #[cfg(test)]
+#[cfg(test)]
 extern crate log;
-#[macro_use] #[cfg(test)]
+#[cfg(test)]
 extern crate yup_hyper_mock;
 extern crate mime;
 extern crate url;

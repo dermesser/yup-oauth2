@@ -384,8 +384,6 @@ pub mod tests {
         fn connect(&self, host: &str, port: u16, scheme: &str) -> ::hyper::Result<MockStream> {
             self.0.connect(host, port, scheme)
         }
-
-        fn set_ssl_verifier(&mut self, _: hyper::net::ContextVerifier) {}
     }
 
     #[test]
