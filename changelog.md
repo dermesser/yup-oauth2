@@ -1,5 +1,15 @@
-<a name="0.5.1"></a>
-## 0.5.1 (2015-08-08)
+<a name="v0.5.2"></a>
+## v0.5.2 (2015-08-08)
+
+
+#### Bug Fixes
+
+* **tests**  assure tests actually work ([ad0bde30](https://github.com/Byron/yup-oauth2/commit/ad0bde3092499e26c819a871065f70d0d8519e0b))
+
+
+
+<a name="v0.5.1"></a>
+## v0.5.1 (2015-08-08)
 
 * compatibility with serde 0.5.x
 
