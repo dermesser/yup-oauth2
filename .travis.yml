@@ -3,16 +3,20 @@ sudo: required
 rust:
 - stable
 - nightly
+include:
+  - rust: stable
+    env: FEATURE=with_syntex TRAVIS_RUST_VERSION=stable
+  - rust: nightly
+    env: FEATURE=nightly
 before_script:
 - pip install 'travis-cargo<0.2' --user && export PATH=$HOME/.local/bin:$PATH
 script:
-- travis-cargo build
-- travis-cargo test
-- travis-cargo doc
+- travis-cargo build --no-default-features --feature $FEATURE
+- travis-cargo test --no-default-features --feature $FEATURE
+- travis-cargo doc --no-default-features --feature $FEATURE
 after_success:
-- travis-cargo doc-upload
-- travis-cargo coveralls
+- travis-cargo --only stable doc-upload
+- travis-cargo --only stable coveralls
 env:
   global:
-    - TRAVIS_CARGO_NIGHTLY_FEATURE=nightly
     - secure: Es8/QExA+XfWaTi2wQqpJL+yc4d3yU9/dfCpVFhyWpu+2XXIvbPbdqFuiZG6QVGaYOmwjlFJ5gCsAqxliG2wzVHkv+KhA1yeVn4ia41Vmx1mJlEU+O7ZNldfgjWemWKTD5kTEFtTBItswKUFH9LsFQ5sztV6/7I9kZZJAxWiXjs=
