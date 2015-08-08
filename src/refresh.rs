@@ -4,7 +4,7 @@ use device::GOOGLE_TOKEN_URL;
 use chrono::UTC;
 use hyper;
 use hyper::header::ContentType;
-use serde::json;
+use serde_json as json;
 use url::form_urlencoded;
 use super::Token;
 use std::borrow::BorrowMut;

@@ -481,7 +481,7 @@ mod tests {
 
     #[test]
     fn flow() {
-        use serde::json;
+        use serde_json as json;
 
         let secret = json::from_str::<ConsoleApplicationSecret>(SECRET).unwrap().installed.unwrap();
         let res = Authenticator::new(&secret, DefaultAuthenticatorDelegate,

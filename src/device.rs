@@ -7,7 +7,7 @@ use hyper;
 use hyper::header::ContentType;
 use url::form_urlencoded;
 use itertools::Itertools;
-use serde::json;
+use serde_json as json;
 use chrono::{DateTime,UTC};
 use std::borrow::BorrowMut;
 use std::io::Read;
