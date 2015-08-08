@@ -7,7 +7,7 @@ matrix:
   include:
     - rust: stable
       # make doc-upload and coveralls work on stable only
-      env: TRAVIS_RUST_VERSION=stable
+      env: TRAVIS_RUST_VERSION=stable FEATURE=with_syntex
     - rust: nightly
       env: FEATURE=nightly
 before_script:
