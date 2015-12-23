@@ -74,7 +74,7 @@ pub enum RequestError {
     HttpError(hyper::Error),
     /// The OAuth client was not found
     InvalidClient,
-    /// Some requested scopes were invalid. String contains the scopes as part of 
+    /// Some requested scopes were invalid. String contains the scopes as part of
     /// the server error message
     InvalidScope(String),
     /// A 'catch-all' variant containing the server error and description
@@ -99,7 +99,7 @@ impl fmt::Display for RequestError {
         match *self {
             RequestError::HttpError(ref err) => err.fmt(f),
             RequestError::InvalidClient => "Invalid Client".fmt(f),
-            RequestError::InvalidScope(ref scope) 
+            RequestError::InvalidScope(ref scope)
                 => writeln!(f, "Invalid Scope: '{}'", scope),
             RequestError::NegativeServerResponse(ref error, ref desc) => {
                 try!(error.fmt(f));
@@ -135,7 +135,7 @@ impl fmt::Display for PollError {
 }
 
 
-impl<C> DeviceFlow<C> 
+impl<C> DeviceFlow<C>
     where   C: BorrowMut<hyper::Client> {
 
     /// # Examples
@@ -143,7 +143,7 @@ impl<C> DeviceFlow<C>
     /// extern crate hyper;
     /// extern crate yup_oauth2 as oauth2;
     /// use oauth2::DeviceFlow;
-    /// 
+    ///
     /// # #[test] fn new() {
     /// let mut f = DeviceFlow::new(hyper::Client::new());
     /// # }
@@ -161,14 +161,14 @@ impl<C> DeviceFlow<C>
 
     /// The first step involves asking the server for a code that the user
     /// can type into a field at a specified URL. It is called only once, assuming
-    /// there was no connection error. Otherwise, it may be called again until 
+    /// there was no connection error. Otherwise, it may be called again until
     /// you receive an `Ok` result.
     /// # Arguments
     /// * `client_id` & `client_secret` - as obtained when [registering your application](https://developers.google.com/youtube/registering_an_application)
-    /// * `scopes` - an iterator yielding String-like objects which are URLs defining what your 
+    /// * `scopes` - an iterator yielding String-like objects which are URLs defining what your
     ///              application is able to do. It is considered good behaviour to authenticate
     ///              only once, with all scopes you will ever require.
-    ///              However, you can also manage multiple tokens for different scopes, if your 
+    ///              However, you can also manage multiple tokens for different scopes, if your
     ///              application is providing distinct read-only and write modes.
     /// # Panics
     /// * If called after a successful result was returned at least once.
@@ -176,7 +176,7 @@ impl<C> DeviceFlow<C>
     /// See test-cases in source code for a more complete example.
     pub fn request_code<'b, T, I>(&mut self, client_id: &str, client_secret: &str, scopes: I)
                                     -> Result<PollInformation, RequestError>
-                                    where T: AsRef<str>,
+                                    where T: AsRef<str> + 'b,
                                           I: IntoIterator<Item=&'b T> {
         if self.state.is_some() {
             panic!("Must not be called after we have obtained a token and have no error");
@@ -246,16 +246,16 @@ impl<C> DeviceFlow<C>
 
     /// If the first call is successful, this method may be called.
     /// As long as we are waiting for authentication, it will return `Ok(None)`.
-    /// You should call it within the interval given the previously returned 
+    /// You should call it within the interval given the previously returned
     /// `PollInformation.interval` field.
     ///
     /// The operation was successful once you receive an Ok(Some(Token)) for the first time.
     /// Subsequent calls will return the previous result, which may also be an error state.
     ///
-    /// Do not call after `PollError::Expired|PollError::AccessDenied` was among the 
+    /// Do not call after `PollError::Expired|PollError::AccessDenied` was among the
     /// `Err(PollError)` variants as the flow will not do anything anymore.
     /// Thus in any unsuccessful case which is not `PollError::HttpError`, you will have to start /// over the entire flow, which requires a new instance of this type.
-    /// 
+    ///
     /// > ⚠️ **Warning**: We assume the caller doesn't call faster than `interval` and are not
     /// > protected against this kind of mis-use.
     ///
@@ -264,7 +264,7 @@ impl<C> DeviceFlow<C>
     pub fn poll_token(&mut self) -> Result<Option<Token>, &PollError> {
         // clone, as we may re-assign our state later
         let pi = match self.state {
-            Some(ref s) => 
+            Some(ref s) =>
                 match *s {
                     DeviceFlowState::Pending(ref pi) => pi.clone(),
                     DeviceFlowState::Error => return Err(self.error.as_ref().unwrap()),
@@ -286,7 +286,7 @@ impl<C> DeviceFlow<C>
                          ("code", &self.device_code),
                          ("grant_type", "http://oauth.net/grant_type/device/1.0")]);
 
-        let json_str = 
+        let json_str =
             match self.client.borrow_mut().post(GOOGLE_TOKEN_URL)
                .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                .body(&*req)
@@ -403,7 +403,7 @@ pub mod tests {
             _ => unreachable!(),
         }
 
-        let t = 
+        let t =
             match flow.poll_token() {
                 Ok(Some(t)) => {
                     assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");

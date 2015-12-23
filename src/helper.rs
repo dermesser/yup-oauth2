@@ -79,7 +79,7 @@ impl TokenStorage for MemoryStorage {
     }
 }
 
-/// A generalized authenticator which will keep tokens valid and store them. 
+/// A generalized authenticator which will keep tokens valid and store them.
 ///
 /// It is the go-to helper to deal with any kind of supported authentication flow,
 /// which will be kept valid and usable.
@@ -92,7 +92,7 @@ impl TokenStorage for MemoryStorage {
 /// * presenting the user code
 /// * inform the user about the progress or errors
 /// * abort the operation
-/// 
+///
 /// # Usage
 /// Please have a look at the library's landing page.
 pub struct Authenticator<D, S, C> {
@@ -151,7 +151,7 @@ impl Error for StringError {
 /// if no user is involved.
 pub trait GetToken {
     fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<Error>>
-        where   T: AsRef<str> + Ord,
+        where   T: AsRef<str> + Ord + 'b,
                 I: IntoIterator<Item=&'b T>;
 
     fn api_key(&mut self) -> Option<String>;
@@ -162,21 +162,21 @@ impl<D, S, C> Authenticator<D, S, C>
            S: TokenStorage,
            C: BorrowMut<hyper::Client> {
 
-    
+
     /// Returns a new `Authenticator` instance
     ///
     /// # Arguments
-    /// * `secret` - usually obtained from a client secret file produced by the 
+    /// * `secret` - usually obtained from a client secret file produced by the
     ///              [developer console][dev-con]
     /// * `delegate` - Used to further refine the flow of the authentication.
     /// * `client` - used for all authentication https requests
     /// * `storage` - used to cache authorization tokens tokens permanently. However,
     ///               the implementation doesn't have any particular semantic requirement, which
     ///               is why `NullStorage` and `MemoryStorage` can be used as well.
-    /// * `flow_type` - the kind of authentication to use to obtain a token for the 
+    /// * `flow_type` - the kind of authentication to use to obtain a token for the
     ///                 required scopes. If unset, it will be derived from the secret.
     /// [dev-con]: https://console.developers.google.com
-    pub fn new(secret: &ApplicationSecret, 
+    pub fn new(secret: &ApplicationSecret,
                delegate: D, client: C, storage: S, flow_type: Option<FlowType>)
                                                      -> Authenticator<D, S, C> {
         Authenticator {
@@ -194,7 +194,7 @@ impl<D, S, C> Authenticator<D, S, C>
         // PHASE 1: REQUEST CODE
         let pi: PollInformation;
         loop {
-            let res = flow.request_code(&self.secret.client_id, 
+            let res = flow.request_code(&self.secret.client_id,
                                         &self.secret.client_secret, scopes.iter());
 
             pi = match res {
@@ -232,7 +232,7 @@ impl<D, S, C> Authenticator<D, S, C>
                     match poll_err {
                         &&PollError::HttpError(ref err) => {
                             match self.delegate.connection_error(err) {
-                                Retry::Abort|Retry::Skip 
+                                Retry::Abort|Retry::Skip
                                     => return Err(Box::new(StringError::from(err as &Error))),
                                 Retry::After(d) => sleep_ms(d.num_milliseconds() as u32),
                             }
@@ -247,9 +247,9 @@ impl<D, S, C> Authenticator<D, S, C>
                         },
                     }; // end match poll_err
                 },
-                Ok(None) => 
+                Ok(None) =>
                         match self.delegate.pending(&pi) {
-                            Retry::Abort|Retry::Skip 
+                            Retry::Abort|Retry::Skip
                                 => return Err(Box::new(StringError::new("Pending authentication aborted".to_string(), None))),
                             Retry::After(d) => sleep_ms(min(d, pi.interval).num_milliseconds() as u32),
                         },
@@ -264,13 +264,13 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
            S: TokenStorage,
            C: BorrowMut<hyper::Client> {
 
-    /// Blocks until a token was retrieved from storage, from the server, or until the delegate 
+    /// Blocks until a token was retrieved from storage, from the server, or until the delegate
     /// decided to abort the attempt, or the user decided not to authorize the application.
-    /// In any failure case, the delegate will be provided with additional information, and 
+    /// In any failure case, the delegate will be provided with additional information, and
     /// the caller will be informed about storage related errors.
     /// Otherwise it is guaranteed to be valid for the given scopes.
     fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<Error>>
-        where   T: AsRef<str> + Ord,
+        where   T: AsRef<str> + Ord + 'b,
                 I: IntoIterator<Item=&'b T> {
         let (scope_key, scopes) = {
             let mut sv: Vec<&str> = scopes.into_iter()
@@ -292,12 +292,12 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                         let mut rf = RefreshFlow::new(self.client.borrow_mut());
                         loop {
                             match *rf.refresh_token(self.flow_type,
-                                                   &self.secret.client_id, 
-                                                   &self.secret.client_secret, 
+                                                   &self.secret.client_id,
+                                                   &self.secret.client_secret,
                                                    &t.refresh_token) {
                                 RefreshResult::Error(ref err) => {
                                     match self.delegate.connection_error(err) {
-                                        Retry::Abort|Retry::Skip => 
+                                        Retry::Abort|Retry::Skip =>
                                             return Err(Box::new(StringError::new(
                                                                     err.description().to_string(),
                                                                     None))),
@@ -306,7 +306,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                                 },
                                 RefreshResult::RefreshError(ref err_str, ref err_description) => {
                                     self.delegate.token_refresh_failed(&err_str, &err_description);
-                                    let storage_err = 
+                                    let storage_err =
                                         match self.storage.set(scope_key, &scopes, None) {
                                             Ok(_) => String::new(),
                                             Err(err) => err.to_string(),
@@ -339,7 +339,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                 Ok(None) => {
                     // Nothing was in storage - get a new token
                     // get new token. The respective sub-routine will do all the logic.
-                    match 
+                    match
                         match self.flow_type {
                             FlowType::Device => self.retrieve_device_token(&scopes),
                         }
@@ -387,13 +387,13 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
 
 
 /// A partially implemented trait to interact with the `Authenticator`
-/// 
+///
 /// The only method that needs to be implemented manually is `present_user_code(...)`,
 /// as no assumptions are made on how this presentation should happen.
 pub trait AuthenticatorDelegate {
 
     /// Called whenever there is an HttpError, usually if there are network problems.
-    /// 
+    ///
     /// Return retry information.
     fn connection_error(&mut self, &hyper::Error) -> Retry {
         Retry::Abort
@@ -402,7 +402,7 @@ pub trait AuthenticatorDelegate {
     /// Called whenever we failed to retrieve a token or set a token due to a storage error.
     /// You may use it to either ignore the incident or retry.
     /// This can be useful if the underlying `TokenStorage` may fail occasionally.
-    /// if `is_set` is true, the failure resulted from `TokenStorage.set(...)`. Otherwise, 
+    /// if `is_set` is true, the failure resulted from `TokenStorage.set(...)`. Otherwise,
     /// it was `TokenStorage.get(...)`
     fn token_storage_failure(&mut self, is_set: bool, _: &Error) -> Retry {
         let _ = is_set;
@@ -417,11 +417,11 @@ pub trait AuthenticatorDelegate {
     /// Given `DateTime` is the expiration date
     fn expired(&mut self, &DateTime<UTC>) {}
 
-    /// Called if the user denied access. You would have to start over. 
+    /// Called if the user denied access. You would have to start over.
     /// This will be the last call the delegate receives.
     fn denied(&mut self) {}
 
-    /// Called if we could not acquire a refresh token for a reason possibly specified 
+    /// Called if we could not acquire a refresh token for a reason possibly specified
     /// by the server.
     /// This call is made for the delegate's information only.
     fn token_refresh_failed(&mut self, error: &String, error_description: &Option<String>) {
@@ -431,7 +431,7 @@ pub trait AuthenticatorDelegate {
 
     /// Called as long as we are waiting for the user to authorize us.
     /// Can be used to print progress information, or decide to time-out.
-    /// 
+    ///
     /// If the returned `Retry` variant is a duration.
     /// # Notes
     /// * Only used in `DeviceFlow`. Return value will only be used if it
@@ -446,7 +446,7 @@ pub trait AuthenticatorDelegate {
     /// * Will be called exactly once, provided we didn't abort during `request_code` phase.
     /// * Will only be called if the Authenticator's flow_type is `FlowType::Device`.
     fn present_user_code(&mut self, pi: &PollInformation) {
-        println!("Please enter {} at {} and grant access to this application", 
+        println!("Please enter {} at {} and grant access to this application",
                   pi.user_code, pi.verification_url);
         println!("Do not close this application until you either denied or granted access.");
         println!("You have time until {}.", pi.expires_at.with_timezone(&Local));
