@@ -1,7 +1,7 @@
 [package]
 
 name = "yup-oauth2"
-version = "0.5.2"
+version = "0.5.3"
 authors = ["Sebastian Thiel <byronimo@gmail.com>"]
 repository = "https://github.com/Byron/yup-oauth2"
 description = "A partial oauth2 implementation, providing the 'device' authorization flow"
@@ -11,16 +11,16 @@ license = "MIT"
 build = "src/build.rs"
 
 [dependencies]
-chrono = "*"
-time = "*"
-log = "*"
-mime = "*"
-url = "*"
-hyper = ">= 0.5.0"
-itertools = "*"
-serde = ">= 0.5.0"
-serde_json = "*"
-serde_macros = { version = "*", optional = true }
+chrono = ">= 0.2"
+time = ">= 0.1"
+log = ">= 0.3"
+mime = ">= 0.1"
+url = ">= 0.5"
+hyper = ">= 0.7.0"
+itertools = ">= 0.4"
+serde = ">= 0.6"
+serde_json = ">= 0.6"
+serde_macros = { version = ">= 0.6", optional = true }
 
 [features]
 default = ["with_syntex"]
@@ -28,10 +28,10 @@ nightly = ["serde_macros"]
 with_syntex = ["serde_codegen", "syntex"]
 
 [build-dependencies]
-syntex = { version = "*", optional = true }
-serde_codegen = { version = "*", optional = true }
+syntex = { version = ">= 0.2", optional = true }
+serde_codegen = { version = ">= 0.6", optional = true }
 
 [dev-dependencies]
-getopts = "*"
-open = "*"
-yup-hyper-mock = ">= 1.0.0"
+getopts = "0.2"
+open = "1.1"
+yup-hyper-mock = "1.3.0"
