@@ -1,3 +1,13 @@
+<a name="v0.5.4"></a>
+### v0.5.4 (2016-01-30)
+
+
+#### Bug Fixes
+
+* **rustup:**  use std::time::Duration and Thread::sleep ([c2bb59b4](https://github.com/Byron/yup-oauth2/commit/c2bb59b4c5ad3b8a272712b53044624be3a531e0))
+
+
+
 <a name="v0.5.2"></a>
 ## v0.5.2 (2015-08-08)
 
