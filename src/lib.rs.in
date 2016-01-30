@@ -9,8 +9,8 @@ extern crate log;
 #[cfg(test)]
 extern crate yup_hyper_mock;
 extern crate mime;
-extern crate url;
 extern crate time;
+extern crate url;
 extern crate itertools;
 
 mod device;
@@ -21,5 +21,5 @@ mod helper;
 pub use device::{DeviceFlow, PollInformation, PollError};
 pub use refresh::{RefreshFlow, RefreshResult};
 pub use common::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret, Scheme, TokenType};
-pub use helper::{TokenStorage, NullStorage, MemoryStorage, Authenticator, 
+pub use helper::{TokenStorage, NullStorage, MemoryStorage, Authenticator,
                  AuthenticatorDelegate, Retry, DefaultAuthenticatorDelegate, GetToken};

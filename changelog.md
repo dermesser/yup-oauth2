@@ -110,7 +110,7 @@ This release essentially make yup-oauth2 work on rustc *stable*.
 
 #### Bug Fixes
 
-* **rustup**  replace sleep with sleep_ms ([727c1d80](https://github.com/Byron/yup-oauth2/commit/727c1d801b4ae8f7b7cb80050139926bbcb9bf48))
+* **rustup**  replace sleep with sleep ([727c1d80](https://github.com/Byron/yup-oauth2/commit/727c1d801b4ae8f7b7cb80050139926bbcb9bf48))
 
 
 

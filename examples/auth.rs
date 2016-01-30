@@ -11,8 +11,8 @@ use chrono::{Local};
 use getopts::{HasArg,Options,Occur,Fail};
 use std::env;
 use std::default::Default;
-use time::Duration;
-use std::thread::sleep_ms;
+use std::time::Duration;
+use std::thread::sleep;
 
 
 fn usage(program: &str, opts: &Options, err: Option<Fail>) -> ! {
@@ -69,9 +69,9 @@ fn main() {
                       You have time until {} to do that.
                       Do not terminate the program until you deny or grant access !",
                       pi.user_code, pi.verification_url, pi.expires_at.with_timezone(&Local));
-            let delay = Duration::seconds(5);
+            let delay = Duration::from_secs(5);
             println!("Browser opens automatically in {} seconds", delay);
-            sleep_ms(delay.num_milliseconds() as u32);
+            sleep(delay);
             open::that(&pi.verification_url).ok();
             println!("DONE - waiting for authorization ...");
         }
@@ -81,7 +81,7 @@ fn main() {
                         connector: hyper::net::HttpConnector
                     });
 
-    match oauth2::Authenticator::new(&secret, StdoutHandler, client, 
+    match oauth2::Authenticator::new(&secret, StdoutHandler, client,
                                         oauth2::NullStorage, None).token(&m.free) {
         Ok(t) => {
             println!("Authentication granted !");
