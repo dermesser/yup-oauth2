@@ -1,5 +1,5 @@
 use std::iter::IntoIterator;
-use time::Duration;
+use std::time::Duration;
 use std::default::Default;
 use std::fmt;
 
@@ -8,9 +8,10 @@ use hyper::header::ContentType;
 use url::form_urlencoded;
 use itertools::Itertools;
 use serde_json as json;
-use chrono::{DateTime,UTC};
+use chrono::{DateTime,UTC, self};
 use std::borrow::BorrowMut;
 use std::io::Read;
+use std::i64;
 
 use common::{Token, FlowType, Flow, JsonError};
 
@@ -230,8 +231,8 @@ impl<C> DeviceFlow<C>
                 let pi = PollInformation {
                     user_code: decoded.user_code,
                     verification_url: decoded.verification_url,
-                    expires_at: UTC::now() + Duration::seconds(decoded.expires_in),
-                    interval: Duration::seconds(decoded.interval),
+                    expires_at: UTC::now() + chrono::Duration::seconds(decoded.expires_in), 
+                    interval: Duration::from_secs(i64::abs(decoded.interval) as u64),
                 };
                 self.state = Some(DeviceFlowState::Pending(pi.clone()));
 
@@ -337,7 +338,7 @@ impl<C> DeviceFlow<C>
 pub mod tests {
     use super::*;
     use std::default::Default;
-    use time::Duration;
+    use std::time::Duration;
     use hyper;
     use yup_hyper_mock::{SequentialConnector, MockStream};
 
@@ -394,7 +395,7 @@ pub mod tests {
         match flow.request_code("bogus_client_id",
                                 "bogus_secret",
                                 &["https://www.googleapis.com/auth/youtube.upload"]) {
-            Ok(pi) => assert_eq!(pi.interval, Duration::seconds(0)),
+            Ok(pi) => assert_eq!(pi.interval, Duration::from_secs(0)),
             _ => unreachable!(),
         }
 

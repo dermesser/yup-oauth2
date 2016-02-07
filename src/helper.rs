@@ -2,7 +2,7 @@ use std::iter::IntoIterator;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::hash::{SipHasher, Hash, Hasher};
-use std::thread::sleep_ms;
+use std::thread::sleep;
 use std::cmp::min;
 use std::error::Error;
 use std::fmt;
@@ -11,7 +11,8 @@ use std::convert::From;
 use common::{Token, FlowType, ApplicationSecret};
 use device::{PollInformation, RequestError, DeviceFlow, PollError};
 use refresh::{RefreshResult, RefreshFlow};
-use chrono::{DateTime, UTC, Duration, Local};
+use chrono::{DateTime, UTC, Local};
+use std::time::Duration;
 use hyper;
 
 
@@ -203,7 +204,7 @@ impl<D, S, C> Authenticator<D, S, C>
                             RequestError::HttpError(err) => {
                                 match self.delegate.connection_error(&err) {
                                     Retry::Abort|Retry::Skip => return Err(Box::new(StringError::from(&err as &Error))),
-                                    Retry::After(d) => sleep_ms(d.num_milliseconds() as u32),
+                                    Retry::After(d) => sleep(d),
                                 }
                             },
                             RequestError::InvalidClient
@@ -234,7 +235,7 @@ impl<D, S, C> Authenticator<D, S, C>
                             match self.delegate.connection_error(err) {
                                 Retry::Abort|Retry::Skip
                                     => return Err(Box::new(StringError::from(err as &Error))),
-                                Retry::After(d) => sleep_ms(d.num_milliseconds() as u32),
+                                Retry::After(d) => sleep(d),
                             }
                         },
                         &&PollError::Expired(ref t) => {
@@ -251,7 +252,7 @@ impl<D, S, C> Authenticator<D, S, C>
                         match self.delegate.pending(&pi) {
                             Retry::Abort|Retry::Skip
                                 => return Err(Box::new(StringError::new("Pending authentication aborted".to_string(), None))),
-                            Retry::After(d) => sleep_ms(min(d, pi.interval).num_milliseconds() as u32),
+                            Retry::After(d) => sleep(min(d, pi.interval)),
                         },
                 Ok(Some(token)) => return Ok(token)
             }
@@ -301,7 +302,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                                             return Err(Box::new(StringError::new(
                                                                     err.description().to_string(),
                                                                     None))),
-                                        Retry::After(d) => sleep_ms(d.num_milliseconds() as u32),
+                                        Retry::After(d) => sleep(d),
                                     }
                                 },
                                 RefreshResult::RefreshError(ref err_str, ref err_description) => {
@@ -322,7 +323,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                                                 Retry::Skip => break,
                                                 Retry::Abort => return Err(Box::new(err)),
                                                 Retry::After(d) => {
-                                                    sleep_ms(d.num_milliseconds() as u32);
+                                                    sleep(d);
                                                     continue;
                                                 }
                                             }
@@ -351,7 +352,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                                         Retry::Skip => break,
                                         Retry::Abort => return Err(Box::new(err)),
                                         Retry::After(d) => {
-                                            sleep_ms(d.num_milliseconds() as u32);
+                                            sleep(d);
                                             continue;
                                         }
                                     }
@@ -367,7 +368,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                     match self.delegate.token_storage_failure(false, &err) {
                         Retry::Abort|Retry::Skip => Err(Box::new(err)),
                         Retry::After(d) => {
-                            sleep_ms(d.num_milliseconds() as u32);
+                            sleep(d);
                             continue
                         }
                     }
@@ -437,7 +438,7 @@ pub trait AuthenticatorDelegate {
     /// * Only used in `DeviceFlow`. Return value will only be used if it
     /// is larger than the interval desired by the server.
     fn pending(&mut self,  &PollInformation) -> Retry {
-        Retry::After(Duration::seconds(5))
+        Retry::After(Duration::from_secs(5))
     }
 
     /// The server has returned a `user_code` which must be shown to the user,
