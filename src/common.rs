@@ -77,14 +77,14 @@ impl FromStr for Scheme {
 /// Represents a token as returned by OAuth2 servers.
 ///
 /// It is produced by all authentication flows.
-/// It authenticates certain operations, and must be refreshed once 
+/// It authenticates certain operations, and must be refreshed once
 /// it reached it's expiry date.
 ///
 /// The type is tuned to be suitable for direct de-serialization from server
 /// replies, as well as for serialization for later reuse. This is the reason
-/// for the two fields dealing with expiry - once in relative in and once in 
+/// for the two fields dealing with expiry - once in relative in and once in
 /// absolute terms.
-/// 
+///
 /// Utility methods make common queries easier, see `expired()`.
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Token {
@@ -163,9 +163,11 @@ pub struct ApplicationSecret {
     pub auth_uri: String,
     pub redirect_uris: Vec<String>,
 
+    /// Name of the google project the credentials are associated with
+    pub project_id: Option<String>,
     /// The service account email associated with the client.
     pub client_email: Option<String>,
-    /// The URL of the public x509 certificate, used to verify the signature on JWTs, such 
+    /// The URL of the public x509 certificate, used to verify the signature on JWTs, such
     /// as ID tokens, signed by the authentication provider.
     pub auth_provider_x509_cert_url: Option<String>,
     ///  The URL of the public x509 certificate, used to verify JWTs signed by the client.
