@@ -1,5 +1,12 @@
+<a name="v0.5.5"></a>
+### v0.5.5 (2016-02-07)
+
+#### Improvements
+
+* **crates:**  remove `time` crate
+
 <a name="v0.5.4"></a>
-### v0.5.4 (2016-02-07)
+### v0.5.4 (2016-01-30)
 
 
 #### Bug Fixes
@@ -217,6 +224,3 @@ This release essentially make yup-oauth2 work on rustc *stable*.
 * **helper**  full implementation of Authenticator ([c227c161](https://github.com/Byron/yup-oauth2/commit/c227c161fd7233d236c1ee5e700dd56298922f08))
 * **util**  new MemoryStorage and NullStorage ([091f1c07](https://github.com/Byron/yup-oauth2/commit/091f1c07592808656735cb8800f0a809329e58d9))
 * **device**  BorrowMut for client ([3f965c8f](https://github.com/Byron/yup-oauth2/commit/3f965c8fea1f341809be97364cbaa570b986f2c4))
-
-
-
