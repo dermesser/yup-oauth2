@@ -13,6 +13,8 @@ matrix:
       env: TRAVIS_RUST_VERSION=stable FEATURE=with_syntex
     - rust: nightly
       env: FEATURE=nightly
+  allow_failures:
+    - os: osx
 before_script:
 - pip install 'travis-cargo<0.2' --user  && export PATH=$HOME/Library/Python/2.7/bin:$HOME/.local/bin:$PATH
 script:
