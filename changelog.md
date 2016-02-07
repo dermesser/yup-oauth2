@@ -1,3 +1,17 @@
+<a name="v0.5.4"></a>
+### v0.5.4 (2016-02-07)
+
+
+#### Bug Fixes
+
+* **secret:**  allow project_id field ([c039db56](https://github.com/Byron/yup-oauth2/commit/c039db56cdda527e51e83e3f65033b94aca11a68))
+
+#### Improvements
+
+* **duration:**  use std::time::Duration everywhere ([c18ae07b](https://github.com/Byron/yup-oauth2/commit/c18ae07bbb6855230ba64806967456ee681e8f4a))
+
+
+
 <a name="v0.5.2"></a>
 ## v0.5.2 (2015-08-08)
 
