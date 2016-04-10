@@ -1,3 +1,13 @@
+<a name="v0.5.6"></a>
+### v0.5.6 (2016-04-10)
+
+
+#### Bug Fixes
+
+* **serde:**  go back to serde 0.6 ([1f2f5b8f](https://github.com/Byron/yup-oauth2/commit/1f2f5b8f892ac280eb33a114b5e415f914454311))
+
+
+
 <a name="v0.5.5"></a>
 ### v0.5.5 (2016-02-07)
 
