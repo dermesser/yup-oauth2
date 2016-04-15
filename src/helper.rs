@@ -7,9 +7,11 @@ use std::cmp::min;
 use std::error::Error;
 use std::fmt;
 use std::convert::From;
+use std::io;
 
 use common::{Token, FlowType, ApplicationSecret};
 use device::{PollInformation, RequestError, DeviceFlow, PollError};
+use installed::{InstalledFlow, InstalledFlowReturnMethod};
 use refresh::{RefreshResult, RefreshFlow};
 use chrono::{DateTime, UTC, Local};
 use std::time::Duration;
@@ -187,6 +189,27 @@ impl<D, S, C> Authenticator<D, S, C>
             client: client,
             secret: secret.clone(),
         }
+    }
+
+
+    fn do_installed_flow(&mut self, scopes: &Vec<&str>) -> Result<Token, Box<Error>> {
+        let installed_type;
+
+        match self.flow_type {
+            FlowType::InstalledInteractive => {
+                installed_type = Some(InstalledFlowReturnMethod::Interactive)
+            }
+            FlowType::InstalledRedirect(port) => {
+                installed_type = Some(InstalledFlowReturnMethod::HTTPRedirect(port))
+            }
+            _ => installed_type = None,
+        }
+
+        let mut flow = InstalledFlow::new(self.client.borrow_mut(), installed_type);
+        flow.obtain_token(&mut self.delegate,
+                          &self.secret.client_id,
+                          &self.secret.client_secret,
+                          scopes.iter())
     }
 
     fn retrieve_device_token(&mut self, scopes: &Vec<&str>) -> Result<Token, Box<Error>> {
@@ -448,9 +471,37 @@ pub trait AuthenticatorDelegate {
     /// * Will only be called if the Authenticator's flow_type is `FlowType::Device`.
     fn present_user_code(&mut self, pi: &PollInformation) {
         println!("Please enter {} at {} and grant access to this application",
-                  pi.user_code, pi.verification_url);
+                 pi.user_code,
+                 pi.verification_url);
         println!("Do not close this application until you either denied or granted access.");
-        println!("You have time until {}.", pi.expires_at.with_timezone(&Local));
+        println!("You have time until {}.",
+                 pi.expires_at.with_timezone(&Local));
+    }
+
+    /// Only method currently used by the InstalledFlow.
+    /// We need the user to navigate to a URL using their browser and potentially paste back a code
+    /// (or maybe not). Whether they have to enter a code depends on the InstalledFlowReturnMethod
+    /// used.
+    fn present_user_url(&mut self, url: &String, need_code: bool) -> Option<String> {
+        if need_code {
+            println!("Please direct your browser to {}, follow the instructions and enter the \
+                      code displayed here: ",
+                     url);
+
+            let mut code = String::new();
+            let _ = io::stdin().read_line(&mut code);
+
+            if !code.is_empty() {
+                Some(code)
+            } else {
+                None
+            }
+        } else {
+            println!("Please direct your browser to {} and follow the instructions displayed \
+                      there.",
+                     url);
+            None
+        }
     }
 }
 
