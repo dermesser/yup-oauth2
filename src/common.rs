@@ -25,7 +25,7 @@ pub enum TokenType {
 impl AsRef<str> for TokenType {
     fn as_ref(&self) -> &'static str {
         match *self {
-            TokenType::Bearer => "Bearer"
+            TokenType::Bearer => "Bearer",
         }
     }
 }
@@ -35,7 +35,7 @@ impl FromStr for TokenType {
     fn from_str(s: &str) -> Result<TokenType, ()> {
         match s {
             "Bearer" => Ok(TokenType::Bearer),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -47,7 +47,7 @@ pub struct Scheme {
     /// The type of our access token
     pub token_type: TokenType,
     /// The token returned by one of the Authorization Flows
-    pub access_token: String
+    pub access_token: String,
 }
 
 impl hyper::header::Scheme for Scheme {
@@ -65,11 +65,16 @@ impl FromStr for Scheme {
     fn from_str(s: &str) -> Result<Scheme, &'static str> {
         let parts: Vec<&str> = s.split(' ').collect();
         if parts.len() != 2 {
-            return Err("Expected two parts: <token_type> <token>")
+            return Err("Expected two parts: <token_type> <token>");
         }
         match <TokenType as FromStr>::from_str(parts[0]) {
-            Ok(t) => Ok(Scheme { token_type: t, access_token: parts[1].to_string() }),
-            Err(_) => Err("Couldn't parse token type")
+            Ok(t) => {
+                Ok(Scheme {
+                    token_type: t,
+                    access_token: parts[1].to_string(),
+                })
+            }
+            Err(_) => Err("Couldn't parse token type"),
         }
     }
 }
@@ -103,7 +108,6 @@ pub struct Token {
 }
 
 impl Token {
-
     /// Returns true if we are expired.
     ///
     /// # Panics
@@ -124,7 +128,7 @@ impl Token {
     pub fn set_expiry_absolute(&mut self) -> &mut Token {
         if self.expires_in_timestamp.is_some() {
             assert!(self.expires_in.is_none());
-            return self
+            return self;
         }
 
         self.expires_in_timestamp = Some(UTC::now().timestamp() + self.expires_in.unwrap());
@@ -136,8 +140,17 @@ impl Token {
 /// All known authentication types, for suitable constants
 #[derive(Clone, Copy)]
 pub enum FlowType {
-    /// [device authentication](https://developers.google.com/youtube/v3/guides/authentication#devices)
+    /// [device authentication](https://developers.google.com/youtube/v3/guides/authentication#devices). Only works
+    /// for certain scopes.
     Device,
+    /// [installed app flow](https://developers.google.com/identity/protocols/OAuth2InstalledApp). Required
+    /// for Drive, Calendar, Gmail...; Requires user to paste a code from the browser.
+    InstalledInteractive,
+    /// Same as InstalledInteractive, but uses a redirect: The OAuth provider redirects the user's
+    /// browser to a web server that is running on localhost. This may not work as well with the
+    /// Windows Firewall, but is more comfortable otherwise. The integer describes which port to
+    /// bind to (default: 8080)
+    InstalledRedirect(u32),
 }
 
 impl AsRef<str> for FlowType {
@@ -145,6 +158,8 @@ impl AsRef<str> for FlowType {
     fn as_ref(&self) -> &'static str {
         match *self {
             FlowType::Device => "https://accounts.google.com/o/oauth2/device/code",
+            FlowType::InstalledInteractive => "https://accounts.google.com/o/oauth2/v2/auth",
+            FlowType::InstalledRedirect(_) => "https://accounts.google.com/o/oauth2/v2/auth",
         }
     }
 }
@@ -171,7 +186,7 @@ pub struct ApplicationSecret {
     /// as ID tokens, signed by the authentication provider.
     pub auth_provider_x509_cert_url: Option<String>,
     ///  The URL of the public x509 certificate, used to verify JWTs signed by the client.
-    pub client_x509_cert_url: Option<String>
+    pub client_x509_cert_url: Option<String>,
 }
 
 /// A type to facilitate reading and writing the json secret file
@@ -179,7 +194,7 @@ pub struct ApplicationSecret {
 #[derive(Deserialize, Serialize, Default)]
 pub struct ConsoleApplicationSecret {
     pub web: Option<ApplicationSecret>,
-    pub installed: Option<ApplicationSecret>
+    pub installed: Option<ApplicationSecret>,
 }
 
 
@@ -188,7 +203,15 @@ pub mod tests {
     use super::*;
     use hyper;
 
-    pub const SECRET: &'static str = "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.googleusercontent.com\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\"}}";
+    pub const SECRET: &'static str = "{\"installed\":{\"auth_uri\":\"https://accounts.google.\
+                                      com/o/oauth2/auth\",\"client_secret\":\
+                                      \"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https:\
+                                      //accounts.google.com/o/oauth2/token\",\"client_email\":\
+                                      \"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\
+                                      \"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\
+                                      \"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.\
+                                      googleusercontent.com\",\"auth_provider_x509_cert_url\":\
+                                      \"https://www.googleapis.com/oauth2/v1/certs\"}}";
 
     #[test]
     fn console_secret() {
@@ -201,15 +224,20 @@ pub mod tests {
 
     #[test]
     fn schema() {
-        let s = Scheme {token_type: TokenType::Bearer, access_token: "foo".to_string() };
+        let s = Scheme {
+            token_type: TokenType::Bearer,
+            access_token: "foo".to_string(),
+        };
         let mut headers = hyper::header::Headers::new();
         headers.set(hyper::header::Authorization(s));
-        assert_eq!(headers.to_string(), "Authorization: Bearer foo\r\n".to_string());
+        assert_eq!(headers.to_string(),
+                   "Authorization: Bearer foo\r\n".to_string());
     }
 
     #[test]
     fn parse_schema() {
-        let auth: hyper::header::Authorization<Scheme> = hyper::header::Header::parse_header(&[b"Bearer foo".to_vec()]).unwrap();
+        let auth: hyper::header::Authorization<Scheme> =
+            hyper::header::Header::parse_header(&[b"Bearer foo".to_vec()]).unwrap();
         assert_eq!(auth.0.token_type, TokenType::Bearer);
         assert_eq!(auth.0.access_token, "foo".to_string());
     }

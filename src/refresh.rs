@@ -31,9 +31,8 @@ pub enum RefreshResult {
     Success(Token),
 }
 
-impl<C> RefreshFlow<C>
-    where C: BorrowMut<hyper::Client> {
-
+impl<C> RefreshFlow<C> where C: BorrowMut<hyper::Client>
+{
     pub fn new(client: C) -> RefreshFlow<C> {
         RefreshFlow {
             client: client,
@@ -55,28 +54,31 @@ impl<C> RefreshFlow<C>
     /// 
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub fn refresh_token(&mut self, 
-                         flow_type: FlowType, 
-                         client_id: &str, 
-                         client_secret: &str, 
-                         refresh_token: &str) -> &RefreshResult {
+    pub fn refresh_token(&mut self,
+                         flow_type: FlowType,
+                         client_id: &str,
+                         client_secret: &str,
+                         refresh_token: &str)
+                         -> &RefreshResult {
         let _ = flow_type;
         if let RefreshResult::Success(_) = self.result {
             return &self.result;
         }
 
-        let req = form_urlencoded::serialize(
-                               &[("client_id", client_id),
-                                 ("client_secret", client_secret),
-                                 ("refresh_token", refresh_token),
-                                 ("grant_type", "refresh_token")]);
+        let req = form_urlencoded::serialize(&[("client_id", client_id),
+                                               ("client_secret", client_secret),
+                                               ("refresh_token", refresh_token),
+                                               ("grant_type", "refresh_token")]);
 
-        let json_str = 
-            match self.client.borrow_mut().post(GOOGLE_TOKEN_URL)
-               .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
-               .body(&*req)
-               .send() {
-            Err(err) => { 
+        let json_str = match self.client
+                                 .borrow_mut()
+                                 .post(GOOGLE_TOKEN_URL)
+                                 .header(ContentType("application/x-www-form-urlencoded"
+                                                         .parse()
+                                                         .unwrap()))
+                                 .body(&*req)
+                                 .send() {
+            Err(err) => {
                 self.result = RefreshResult::Error(err);
                 return &self.result;
             }
@@ -95,7 +97,7 @@ impl<C> RefreshFlow<C>
         }
 
         match json::from_str::<JsonError>(&json_str) {
-            Err(_) => {},
+            Err(_) => {}
             Ok(res) => {
                 self.result = RefreshResult::RefreshError(res.error, res.error_description);
                 return &self.result;
@@ -130,14 +132,10 @@ mod tests {
     impl Default for MockGoogleRefresh {
         fn default() -> MockGoogleRefresh {
             let mut c = MockGoogleRefresh(Default::default());
-            c.0.content.push("HTTP/1.1 200 OK\r\n\
-                             Server: BOGUS\r\n\
-                             \r\n\
-                            {\r\n\
-                              \"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\r\n\
-                              \"expires_in\":3920,\r\n\
-                              \"token_type\":\"Bearer\"\r\n\
-                            }".to_string());
+            c.0.content.push("HTTP/1.1 200 OK\r\nServer: \
+                              BOGUS\r\n\r\n{\r\n\"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\
+                              \r\n\"expires_in\":3920,\r\n\"token_type\":\"Bearer\"\r\n}"
+                                 .to_string());
 
             c
         }
@@ -154,17 +152,15 @@ mod tests {
     #[test]
     fn refresh_flow() {
         let mut c = hyper::Client::with_connector(<MockGoogleRefresh as Default>::default());
-        let mut flow = RefreshFlow::new(
-                            &mut c);
+        let mut flow = RefreshFlow::new(&mut c);
 
 
-        match *flow.refresh_token(FlowType::Device, 
-                                    "bogus", "secret", "bogus_refresh_token") {
+        match *flow.refresh_token(FlowType::Device, "bogus", "secret", "bogus_refresh_token") {
             RefreshResult::Success(ref t) => {
                 assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
                 assert!(!t.expired());
-            },
-            _ => unreachable!()
+            }
+            _ => unreachable!(),
         }
     }
 }
