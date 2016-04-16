@@ -19,7 +19,7 @@ use serde_json::error;
 use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
-use common::Token;
+use common::{ApplicationSecret, Token};
 use helper::AuthenticatorDelegate;
 
 const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
@@ -128,18 +128,15 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
     /// It's recommended not to use the DefaultAuthenticatorDelegate, but a specialized one.
     pub fn obtain_token<'a, AD: AuthenticatorDelegate, S, T>(&mut self,
                                                              auth_delegate: &mut AD,
-                                                             auth_uri: &str,
-                                                             token_uri: &str,
-                                                             client_id: &str,
-                                                             client_secret: &str,
+                                                             appsecret: &ApplicationSecret,
                                                              scopes: S)
                                                              -> Result<Token, Box<Error>>
         where T: AsRef<str> + 'a,
               S: Iterator<Item = &'a T>
     {
         use std::error::Error;
-        let authcode = try!(self.get_authorization_code(auth_delegate, auth_uri, client_id, scopes));
-        let tokens = try!(self.request_token(token_uri, client_secret, client_id, &authcode));
+        let authcode = try!(self.get_authorization_code(auth_delegate, &appsecret, scopes));
+        let tokens = try!(self.request_token(&appsecret, &authcode));
 
         // Successful response
         if tokens.access_token.is_some() {
@@ -168,8 +165,7 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
     /// TODO(dermesser): Add timeout configurability!
     fn get_authorization_code<'a, AD: AuthenticatorDelegate, S, T>(&mut self,
                                                                    auth_delegate: &mut AD,
-                                                                   auth_uri: &str,
-                                                                   client_id: &str,
+                                                                   appsecret: &ApplicationSecret,
                                                                    scopes: S)
                                                                    -> Result<String, Box<Error>>
         where T: AsRef<str> + 'a,
@@ -177,7 +173,10 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
     {
         let result: Result<String, Box<Error>> = match self.server {
             None => {
-                let url = build_authentication_request_url(auth_uri, client_id, scopes, None);
+                let url = build_authentication_request_url(&appsecret.auth_uri,
+                                                           &appsecret.client_id,
+                                                           scopes,
+                                                           None);
                 match auth_delegate.present_user_url(&url, true /* need_code */) {
                     None => {
                         Result::Err(Box::new(io::Error::new(io::ErrorKind::UnexpectedEof,
@@ -193,7 +192,8 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
             Some(_) => {
                 // The redirect URI must be this very localhost URL, otherwise Google refuses
                 // authorization.
-                let url = build_authentication_request_url(auth_uri, client_id,
+                let url = build_authentication_request_url(&appsecret.auth_uri,
+                                                           &appsecret.client_id,
                                                            scopes,
                                                            Some(format!("http://localhost:{}",
                                                                         self.port
@@ -212,9 +212,7 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
 
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.
     fn request_token(&mut self,
-                     token_uri: &str,
-                     client_secret: &str,
-                     client_id: &str,
+                     appsecret: &ApplicationSecret,
                      authcode: &str)
                      -> Result<JSONTokenResponse, Box<Error>> {
         let redirect_uri;
@@ -226,9 +224,9 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
 
         let body = form_urlencoded::serialize(vec![("code".to_string(), authcode.to_string()),
                                                    ("client_id".to_string(),
-                                                    client_id.to_string()),
+                                                    appsecret.client_id.clone()),
                                                    ("client_secret".to_string(),
-                                                    client_secret.to_string()),
+                                                    appsecret.client_secret.clone()),
                                                    ("redirect_uri".to_string(), redirect_uri),
                                                    ("grant_type".to_string(),
                                                     "authorization_code".to_string())]);
@@ -236,7 +234,7 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
         let result: Result<client::Response, hyper::Error> =
             self.client
                 .borrow_mut()
-                .post(token_uri)
+                .post(&appsecret.token_uri)
                 .body(&body)
                 .header(header::ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                 .send();
@@ -336,9 +334,9 @@ mod tests {
     #[test]
     fn test_request_url_builder() {
         assert_eq!("https://accounts.google.\
-                    com/o/oauth2/auth?scope=email%20profile&redirect_uri=urn:ietf:wg:oauth:2.\
-                    0:oob&response_type=code&client_id=812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5a\
-                    mrf.apps.googleusercontent.com",
+                    com/o/oauth2/auth?scope=email%20profile&redirect_uri=urn:ietf:wg:oauth:2.0:\
+                    oob&response_type=code&client_id=812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5amr\
+                    f.apps.googleusercontent.com",
                    build_authentication_request_url("https://accounts.google.com/o/oauth2/auth",
                                                     "812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5am\
                                                      rf.apps.googleusercontent.com",

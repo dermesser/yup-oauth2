@@ -207,10 +207,7 @@ impl<D, S, C> Authenticator<D, S, C>
 
         let mut flow = InstalledFlow::new(self.client.borrow_mut(), installed_type);
         flow.obtain_token(&mut self.delegate,
-                          &self.secret.auth_uri,
-                          &self.secret.token_uri,
-                          &self.secret.client_id,
-                          &self.secret.client_secret,
+                          &self.secret,
                           scopes.iter())
     }
 
