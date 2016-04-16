@@ -1,8 +1,7 @@
-/*
- * Copyright (c) 2016 Google Inc (lewinb@google.com).
- *
- * Refer to the project root for licensing information.
- */
+// Copyright (c) 2016 Google Inc (lewinb@google.com).
+//
+// Refer to the project root for licensing information.
+//
 extern crate serde_json;
 extern crate url;
 
@@ -28,7 +27,8 @@ const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
 /// Assembles a URL to request an authorization token (with user interaction).
 /// Note that the redirect_uri here has to be either None or some variation of
 /// http://localhost:{port}, or the authorization won't work (error "redirect_uri_mismatch")
-fn build_authentication_request_url<'a, T, I>(client_id: &str,
+fn build_authentication_request_url<'a, T, I>(auth_uri: &str,
+                                              client_id: &str,
                                               scopes: I,
                                               redirect_uri: Option<String>)
                                               -> String
@@ -44,8 +44,8 @@ fn build_authentication_request_url<'a, T, I>(client_id: &str,
     // Remove last space
     scopes_string.pop();
 
-    url.push_str("https://accounts.google.com/o/oauth2/v2/auth?");
-    vec![format!("scope={}", scopes_string),
+    url.push_str(auth_uri);
+    vec![format!("?scope={}", scopes_string),
          format!("&redirect_uri={}",
                  redirect_uri.unwrap_or(OOB_REDIRECT_URI.to_string())),
          format!("&response_type=code"),
@@ -128,6 +128,8 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
     /// It's recommended not to use the DefaultAuthenticatorDelegate, but a specialized one.
     pub fn obtain_token<'a, AD: AuthenticatorDelegate, S, T>(&mut self,
                                                              auth_delegate: &mut AD,
+                                                             auth_uri: &str,
+                                                             token_uri: &str,
                                                              client_id: &str,
                                                              client_secret: &str,
                                                              scopes: S)
@@ -136,8 +138,8 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
               S: Iterator<Item = &'a T>
     {
         use std::error::Error;
-        let authcode = try!(self.get_authorization_code(auth_delegate, client_id, scopes));
-        let tokens = try!(self.request_token(client_secret, client_id, &authcode));
+        let authcode = try!(self.get_authorization_code(auth_delegate, auth_uri, client_id, scopes));
+        let tokens = try!(self.request_token(token_uri, client_secret, client_id, &authcode));
 
         // Successful response
         if tokens.access_token.is_some() {
@@ -166,6 +168,7 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
     /// TODO(dermesser): Add timeout configurability!
     fn get_authorization_code<'a, AD: AuthenticatorDelegate, S, T>(&mut self,
                                                                    auth_delegate: &mut AD,
+                                                                   auth_uri: &str,
                                                                    client_id: &str,
                                                                    scopes: S)
                                                                    -> Result<String, Box<Error>>
@@ -174,7 +177,7 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
     {
         let result: Result<String, Box<Error>> = match self.server {
             None => {
-                let url = build_authentication_request_url(client_id, scopes, None);
+                let url = build_authentication_request_url(auth_uri, client_id, scopes, None);
                 match auth_delegate.present_user_url(&url, true /* need_code */) {
                     None => {
                         Result::Err(Box::new(io::Error::new(io::ErrorKind::UnexpectedEof,
@@ -190,7 +193,7 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
             Some(_) => {
                 // The redirect URI must be this very localhost URL, otherwise Google refuses
                 // authorization.
-                let url = build_authentication_request_url(client_id,
+                let url = build_authentication_request_url(auth_uri, client_id,
                                                            scopes,
                                                            Some(format!("http://localhost:{}",
                                                                         self.port
@@ -209,6 +212,7 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
 
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.
     fn request_token(&mut self,
+                     token_uri: &str,
                      client_secret: &str,
                      client_id: &str,
                      authcode: &str)
@@ -232,7 +236,7 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
         let result: Result<client::Response, hyper::Error> =
             self.client
                 .borrow_mut()
-                .post("https://www.googleapis.com/oauth2/v4/token")
+                .post(token_uri)
                 .body(&body)
                 .header(header::ContentType("application/x-www-form-urlencoded".parse().unwrap()))
                 .send();
@@ -332,10 +336,11 @@ mod tests {
     #[test]
     fn test_request_url_builder() {
         assert_eq!("https://accounts.google.\
-                    com/o/oauth2/v2/auth?scope=email%20profile&redirect_uri=urn:ietf:wg:oauth:2.\
+                    com/o/oauth2/auth?scope=email%20profile&redirect_uri=urn:ietf:wg:oauth:2.\
                     0:oob&response_type=code&client_id=812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5a\
                     mrf.apps.googleusercontent.com",
-                   build_authentication_request_url("812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5am\
+                   build_authentication_request_url("https://accounts.google.com/o/oauth2/auth",
+                                                    "812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5am\
                                                      rf.apps.googleusercontent.com",
                                                     vec![&"email".to_string(),
                                                          &"profile".to_string()],

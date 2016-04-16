@@ -207,6 +207,8 @@ impl<D, S, C> Authenticator<D, S, C>
 
         let mut flow = InstalledFlow::new(self.client.borrow_mut(), installed_type);
         flow.obtain_token(&mut self.delegate,
+                          &self.secret.auth_uri,
+                          &self.secret.token_uri,
                           &self.secret.client_id,
                           &self.secret.client_secret,
                           scopes.iter())
@@ -366,6 +368,8 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                     match
                         match self.flow_type {
                             FlowType::Device => self.retrieve_device_token(&scopes),
+                            FlowType::InstalledInteractive => self.do_installed_flow(&scopes),
+                            FlowType::InstalledRedirect(_) => self.do_installed_flow(&scopes),
                         }
                     {
                         Ok(token) => {
