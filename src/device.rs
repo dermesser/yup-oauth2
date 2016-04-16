@@ -8,7 +8,7 @@ use hyper::header::ContentType;
 use url::form_urlencoded;
 use itertools::Itertools;
 use serde_json as json;
-use chrono::{DateTime,UTC, self};
+use chrono::{self, DateTime, UTC};
 use std::borrow::BorrowMut;
 use std::io::Read;
 use std::i64;
@@ -87,9 +87,10 @@ impl From<JsonError> for RequestError {
     fn from(value: JsonError) -> RequestError {
         match &*value.error {
             "invalid_client" => RequestError::InvalidClient,
-            "invalid_scope" => RequestError::InvalidScope(
-                        value.error_description.unwrap_or("no description provided".to_string())
-                               ),
+            "invalid_scope" => {
+                RequestError::InvalidScope(value.error_description
+                                                .unwrap_or("no description provided".to_string()))
+            }
             _ => RequestError::NegativeServerResponse(value.error, value.error_description),
         }
     }
@@ -100,15 +101,14 @@ impl fmt::Display for RequestError {
         match *self {
             RequestError::HttpError(ref err) => err.fmt(f),
             RequestError::InvalidClient => "Invalid Client".fmt(f),
-            RequestError::InvalidScope(ref scope)
-                => writeln!(f, "Invalid Scope: '{}'", scope),
+            RequestError::InvalidScope(ref scope) => writeln!(f, "Invalid Scope: '{}'", scope),
             RequestError::NegativeServerResponse(ref error, ref desc) => {
                 try!(error.fmt(f));
                 if let &Some(ref desc) = desc {
                     try!(write!(f, ": {}", desc));
                 }
                 "\n".fmt(f)
-            },
+            }
         }
     }
 }
@@ -128,17 +128,15 @@ impl fmt::Display for PollError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             PollError::HttpError(ref err) => err.fmt(f),
-            PollError::Expired(ref date)
-                => writeln!(f, "Authentication expired at {}", date),
+            PollError::Expired(ref date) => writeln!(f, "Authentication expired at {}", date),
             PollError::AccessDenied => "Access denied by user".fmt(f),
         }
     }
 }
 
 
-impl<C> DeviceFlow<C>
-    where   C: BorrowMut<hyper::Client> {
-
+impl<C> DeviceFlow<C> where C: BorrowMut<hyper::Client>
+{
     /// # Examples
     /// ```test_harness
     /// extern crate hyper;
@@ -175,30 +173,38 @@ impl<C> DeviceFlow<C>
     /// * If called after a successful result was returned at least once.
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    pub fn request_code<'b, T, I>(&mut self, client_id: &str, client_secret: &str, scopes: I)
-                                    -> Result<PollInformation, RequestError>
-                                    where T: AsRef<str> + 'b,
-                                          I: IntoIterator<Item=&'b T> {
+    pub fn request_code<'b, T, I>(&mut self,
+                                  client_id: &str,
+                                  client_secret: &str,
+                                  scopes: I)
+                                  -> Result<PollInformation, RequestError>
+        where T: AsRef<str> + 'b,
+              I: IntoIterator<Item = &'b T>
+    {
         if self.state.is_some() {
             panic!("Must not be called after we have obtained a token and have no error");
         }
 
         // note: cloned() shouldn't be needed, see issue
         // https://github.com/servo/rust-url/issues/81
-        let req = form_urlencoded::serialize(
-                  &[("client_id", client_id),
-                    ("scope", scopes.into_iter()
-                                    .map(|s| s.as_ref())
-                                    .intersperse(" ")
-                                    .collect::<String>()
-                                    .as_ref())]);
+        let req = form_urlencoded::serialize(&[("client_id", client_id),
+                                               ("scope",
+                                                scopes.into_iter()
+                                                      .map(|s| s.as_ref())
+                                                      .intersperse(" ")
+                                                      .collect::<String>()
+                                                      .as_ref())]);
 
         // note: works around bug in rustlang
         // https://github.com/rust-lang/rust/issues/22252
-        let ret = match self.client.borrow_mut().post(FlowType::Device.as_ref())
-               .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
-               .body(&*req)
-               .send() {
+        let ret = match self.client
+                            .borrow_mut()
+                            .post(FlowType::Device.as_ref())
+                            .header(ContentType("application/x-www-form-urlencoded"
+                                                    .parse()
+                                                    .unwrap()))
+                            .body(&*req)
+                            .send() {
             Err(err) => {
                 return Err(RequestError::HttpError(err));
             }
@@ -219,10 +225,8 @@ impl<C> DeviceFlow<C>
 
                 // check for error
                 match json::from_str::<JsonError>(&json_str) {
-                    Err(_) => {}, // ignore, move on
-                    Ok(res) => {
-                        return Err(RequestError::from(res))
-                    }
+                    Err(_) => {} // ignore, move on
+                    Ok(res) => return Err(RequestError::from(res)),
                 }
 
                 let decoded: JsonData = json::from_str(&json_str).unwrap();
@@ -231,7 +235,7 @@ impl<C> DeviceFlow<C>
                 let pi = PollInformation {
                     user_code: decoded.user_code,
                     verification_url: decoded.verification_url,
-                    expires_at: UTC::now() + chrono::Duration::seconds(decoded.expires_in), 
+                    expires_at: UTC::now() + chrono::Duration::seconds(decoded.expires_in),
                     interval: Duration::from_secs(i64::abs(decoded.interval) as u64),
                 };
                 self.state = Some(DeviceFlowState::Pending(pi.clone()));
@@ -265,33 +269,37 @@ impl<C> DeviceFlow<C>
     pub fn poll_token(&mut self) -> Result<Option<Token>, &PollError> {
         // clone, as we may re-assign our state later
         let pi = match self.state {
-            Some(ref s) =>
+            Some(ref s) => {
                 match *s {
                     DeviceFlowState::Pending(ref pi) => pi.clone(),
                     DeviceFlowState::Error => return Err(self.error.as_ref().unwrap()),
                     DeviceFlowState::Success(ref t) => return Ok(Some(t.clone())),
-                },
+                }
+            }
             _ => panic!("You have to call request_code() beforehand"),
         };
 
         if pi.expires_at <= UTC::now() {
             self.error = Some(PollError::Expired(pi.expires_at));
             self.state = Some(DeviceFlowState::Error);
-            return Err(&self.error.as_ref().unwrap())
+            return Err(&self.error.as_ref().unwrap());
         }
 
         // We should be ready for a new request
-        let req = form_urlencoded::serialize(
-                       &[("client_id", &self.id[..]),
-                         ("client_secret", &self.secret),
-                         ("code", &self.device_code),
-                         ("grant_type", "http://oauth.net/grant_type/device/1.0")]);
+        let req = form_urlencoded::serialize(&[("client_id", &self.id[..]),
+                                               ("client_secret", &self.secret),
+                                               ("code", &self.device_code),
+                                               ("grant_type",
+                                                "http://oauth.net/grant_type/device/1.0")]);
 
-        let json_str =
-            match self.client.borrow_mut().post(GOOGLE_TOKEN_URL)
-               .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
-               .body(&*req)
-               .send() {
+        let json_str = match self.client
+                                 .borrow_mut()
+                                 .post(GOOGLE_TOKEN_URL)
+                                 .header(ContentType("application/x-www-form-urlencoded"
+                                                         .parse()
+                                                         .unwrap()))
+                                 .body(&*req)
+                                 .send() {
             Err(err) => {
                 self.error = Some(PollError::HttpError(err));
                 return Err(self.error.as_ref().unwrap());
@@ -305,18 +313,18 @@ impl<C> DeviceFlow<C>
 
         #[derive(Deserialize)]
         struct JsonError {
-            error: String
+            error: String,
         }
 
         match json::from_str::<JsonError>(&json_str) {
-            Err(_) => {}, // ignore, move on, it's not an error
+            Err(_) => {} // ignore, move on, it's not an error
             Ok(res) => {
                 match res.error.as_ref() {
                     "access_denied" => {
                         self.error = Some(PollError::AccessDenied);
                         self.state = Some(DeviceFlowState::Error);
-                        return Err(self.error.as_ref().unwrap())
-                    },
+                        return Err(self.error.as_ref().unwrap());
+                    }
                     "authorization_pending" => return Ok(None),
                     _ => panic!("server message '{}' not understood", res.error),
                 };
@@ -329,7 +337,7 @@ impl<C> DeviceFlow<C>
 
         let res = Ok(Some(t.clone()));
         self.state = Some(DeviceFlowState::Success(t));
-        return res
+        return res;
     }
 }
 
@@ -347,33 +355,23 @@ pub mod tests {
     impl Default for MockGoogleAuth {
         fn default() -> MockGoogleAuth {
             let mut c = MockGoogleAuth(Default::default());
-            c.0.content.push("HTTP/1.1 200 OK\r\n\
-                                 Server: BOGUS\r\n\
-                                 \r\n\
-                                {\r\n\
-                                  \"device_code\" : \"4/L9fTtLrhY96442SEuf1Rl3KLFg3y\",\r\n\
-                                  \"user_code\" : \"a9xfwk9c\",\r\n\
-                                  \"verification_url\" : \"http://www.google.com/device\",\r\n\
-                                  \"expires_in\" : 1800,\r\n\
-                                  \"interval\" : 0\r\n\
-                                }".to_string());
+            c.0.content.push("HTTP/1.1 200 OK\r\nServer: BOGUS\r\n\r\n{\r\n\"device_code\" : \
+                              \"4/L9fTtLrhY96442SEuf1Rl3KLFg3y\",\r\n\"user_code\" : \
+                              \"a9xfwk9c\",\r\n\"verification_url\" : \
+                              \"http://www.google.com/device\",\r\n\"expires_in\" : \
+                              1800,\r\n\"interval\" : 0\r\n}"
+                                 .to_string());
 
-            c.0.content.push("HTTP/1.1 200 OK\r\n\
-                             Server: BOGUS\r\n\
-                             \r\n\
-                            {\r\n\
-                                \"error\" : \"authorization_pending\"\r\n\
-                            }".to_string());
+            c.0.content.push("HTTP/1.1 200 OK\r\nServer: BOGUS\r\n\r\n{\r\n\"error\" : \
+                              \"authorization_pending\"\r\n}"
+                                 .to_string());
 
-            c.0.content.push("HTTP/1.1 200 OK\r\n\
-                             Server: BOGUS\r\n\
-                             \r\n\
-                            {\r\n\
-                              \"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\r\n\
-                              \"expires_in\":3920,\r\n\
-                              \"token_type\":\"Bearer\",\r\n\
-                              \"refresh_token\":\"1/6BMfW9j53gdGImsixUH6kU5RsR4zwI9lUVX-tqf8JXQ\"\r\n\
-                            }".to_string());
+            c.0.content.push("HTTP/1.1 200 OK\r\nServer: \
+                              BOGUS\r\n\r\n{\r\n\"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\
+                              \r\n\"expires_in\":3920,\r\n\"token_type\":\"Bearer\",\
+                              \r\n\"refresh_token\":\
+                              \"1/6BMfW9j53gdGImsixUH6kU5RsR4zwI9lUVX-tqf8JXQ\"\r\n}"
+                                 .to_string());
             c
 
         }
@@ -400,18 +398,17 @@ pub mod tests {
         }
 
         match flow.poll_token() {
-            Ok(None) => {},
+            Ok(None) => {}
             _ => unreachable!(),
         }
 
-        let t =
-            match flow.poll_token() {
-                Ok(Some(t)) => {
-                    assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
-                    t
-                },
-                _ => unreachable!(),
-            };
+        let t = match flow.poll_token() {
+            Ok(Some(t)) => {
+                assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
+                t
+            }
+            _ => unreachable!(),
+        };
 
         // from now on, all calls will yield the same result
         // As our mock has only 3 items, we would panic on this call
