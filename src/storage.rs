@@ -113,7 +113,7 @@ pub struct DiskTokenStorage {
 }
 
 impl DiskTokenStorage {
-    pub fn new(location: &String) -> DiskTokenStorage {
+    pub fn new(location: &String) -> Result<DiskTokenStorage, io::Error> {
         use std::fs;
         let mut dts = DiskTokenStorage {
             location: location.clone(),
@@ -121,8 +121,17 @@ impl DiskTokenStorage {
         };
 
         // best-effort
-        let _ = dts.load_from_file();
-        dts
+        let read_result = dts.load_from_file();
+
+        match read_result {
+            Result::Ok(()) => Result::Ok(dts),
+            Result::Err(e) => {
+                match e.kind() {
+                    io::ErrorKind::NotFound => Result::Ok(dts), // File not found; ignore and create new one
+                    _ => Result::Err(e), // e.g. PermissionDenied
+                }
+            }
+        }
     }
 
     fn load_from_file(&mut self) -> Result<(), io::Error> {
