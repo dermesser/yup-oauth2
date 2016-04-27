@@ -490,13 +490,7 @@ pub trait AuthenticatorDelegate {
                      url);
 
             let mut code = String::new();
-            let _ = io::stdin().read_line(&mut code);
-
-            if !code.is_empty() {
-                Some(code)
-            } else {
-                None
-            }
+            io::stdin().read_line(&mut code).ok().map(|_| code)
         } else {
             println!("Please direct your browser to {} and follow the instructions displayed \
                       there.",

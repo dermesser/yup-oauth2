@@ -162,7 +162,6 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
 
     /// Obtains an authorization code either interactively or via HTTP redirect (see
     /// InstalledFlowReturnMethod).
-    /// TODO(dermesser): Add timeout configurability!
     fn get_authorization_code<'a, AD: AuthenticatorDelegate, S, T>(&mut self,
                                                                    auth_delegate: &mut AD,
                                                                    appsecret: &ApplicationSecret,
@@ -206,7 +205,7 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
                 }
             }
         };
-        let _ = self.server.as_mut().map(|l| l.close());
+        self.server.as_mut().map(|l| l.close()).is_some();
         result
     }
 
