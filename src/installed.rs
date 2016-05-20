@@ -139,14 +139,15 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
 
         // Successful response
         if tokens.access_token.is_some() {
-            let token = Token {
+            let mut token = Token {
                 access_token: tokens.access_token.unwrap(),
                 refresh_token: tokens.refresh_token.unwrap(),
                 token_type: tokens.token_type.unwrap(),
                 expires_in: tokens.expires_in,
                 expires_in_timestamp: None,
             };
-
+            
+            token.set_expiry_absolute();
             Result::Ok(token)
         } else {
             let err = io::Error::new(io::ErrorKind::Other,

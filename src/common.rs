@@ -117,7 +117,7 @@ impl Token {
 
     /// Returns a DateTime object representing our expiry date.
     pub fn expiry_date(&self) -> DateTime<UTC> {
-        UTC.timestamp(self.expires_in_timestamp.unwrap(), 0)
+        UTC.timestamp(self.expires_in_timestamp.expect("Tokens without an absolute expiry are invalid"), 0)
     }
 
     /// Adjust our stored expiry format to be absolute, using the current time.
