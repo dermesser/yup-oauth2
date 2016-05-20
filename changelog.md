@@ -1,3 +1,24 @@
+<a name="v0.6.0"></a>
+## v0.6.0 (2016-05-20)
+
+
+#### Features
+
+* **flows:**  Implement flow for installed apps ([77355888](https://github.com/Byron/yup-oauth2/commit/77355888f2d1f0db09b10d81a374d8d254dd13fb))
+* **storage:**  Implement DiskTokenStorage ([2cb5250e](https://github.com/Byron/yup-oauth2/commit/2cb5250e72f53bc020cad298b5689dcc88e6347f))
+
+#### Bug Fixes
+
+* **DiskTokenStorage:**  make DiskTokenStorage::new() return a Result<> ([ae5e94bf](https://github.com/Byron/yup-oauth2/commit/ae5e94bf7b15318a15b2885fa0d4b5fded8bcadd))
+* **dependencies:**
+  *  work with latest dependencies on nightly ([22bb255a](https://github.com/Byron/yup-oauth2/commit/22bb255a55e2a92e4b03c33d721ab122c6c5ae32))
+  *  hyper also broke us ([4e1d9bd7](https://github.com/Byron/yup-oauth2/commit/4e1d9bd75091583ff9d8f49e6e8cd46458677457))
+  *  use url = 0.5; the bump to 1.0 broke us ([95ecb5c3](https://github.com/Byron/yup-oauth2/commit/95ecb5c3887bd51367724da4e9c862aa1c3154a9), closes [#23](https://github.com/Byron/yup-oauth2/issues/23))
+  *  use url = 0.5; the bump to 1.0 broke us ([5c4e3188](https://github.com/Byron/yup-oauth2/commit/5c4e318842c809551242a804c97e8696e5e6eb5c), closes [#23](https://github.com/Byron/yup-oauth2/issues/23))
+* **installed:**  Genericize token/auth URI ([9b31070e](https://github.com/Byron/yup-oauth2/commit/9b31070edbac3ba9e42dc08c81a48ec3fee8a728))
+
+
+
 <a name="v0.5.6"></a>
 ### v0.5.6 (2016-04-10)
 
