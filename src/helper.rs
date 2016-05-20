@@ -1,6 +1,5 @@
 use std::iter::IntoIterator;
 use std::borrow::BorrowMut;
-use std::collections::HashMap;
 use std::hash::{SipHasher, Hash, Hasher};
 use std::thread::sleep;
 use std::cmp::min;

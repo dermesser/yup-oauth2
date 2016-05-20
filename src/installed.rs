@@ -134,7 +134,6 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
         where T: AsRef<str> + 'a,
               S: Iterator<Item = &'a T>
     {
-        use std::error::Error;
         let authcode = try!(self.get_authorization_code(auth_delegate, &appsecret, scopes));
         let tokens = try!(self.request_token(&appsecret, &authcode));
 
@@ -311,7 +310,7 @@ impl InstalledFlowHandler {
         // code, like this: http://localhost:8080/xyz/?code=4/731fJ3BheyCouCniPufAd280GHNV5Ju35yYcGs
         // We take that code and send it to the get_authorization_code() function that
         // waits for it.
-        for (param, val) in url.query_pairs().unwrap_or(Vec::new()) {
+        for (param, val) in url.query_pairs().into_owned() {
             if param == "code".to_string() {
                 let _ = self.auth_code_snd.lock().unwrap().send(val);
             }

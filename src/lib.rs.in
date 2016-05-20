@@ -13,6 +13,7 @@ extern crate url;
 extern crate itertools;
 
 mod device;
+mod storage;
 mod installed;
 mod helper;
 mod refresh;
@@ -22,5 +23,6 @@ pub use device::{DeviceFlow, PollInformation, PollError};
 pub use refresh::{RefreshFlow, RefreshResult};
 pub use common::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret, Scheme, TokenType};
 pub use installed::{InstalledFlow, InstalledFlowReturnMethod};
-pub use helper::{TokenStorage, NullStorage, MemoryStorage, Authenticator, AuthenticatorDelegate,
+pub use storage::{TokenStorage, NullStorage, MemoryStorage, DiskTokenStorage};
+pub use helper::{Authenticator, AuthenticatorDelegate,
                  Retry, DefaultAuthenticatorDelegate, GetToken};

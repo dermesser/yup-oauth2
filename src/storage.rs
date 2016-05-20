@@ -7,7 +7,6 @@
 extern crate serde_json;
 
 use std::collections::HashMap;
-use std::hash::Hasher;
 use std::error::Error;
 use std::fmt;
 use std::fs;
@@ -114,7 +113,6 @@ pub struct DiskTokenStorage {
 
 impl DiskTokenStorage {
     pub fn new(location: &String) -> Result<DiskTokenStorage, io::Error> {
-        use std::fs;
         let mut dts = DiskTokenStorage {
             location: location.clone(),
             tokens: HashMap::new(),
