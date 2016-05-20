@@ -70,5 +70,5 @@
 #[cfg(feature = "nightly")]
 include!("lib.rs.in");
 
-#[cfg(feature = "with_syntex")]
+#[cfg(feature = "with-syntex")]
 include!(concat!(env!("OUT_DIR"), "/lib.rs"));

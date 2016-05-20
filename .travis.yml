@@ -10,7 +10,7 @@ matrix:
   include:
     - rust: stable
       # make doc-upload and coveralls work on stable only
-      env: TRAVIS_RUST_VERSION=stable FEATURE=with_syntex
+      env: TRAVIS_RUST_VERSION=stable FEATURE=with-syntex
     - rust: nightly
       env: FEATURE=nightly
   allow_failures:
@@ -29,4 +29,4 @@ env:
     - TRAVIS_CARGO_NIGHTLY_FEATURE=""
     - secure: Es8/QExA+XfWaTi2wQqpJL+yc4d3yU9/dfCpVFhyWpu+2XXIvbPbdqFuiZG6QVGaYOmwjlFJ5gCsAqxliG2wzVHkv+KhA1yeVn4ia41Vmx1mJlEU+O7ZNldfgjWemWKTD5kTEFtTBItswKUFH9LsFQ5sztV6/7I9kZZJAxWiXjs=
   matrix:
-    - FEATURE=with_syntex
+    - FEATURE=with-syntex
