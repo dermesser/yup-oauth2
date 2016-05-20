@@ -1,10 +1,13 @@
 //! This library can be used to acquire oauth2.0 authentication for services.
-//! At the time of writing, only one way of doing so is implemented, the [device flow](https://developers.google.com/youtube/v3/guides/authentication#devices), along with a flow 
+//! At the time of writing, only one way of doing so is implemented, the
+//! [device flow](https://developers.google.com/youtube/v3/guides/authentication#devices), along
+//! with a flow
 //! for [refreshing tokens](https://developers.google.com/youtube/v3/guides/authentication#devices)
-//! 
+//!
 //! For your application to use this library, you will have to obtain an application
-//! id and secret by [following this guide](https://developers.google.com/youtube/registering_an_application).
-//! 
+//! id and secret by
+//! [following this guide](https://developers.google.com/youtube/registering_an_application).
+//!
 //! # Device Flow Usage
 //! As the `DeviceFlow` involves polling, the `DeviceFlowHelper` should be used
 //! as means to adhere to the protocol, and remain resilient to all kinds of errors
@@ -19,7 +22,7 @@
 //! extern crate yup_oauth2 as oauth2;
 //! extern crate serde;
 //! extern crate serde_json;
-//! 
+//!
 //! use oauth2::{Authenticator, DefaultAuthenticatorDelegate, PollInformation, ConsoleApplicationSecret, MemoryStorage, GetToken};
 //! use serde_json as json;
 //! use std::default::Default;
@@ -34,7 +37,7 @@
 //! match res {
 //!     Ok(t) => {
 //!     // now you can use t.access_token to authenticate API calls within your
-//!     // given scopes. It will not be valid forever, which is when you have to 
+//!     // given scopes. It will not be valid forever, which is when you have to
 //!     // refresh it using the `RefreshFlow`
 //!     },
 //!     Err(err) => println!("Failed to acquire token: {}", err),
