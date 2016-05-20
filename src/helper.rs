@@ -13,74 +13,11 @@ use common::{Token, FlowType, ApplicationSecret};
 use device::{PollInformation, RequestError, DeviceFlow, PollError};
 use installed::{InstalledFlow, InstalledFlowReturnMethod};
 use refresh::{RefreshResult, RefreshFlow};
+use storage::{TokenStorage};
 use chrono::{DateTime, UTC, Local};
 use std::time::Duration;
 use hyper;
 
-
-/// Implements a specialized storage to set and retrieve `Token` instances.
-/// The `scope_hash` represents the signature of the scopes for which the given token
-/// should be stored or retrieved.
-/// For completeness, the underlying, sorted scopes are provided as well. They might be
-/// useful for presentation to the user.
-pub trait TokenStorage {
-    type Error: 'static + Error;
-
-    /// If `token` is None, it is invalid or revoked and should be removed from storage.
-    /// Otherwise, it should be saved.
-    fn set(&mut self, scope_hash: u64, scopes: &Vec<&str>, token: Option<Token>) -> Result<(), Self::Error>;
-    /// A `None` result indicates that there is no token for the given scope_hash.
-    fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, Self::Error>;
-}
-
-/// A storage that remembers nothing.
-#[derive(Default)]
-pub struct NullStorage;
-#[derive(Debug)]
-pub struct NullError;
-
-impl Error for NullError {
-    fn description(&self) -> &str {
-        "NULL"
-    }
-}
-
-impl fmt::Display for NullError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        "NULL-ERROR".fmt(f)
-    }
-}
-
-impl TokenStorage for NullStorage {
-    type Error = NullError;
-    fn set(&mut self, _: u64, _: &Vec<&str>, _: Option<Token>) -> Result<(), NullError> { Ok(()) }
-    fn get(&self, _: u64, _: &Vec<&str>) -> Result<Option<Token>, NullError> { Ok(None) }
-}
-
-/// A storage that remembers values for one session only.
-#[derive(Default)]
-pub struct MemoryStorage {
-    pub tokens: HashMap<u64, Token>
-}
-
-impl TokenStorage for MemoryStorage {
-    type Error = NullError;
-
-    fn set(&mut self, scope_hash: u64, _: &Vec<&str>, token: Option<Token>) -> Result<(), NullError> {
-        match token {
-            Some(t) => self.tokens.insert(scope_hash, t),
-            None => self.tokens.remove(&scope_hash),
-        };
-        Ok(())
-    }
-
-    fn get(&self, scope_hash: u64, _: &Vec<&str>) -> Result<Option<Token>, NullError> {
-        match self.tokens.get(&scope_hash) {
-            Some(t) => Ok(Some(t.clone())),
-            None => Ok(None),
-        }
-    }
-}
 
 /// A generalized authenticator which will keep tokens valid and store them.
 ///
@@ -523,6 +460,7 @@ mod tests {
     use super::super::device::tests::MockGoogleAuth;
     use super::super::common::tests::SECRET;
     use super::super::common::{ConsoleApplicationSecret};
+    use storage::MemoryStorage;
     use std::default::Default;
     use hyper;
 
