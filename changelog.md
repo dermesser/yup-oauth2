@@ -1,3 +1,13 @@
+<a name="v0.6.1"></a>
+### v0.6.1 (2016-05-20)
+
+
+#### Bug Fixes
+
+* **flows:**  save Token properly ([57a3151d](https://github.com/Byron/yup-oauth2/commit/57a3151d4d550c14e0763bcf3153791d5d832dba))
+
+
+
 <a name="v0.6.0"></a>
 ## v0.6.0 (2016-05-20)
 
