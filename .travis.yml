@@ -10,10 +10,6 @@ matrix:
   exclude:
     - rust: stable
       env: FEATURE=nightly
-  include:
-    - rust: stable
-      # make doc-upload and coveralls work on stable only
-      env: TRAVIS_RUST_VERSION=stable FEATURE=with-syntex
   allow_failures:
     - os: osx
 before_script:
