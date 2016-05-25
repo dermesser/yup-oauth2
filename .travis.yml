@@ -4,26 +4,30 @@ os:
   - linux
   - osx
 rust:
-- stable
-- nightly
+  - stable
+  - nightly
+env:
+  - FEATURE=with-syntex
+  - FEATURE=nightly
 matrix:
+  exclude:
+    - rust: stable
+      env: FEATURE=nightly
   include:
     - rust: stable
       # make doc-upload and coveralls work on stable only
       env: TRAVIS_RUST_VERSION=stable FEATURE=with-syntex
-    - rust: nightly
-      env: FEATURE=nightly
   allow_failures:
     - os: osx
 before_script:
-- pip install 'travis-cargo<0.2' --user  && export PATH=$HOME/Library/Python/2.7/bin:$HOME/.local/bin:$PATH
+  - pip install 'travis-cargo<0.2' --user  && export PATH=$HOME/Library/Python/2.7/bin:$HOME/.local/bin:$PATH
 script:
-- travis-cargo build -- --features $FEATURE --no-default-features
-- travis-cargo test -- --features $FEATURE --no-default-features
-- travis-cargo doc -- --features $FEATURE --no-default-features
+  - travis-cargo build -- --features $FEATURE --no-default-features
+  - travis-cargo test -- --features $FEATURE --no-default-features
+  - travis-cargo doc -- --features $FEATURE --no-default-features
 after_success:
-- travis-cargo --only stable doc-upload
-- travis-cargo --only stable coveralls
+  - travis-cargo --only stable doc-upload
+  - travis-cargo --only stable coveralls
 env:
   global:
     - TRAVIS_CARGO_NIGHTLY_FEATURE=""
