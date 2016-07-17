@@ -70,5 +70,5 @@
 #[cfg(feature = "nightly")]
 include!("lib.rs.in");
 
-#[cfg(feature = "with-syntex")]
+#[cfg(feature = "with-serde-codegen")]
 include!(concat!(env!("OUT_DIR"), "/lib.rs"));
