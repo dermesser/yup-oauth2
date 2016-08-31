@@ -11,7 +11,7 @@ use serde_json;
 use std::io;
 use std::fs;
 
-use types::ApplicationSecret;
+use types::{ConsoleApplicationSecret, ApplicationSecret};
 
 pub fn read_application_secret(file: &String) -> io::Result<ApplicationSecret> {
     use std::io::Read;
@@ -24,11 +24,21 @@ pub fn read_application_secret(file: &String) -> io::Result<ApplicationSecret> {
 }
 
 pub fn parse_application_secret(secret: &String) -> io::Result<ApplicationSecret> {
-    match serde_json::from_str(secret) {
+    let result: serde_json::Result<ConsoleApplicationSecret> = serde_json::from_str(secret);
+    match result {
         Err(e) => {
             Err(io::Error::new(io::ErrorKind::InvalidData,
                                format!("Bad application secret: {}", e)))
         }
-        Ok(decoded) => Ok(decoded),
+        Ok(decoded) => {
+            if decoded.web.is_some() {
+                Ok(decoded.web.unwrap())
+            } else if decoded.installed.is_some() {
+                Ok(decoded.installed.unwrap())
+            } else {
+                Err(io::Error::new(io::ErrorKind::InvalidData,
+                                   "Unknown application secret format"))
+            }
+        }
     }
 }
