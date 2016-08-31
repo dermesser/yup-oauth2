@@ -19,7 +19,7 @@ use serde_json::error;
 use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
-use common::{ApplicationSecret, Token};
+use types::{ApplicationSecret, Token};
 use authenticator_delegate::AuthenticatorDelegate;
 
 const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";

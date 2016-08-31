@@ -1,4 +1,4 @@
-use common::{FlowType, JsonError};
+use types::{FlowType, JsonError};
 use device::GOOGLE_TOKEN_URL;
 
 use chrono::UTC;

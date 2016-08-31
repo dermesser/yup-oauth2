@@ -5,7 +5,7 @@ use std::io;
 use std::error::Error;
 
 use authenticator::Retry;
-use common::RequestError;
+use types::RequestError;
 
 use chrono::{DateTime, Local, UTC};
 use std::time::Duration;

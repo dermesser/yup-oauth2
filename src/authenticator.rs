@@ -8,7 +8,7 @@ use std::fmt;
 use std::convert::From;
 
 use authenticator_delegate::{AuthenticatorDelegate, PollError, PollInformation};
-use common::{RequestError, Token, FlowType, ApplicationSecret};
+use types::{RequestError, Token, FlowType, ApplicationSecret};
 use device::DeviceFlow;
 use installed::{InstalledFlow, InstalledFlowReturnMethod};
 use refresh::{RefreshResult, RefreshFlow};
@@ -368,8 +368,8 @@ pub enum Retry {
 mod tests {
     use super::*;
     use super::super::device::tests::MockGoogleAuth;
-    use super::super::common::tests::SECRET;
-    use super::super::common::ConsoleApplicationSecret;
+    use super::super::types::tests::SECRET;
+    use super::super::types::ConsoleApplicationSecret;
     use storage::MemoryStorage;
     use std::default::Default;
     use hyper;

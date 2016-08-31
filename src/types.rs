@@ -244,7 +244,6 @@ pub struct ConsoleApplicationSecret {
     pub installed: Option<ApplicationSecret>,
 }
 
-
 #[cfg(test)]
 pub mod tests {
     use super::*;

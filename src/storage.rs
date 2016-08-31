@@ -12,7 +12,7 @@ use std::fs;
 use std::io;
 use std::io::{Read, Write};
 
-use common::Token;
+use types::Token;
 
 /// Implements a specialized storage to set and retrieve `Token` instances.
 /// The `scope_hash` represents the signature of the scopes for which the given token

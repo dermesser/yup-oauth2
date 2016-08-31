@@ -12,7 +12,7 @@ use std::borrow::BorrowMut;
 use std::io::Read;
 use std::i64;
 
-use common::{Token, FlowType, Flow, RequestError, JsonError};
+use types::{Token, FlowType, Flow, RequestError, JsonError};
 use authenticator_delegate::{PollError, PollInformation};
 
 pub const GOOGLE_TOKEN_URL: &'static str = "https://accounts.google.com/o/oauth2/token";
