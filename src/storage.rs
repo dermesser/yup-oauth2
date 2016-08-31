@@ -1,8 +1,7 @@
-/*
- * partially (c) 2016 Google Inc. (Lewin Bormann, lewinb@google.com)
- *
- * See project root for licensing information.
- */
+// partially (c) 2016 Google Inc. (Lewin Bormann, lewinb@google.com)
+//
+// See project root for licensing information.
+//
 
 extern crate serde_json;
 
@@ -172,10 +171,10 @@ impl DiskTokenStorage {
         }
 
         let mut f = try!(fs::OpenOptions::new()
-                             .create(true)
-                             .write(true)
-                             .truncate(true)
-                             .open(&self.location));
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&self.location));
         f.write(serialized.as_ref()).map(|_| ())
     }
 }

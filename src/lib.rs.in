@@ -12,17 +12,19 @@ extern crate mime;
 extern crate url;
 extern crate itertools;
 
+mod authenticator_delegate;
+mod authenticator;
 mod device;
 mod storage;
 mod installed;
-mod helper;
 mod refresh;
 mod common;
 
-pub use device::{DeviceFlow, PollInformation, PollError};
+pub use device::DeviceFlow;
 pub use refresh::{RefreshFlow, RefreshResult};
 pub use common::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret, Scheme, TokenType};
 pub use installed::{InstalledFlow, InstalledFlowReturnMethod};
 pub use storage::{TokenStorage, NullStorage, MemoryStorage, DiskTokenStorage};
-pub use helper::{Authenticator, AuthenticatorDelegate,
-                 Retry, DefaultAuthenticatorDelegate, GetToken};
+pub use authenticator::{Authenticator, Retry, GetToken};
+pub use authenticator_delegate::{AuthenticatorDelegate, DefaultAuthenticatorDelegate, PollError,
+                                 PollInformation};

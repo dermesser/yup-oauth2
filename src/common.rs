@@ -15,6 +15,51 @@ pub struct JsonError {
     pub error_uri: Option<String>,
 }
 
+/// Encapsulates all possible results of the `request_token(...)` operation
+pub enum RequestError {
+    /// Indicates connection failure
+    HttpError(hyper::Error),
+    /// The OAuth client was not found
+    InvalidClient,
+    /// Some requested scopes were invalid. String contains the scopes as part of
+    /// the server error message
+    InvalidScope(String),
+    /// A 'catch-all' variant containing the server error and description
+    /// First string is the error code, the second may be a more detailed description
+    NegativeServerResponse(String, Option<String>),
+}
+
+impl From<JsonError> for RequestError {
+    fn from(value: JsonError) -> RequestError {
+        match &*value.error {
+            "invalid_client" => RequestError::InvalidClient,
+            "invalid_scope" => {
+                RequestError::InvalidScope(value.error_description
+                    .unwrap_or("no description provided".to_string()))
+            }
+            _ => RequestError::NegativeServerResponse(value.error, value.error_description),
+        }
+    }
+}
+
+impl fmt::Display for RequestError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            RequestError::HttpError(ref err) => err.fmt(f),
+            RequestError::InvalidClient => "Invalid Client".fmt(f),
+            RequestError::InvalidScope(ref scope) => writeln!(f, "Invalid Scope: '{}'", scope),
+            RequestError::NegativeServerResponse(ref error, ref desc) => {
+                try!(error.fmt(f));
+                if let &Some(ref desc) = desc {
+                    try!(write!(f, ": {}", desc));
+                }
+                "\n".fmt(f)
+            }
+        }
+    }
+}
+
+
 /// Represents all implemented token types
 #[derive(Clone, PartialEq, Debug)]
 pub enum TokenType {
@@ -25,7 +70,7 @@ pub enum TokenType {
 impl AsRef<str> for TokenType {
     fn as_ref(&self) -> &'static str {
         match *self {
-            TokenType::Bearer => "Bearer"
+            TokenType::Bearer => "Bearer",
         }
     }
 }
@@ -35,7 +80,7 @@ impl FromStr for TokenType {
     fn from_str(s: &str) -> Result<TokenType, ()> {
         match s {
             "Bearer" => Ok(TokenType::Bearer),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -47,7 +92,7 @@ pub struct Scheme {
     /// The type of our access token
     pub token_type: TokenType,
     /// The token returned by one of the Authorization Flows
-    pub access_token: String
+    pub access_token: String,
 }
 
 impl hyper::header::Scheme for Scheme {
@@ -65,11 +110,16 @@ impl FromStr for Scheme {
     fn from_str(s: &str) -> Result<Scheme, &'static str> {
         let parts: Vec<&str> = s.split(' ').collect();
         if parts.len() != 2 {
-            return Err("Expected two parts: <token_type> <token>")
+            return Err("Expected two parts: <token_type> <token>");
         }
         match <TokenType as FromStr>::from_str(parts[0]) {
-            Ok(t) => Ok(Scheme { token_type: t, access_token: parts[1].to_string() }),
-            Err(_) => Err("Couldn't parse token type")
+            Ok(t) => {
+                Ok(Scheme {
+                    token_type: t,
+                    access_token: parts[1].to_string(),
+                })
+            }
+            Err(_) => Err("Couldn't parse token type"),
         }
     }
 }
@@ -103,7 +153,6 @@ pub struct Token {
 }
 
 impl Token {
-
     /// Returns true if we are expired.
     ///
     /// # Panics
@@ -117,14 +166,16 @@ impl Token {
 
     /// Returns a DateTime object representing our expiry date.
     pub fn expiry_date(&self) -> DateTime<UTC> {
-        UTC.timestamp(self.expires_in_timestamp.expect("Tokens without an absolute expiry are invalid"), 0)
+        UTC.timestamp(self.expires_in_timestamp
+                          .expect("Tokens without an absolute expiry are invalid"),
+                      0)
     }
 
     /// Adjust our stored expiry format to be absolute, using the current time.
     pub fn set_expiry_absolute(&mut self) -> &mut Token {
         if self.expires_in_timestamp.is_some() {
             assert!(self.expires_in.is_none());
-            return self
+            return self;
         }
 
         self.expires_in_timestamp = Some(UTC::now().timestamp() + self.expires_in.unwrap());
@@ -182,7 +233,7 @@ pub struct ApplicationSecret {
     /// as ID tokens, signed by the authentication provider.
     pub auth_provider_x509_cert_url: Option<String>,
     ///  The URL of the public x509 certificate, used to verify JWTs signed by the client.
-    pub client_x509_cert_url: Option<String>
+    pub client_x509_cert_url: Option<String>,
 }
 
 /// A type to facilitate reading and writing the json secret file
@@ -190,7 +241,7 @@ pub struct ApplicationSecret {
 #[derive(Deserialize, Serialize, Default)]
 pub struct ConsoleApplicationSecret {
     pub web: Option<ApplicationSecret>,
-    pub installed: Option<ApplicationSecret>
+    pub installed: Option<ApplicationSecret>,
 }
 
 
@@ -199,7 +250,13 @@ pub mod tests {
     use super::*;
     use hyper;
 
-    pub const SECRET: &'static str = "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.googleusercontent.com\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\"}}";
+    pub const SECRET: &'static str =
+        "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\
+         \"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.\
+         com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:\
+         oob\",\"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\
+         \"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.googleusercontent.com\",\
+         \"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\"}}";
 
     #[test]
     fn console_secret() {
@@ -212,15 +269,20 @@ pub mod tests {
 
     #[test]
     fn schema() {
-        let s = Scheme {token_type: TokenType::Bearer, access_token: "foo".to_string() };
+        let s = Scheme {
+            token_type: TokenType::Bearer,
+            access_token: "foo".to_string(),
+        };
         let mut headers = hyper::header::Headers::new();
         headers.set(hyper::header::Authorization(s));
-        assert_eq!(headers.to_string(), "Authorization: Bearer foo\r\n".to_string());
+        assert_eq!(headers.to_string(),
+                   "Authorization: Bearer foo\r\n".to_string());
     }
 
     #[test]
     fn parse_schema() {
-        let auth: hyper::header::Authorization<Scheme> = hyper::header::Header::parse_header(&[b"Bearer foo".to_vec()]).unwrap();
+        let auth: hyper::header::Authorization<Scheme> =
+            hyper::header::Header::parse_header(&[b"Bearer foo".to_vec()]).unwrap();
         assert_eq!(auth.0.token_type, TokenType::Bearer);
         assert_eq!(auth.0.access_token, "foo".to_string());
     }

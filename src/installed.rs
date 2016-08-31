@@ -20,7 +20,7 @@ use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
 use common::{ApplicationSecret, Token};
-use helper::AuthenticatorDelegate;
+use authenticator_delegate::AuthenticatorDelegate;
 
 const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
 
@@ -76,7 +76,8 @@ pub enum InstalledFlowReturnMethod {
     HTTPRedirect(u32),
 }
 
-impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
+impl<C> InstalledFlow<C>
+    where C: BorrowMut<hyper::Client>
 {
     /// Starts a new Installed App auth flow.
     /// If HTTPRedirect is chosen as method and the server can't be started, the flow falls
@@ -99,9 +100,8 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
                     Result::Err(_) => default,
                     Result::Ok(server) => {
                         let (tx, rx) = channel();
-                        let listening = server.handle(InstalledFlowHandler {
-                            auth_code_snd: Mutex::new(tx),
-                        });
+                        let listening =
+                            server.handle(InstalledFlowHandler { auth_code_snd: Mutex::new(tx) });
 
                         match listening {
                             Result::Err(_) => default,
@@ -146,7 +146,7 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
                 expires_in: tokens.expires_in,
                 expires_in_timestamp: None,
             };
-            
+
             token.set_expiry_absolute();
             Result::Ok(token)
         } else {
@@ -154,7 +154,7 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
                                      format!("Token API error: {} {}",
                                              tokens.error.unwrap_or("<unknown err>".to_string()),
                                              tokens.error_description
-                                                   .unwrap_or("".to_string()))
+                                                 .unwrap_or("".to_string()))
                                          .as_str());
             Result::Err(Box::new(err))
         }
@@ -230,13 +230,12 @@ impl<C> InstalledFlow<C> where C: BorrowMut<hyper::Client>
                                                    ("grant_type".to_string(),
                                                     "authorization_code".to_string())]);
 
-        let result: Result<client::Response, hyper::Error> =
-            self.client
-                .borrow_mut()
-                .post(&appsecret.token_uri)
-                .body(&body)
-                .header(header::ContentType("application/x-www-form-urlencoded".parse().unwrap()))
-                .send();
+        let result: Result<client::Response, hyper::Error> = self.client
+            .borrow_mut()
+            .post(&appsecret.token_uri)
+            .body(&body)
+            .header(header::ContentType("application/x-www-form-urlencoded".parse().unwrap()))
+            .send();
 
         let mut resp = String::new();
 
@@ -292,9 +291,10 @@ impl server::Handler for InstalledFlowHandler {
                 } else {
                     self.handle_url(url.unwrap());
                     *rp.status_mut() = status::StatusCode::Ok;
-                    let _ = rp.send("<html><head><title>Success</title></head><body>You may now \
-                                     close this window.</body></html>"
-                                        .as_ref());
+                    let _ =
+                        rp.send("<html><head><title>Success</title></head><body>You may now \
+                                 close this window.</body></html>"
+                            .as_ref());
                 }
             }
             _ => {
