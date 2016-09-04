@@ -370,6 +370,7 @@ mod tests {
     use super::super::device::tests::MockGoogleAuth;
     use super::super::types::tests::SECRET;
     use super::super::types::ConsoleApplicationSecret;
+    use authenticator_delegate::DefaultAuthenticatorDelegate;
     use storage::MemoryStorage;
     use std::default::Default;
     use hyper;
