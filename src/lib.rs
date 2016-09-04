@@ -13,7 +13,18 @@
 //! as means to adhere to the protocol, and remain resilient to all kinds of errors
 //! that can occour on the way.
 //!
-//! The returned `Token` should be stored permanently to authorize future API requests.
+//! # Installed Flow Usage
+//! The `InstalledFlow` involves showing a URL to the user (or opening it in a browser)
+//! and then either prompting the user to enter a displayed code, or make the authorizing
+//! website redirect to a web server spun up by this library.
+//! In order to use the interactive method, use the `InstalledInteractive` `FlowType`;
+//! for the redirect method, use `InstalledRedirect`, with the port number to let the
+//! server listen on.
+//! You can implement your own `AuthenticatorDelegate` in order to customize the flow;
+//! the `InstalledFlow` uses the `present_user_url` method.
+//!
+//! The returned `Token` is stored permanently to authorize future API requests in the
+//! same scopes.
 //!
 //! ```test_harness,no_run
 //! #![cfg_attr(feature = "nightly", feature(custom_derive, custom_attribute, plugin))]
