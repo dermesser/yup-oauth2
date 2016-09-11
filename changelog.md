@@ -1,3 +1,29 @@
+<a name="v0.6.3"></a>
+### v0.6.3 (2016-09-11)
+
+
+#### Bug Fixes
+
+* **dependencies:**  use latest version of serde_codegen ([7a907eb3](https://github.com/Byron/yup-oauth2/commit/7a907eb31835268d131c845c85f6f18382c238fa))
+* **helper:**  Parse app secrets into right type ([a4532f27](https://github.com/Byron/yup-oauth2/commit/a4532f27b4a6ddd3e59eb2ffa0f610f9d2d7ad55))
+* **test:**  Add missing import to authenticator tests ([cb667379](https://github.com/Byron/yup-oauth2/commit/cb6673798822a38d4cccf9c8939458afd53c43c2))
+* **travis:**
+  *  actually it should already work this way ([9283db02](https://github.com/Byron/yup-oauth2/commit/9283db022d7121e5607fbdeb0ea60b559023e92c))
+  *  see all environment variables ([d1189d98](https://github.com/Byron/yup-oauth2/commit/d1189d98da80949fed6bafe73cdaf6bd0c33f4e1))
+  *  use actual feature matrix ([30fc78cb](https://github.com/Byron/yup-oauth2/commit/30fc78cbf88c9b5453781328771ddf9fa050114e))
+  *  try again without env: matrix: ([361856ba](https://github.com/Byron/yup-oauth2/commit/361856ba5a9918a50baebf9328ac5b37833dba1b))
+  *  env: matrix is required it seems ([f404fcd7](https://github.com/Byron/yup-oauth2/commit/f404fcd7fad31fd5236b201384f4300db9cdb346))
+  *  try without explicit inclusion ([3fb8d0fe](https://github.com/Byron/yup-oauth2/commit/3fb8d0fec6b5937c66c49c469fd37dc525a21790))
+  *  try without env: matrix ([136b5752](https://github.com/Byron/yup-oauth2/commit/136b57524f1a40c5e451476e839e50480913b1ae))
+  *  another attempt to get env-config right ([17c344c9](https://github.com/Byron/yup-oauth2/commit/17c344c997e53532f65030e32fa8e182bab223c7))
+  *  remove matrix code ([0fc5d693](https://github.com/Byron/yup-oauth2/commit/0fc5d6939ccf477239c1e26f5693d51d260880fd))
+
+#### Features
+
+* **helpers:**  Add helpers for reading/parsing JSON ([c4231e94](https://github.com/Byron/yup-oauth2/commit/c4231e94990cf74f021f237c12e16364e4ec36a2))
+
+
+
 <a name="v0.6.1"></a>
 ### v0.6.1 (2016-05-20)
 
