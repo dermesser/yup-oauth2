@@ -1,10 +1,10 @@
 [package]
 
 name = "yup-oauth2"
-version = "0.6.2"
+version = "0.6.3"
 authors = ["Sebastian Thiel <byronimo@gmail.com>", "Lewin Bormann <lbo@spheniscida.de>"]
 repository = "https://github.com/Byron/yup-oauth2"
-description = "A partial oauth2 implementation, providing the 'device' authorization flow"
+description = "An oauth2 implementation, providing the 'device' and 'installed' authorization flow"
 documentation = "http://byron.github.io/yup-oauth2"
 keywords = ["google", "oauth", "v2"]
 license = "MIT OR Apache-2.0"
