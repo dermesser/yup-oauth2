@@ -2,7 +2,7 @@
 
 name = "yup-oauth2"
 version = "0.6.2"
-authors = ["Sebastian Thiel <byronimo@gmail.com>"]
+authors = ["Sebastian Thiel <byronimo@gmail.com>", "Lewin Bormann <lbo@spheniscida.de>"]
 repository = "https://github.com/Byron/yup-oauth2"
 description = "A partial oauth2 implementation, providing the 'device' authorization flow"
 documentation = "http://byron.github.io/yup-oauth2"
