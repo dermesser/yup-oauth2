@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fs;
+use std::hash::{SipHasher, Hash, Hasher};
 use std::io;
 use std::io::{Read, Write};
 
@@ -31,6 +32,21 @@ pub trait TokenStorage {
            -> Result<(), Self::Error>;
     /// A `None` result indicates that there is no token for the given scope_hash.
     fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, Self::Error>;
+}
+
+/// Calculate a hash value describing the scopes, and return a sorted Vec of the scopes.
+pub fn hash_scopes<'a, I, T>(scopes: I) -> (u64, Vec<&'a str>)
+    where T: AsRef<str> + Ord + 'a,
+          I: IntoIterator<Item = &'a T>
+{
+    let mut sv: Vec<&str> = scopes.into_iter()
+        .map(|s| s.as_ref())
+        .collect::<Vec<&str>>();
+    sv.sort();
+    let mut sh = SipHasher::new();
+    &sv.hash(&mut sh);
+    let sv = sv;
+    (sh.finish(), sv)
 }
 
 /// A storage that remembers nothing.
