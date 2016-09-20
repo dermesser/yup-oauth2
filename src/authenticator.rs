@@ -4,11 +4,10 @@ use std::hash::{SipHasher, Hash, Hasher};
 use std::thread::sleep;
 use std::cmp::min;
 use std::error::Error;
-use std::fmt;
 use std::convert::From;
 
 use authenticator_delegate::{AuthenticatorDelegate, PollError, PollInformation};
-use types::{RequestError, Token, FlowType, ApplicationSecret};
+use types::{RequestError, StringError, Token, FlowType, ApplicationSecret};
 use device::DeviceFlow;
 use installed::{InstalledFlow, InstalledFlowReturnMethod};
 use refresh::{RefreshResult, RefreshFlow};
@@ -39,47 +38,6 @@ pub struct Authenticator<D, S, C> {
     storage: S,
     client: C,
     secret: ApplicationSecret,
-}
-
-#[derive(Debug)]
-struct StringError {
-    error: String,
-}
-
-impl fmt::Display for StringError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        self.description().fmt(f)
-    }
-}
-
-impl StringError {
-    fn new(error: String, desc: Option<&String>) -> StringError {
-        let mut error = error;
-        if let Some(d) = desc {
-            error.push_str(": ");
-            error.push_str(&*d);
-        }
-
-        StringError { error: error }
-    }
-}
-
-impl<'a> From<&'a Error> for StringError {
-    fn from(err: &'a Error) -> StringError {
-        StringError::new(err.description().to_string(), None)
-    }
-}
-
-impl From<String> for StringError {
-    fn from(value: String) -> StringError {
-        StringError::new(value, None)
-    }
-}
-
-impl Error for StringError {
-    fn description(&self) -> &str {
-        &self.error
-    }
 }
 
 /// A provider for authorization tokens, yielding tokens valid for a given scope.

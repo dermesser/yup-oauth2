@@ -1,4 +1,5 @@
 use chrono::{DateTime, UTC, TimeZone};
+use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 use hyper;
@@ -56,6 +57,47 @@ impl fmt::Display for RequestError {
                 "\n".fmt(f)
             }
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct StringError {
+    error: String,
+}
+
+impl fmt::Display for StringError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        self.description().fmt(f)
+    }
+}
+
+impl StringError {
+    pub fn new(error: String, desc: Option<&String>) -> StringError {
+        let mut error = error;
+        if let Some(d) = desc {
+            error.push_str(": ");
+            error.push_str(&*d);
+        }
+
+        StringError { error: error }
+    }
+}
+
+impl<'a> From<&'a Error> for StringError {
+    fn from(err: &'a Error) -> StringError {
+        StringError::new(err.description().to_string(), None)
+    }
+}
+
+impl From<String> for StringError {
+    fn from(value: String) -> StringError {
+        StringError::new(value, None)
+    }
+}
+
+impl Error for StringError {
+    fn description(&self) -> &str {
+        &self.error
     }
 }
 
