@@ -1,0 +1,12 @@
+{
+  "type": "service_account",
+  "project_id": "sanguine-rhythm-105020",
+  "private_key_id": "69411a0c0eeae2a42e025be2d337a3e5d2f816d4",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDWNgiReVu5vJOx\ne3OzaONRGqm+IKFMDwROAj97Rp65KY/t34ARR41bfC7u36LH+WJL7DcMm6EWhFWR\n6B49jVtloJ9Qa5ivVi2sh5Wv1V+2PD5DqGTq2RwlsvA1Xm/guS7tXct6TOUxnhDT\n0/VfwCbW1fn5lL0xNE5NS25vPUNwxteCJGZDanwZeLEaPXL/WCL7t7Kg2T3Gwr3O\n1z3TbirD9SDcPXvXn9w4hKNtmBZ5nGLUAQiKtwiumSlAlD65KcaHmUHRRZCV6625\naKfTBlxksZEh3Ac1NzreRz9NHqkaDCp3+Y/09K7EXSf2LkQI0XtvEHyeWFDVIzbc\niIymrFQ1AgMBAAECggEALMXKcK2O8Hlr3VLSUhOAP7l09RpY3E7fNXbe0eNm1YjM\nXomyeOodr5t7K85udaG4W+oZb3cv6kbqo76CY5ciHVG/Os3icfNvRHpqXQAaKzrY\nQMf3n+aVLYQDFQSSGcRa/J34I63i0cYZ+kx5IvREqe67euEN0jT+kMVNZc7GQ9HJ\nuOSPnDIRQJotiYWB1ooOpJ3aXFzumd+mnMQ54FJILzOUviPo/5F50ShZfAHtagyq\nYMkPwXCx4ygEoZ/8wf5JXWrqfvXxtLke5YAX0rGtnhwOAYvNM0CX08U4qv8cy5xX\nyBhhYnnwaZ5y95FJ5adz9sjCFrTRSItumH5G7ETVAQKBgQD31iAoj0NELhQw/iuO\npf6ctEMl4SScgFWKdKb5proKIKojlDAbjhyYQXwh8waQsulftzoAuor7f5mjedNj\nQTNMONRFICFVgl6BdEW25iofrVhvpK8WhhP3AxmIRJdwnDE1iEstn9MRICF0nmum\nDuiJYTQY0ZIabjspKGfeF76uIQKBgQDdRFzkPqTHz6tA+/r0O9LBeQvWJ5drgslw\nkbdWXgoMpoMFBhsSjR7ErpeTYEP5f35DovlUsJRZECnM/NPM92a8LDoq98b1/WiM\nxInkWgM3YAo5aw0LBAbDWEMfzIqDiFZQinWUZxXTP9ug/XNseHIXbWwXQqWLaSxS\nQXlQuuOblQKBgQDQz18+7R2epzgp4yxtvpvcCeD9XEkNdu8bfZdlhjz+5XCUE3nI\n7Z5YBeyBahIg/iy0kVrUXFdW+LZIzw70dG21DbiDGUQcmH/pkD5gkGHzWIjHX7iJ\nQKQ3nSv47NmvblnjoZa9tQgPSMQHTqaiPbNcdEKBmqj/jdpYnguNSvJEIQKBgEWZ\nxnqJdf3gRidX2/XNh5sSP3Xq2EeaSVEelQQW6qRWEGqZJBTuzRnjLYzPQDKQNyCB\neFp6fP+TBQMVGG6l9+wDIXz4md4xCx0UiaeJ5O8bR7wN/3lSl+oEroCnL372eOg2\n1YuL7aKYuLZoY1Fghcr2wYSDk11KBQYO0GFjmEsNAoGANRR8MroJinKzqA1lvtYa\nLj6Y7mhKw/qeAsCqC0E+a+DUNZCslKtd9dJ+PZDlwFjsZ8hm1JFNWwLOTGlVZkVd\nMOxNqMtZKHC9hlS1RDIZREK46to4R/ac/h515/j1wgwNx0uUnzz3inD2BWlFKkWs\nXri9sBiXiKG7bf7p1WPu2ek=\n-----END PRIVATE KEY-----\n",
+  "client_email": "oauth2-public-test@sanguine-rhythm-105020.iam.gserviceaccount.com",
+  "client_id": "110673384954054291652",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://accounts.google.com/o/oauth2/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/oauth2-public-test%40sanguine-rhythm-105020.iam.gserviceaccount.com"
+}

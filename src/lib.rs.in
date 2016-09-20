@@ -1,14 +1,14 @@
 extern crate serde;
 extern crate serde_json;
+extern crate rustc_serialize;
 
 extern crate chrono;
-
+extern crate openssl;
 extern crate hyper;
 #[cfg(test)]
 extern crate log;
 #[cfg(test)]
 extern crate yup_hyper_mock;
-extern crate mime;
 extern crate url;
 extern crate itertools;
 
@@ -18,6 +18,7 @@ mod device;
 mod helper;
 mod installed;
 mod refresh;
+mod service_account;
 mod storage;
 mod types;
 
