@@ -8,9 +8,11 @@
 // Refer to the project root for licensing information.
 
 use serde_json;
-use std::io;
+
+use std::io::{self, Read};
 use std::fs;
 
+use service_account::ServiceAccountKey;
 use types::{ConsoleApplicationSecret, ApplicationSecret};
 
 pub fn read_application_secret(file: &String) -> io::Result<ApplicationSecret> {
@@ -40,5 +42,16 @@ pub fn parse_application_secret(secret: &String) -> io::Result<ApplicationSecret
                                    "Unknown application secret format"))
             }
         }
+    }
+}
+
+pub fn service_account_key_from_file(path: &String) -> io::Result<ServiceAccountKey> {
+    let mut key = String::new();
+    let mut file = try!(fs::OpenOptions::new().read(true).open(path));
+    try!(file.read_to_string(&mut key));
+
+    match serde_json::from_str(&key) {
+        Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, format!("{}", e))),
+        Ok(decoded) => Ok(decoded),
     }
 }
