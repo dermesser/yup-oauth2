@@ -1,0 +1,10 @@
+[package]
+name = "service_account"
+version = "0.1.0"
+authors = ["Lewin Bormann <lewin@lewin-bormann.info>"]
+
+[dependencies]
+base64 = "0.2"
+yup-oauth2 = "0.6.4"
+google-pubsub1 = { version = "0.1", path = "../../../google-apis-rs/gen/pubsub1" }
+hyper = "0.9"
