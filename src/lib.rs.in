@@ -31,3 +31,4 @@ pub use authenticator::{Authenticator, Retry, GetToken};
 pub use authenticator_delegate::{AuthenticatorDelegate, DefaultAuthenticatorDelegate, PollError,
                                  PollInformation};
 pub use helper::*;
+pub use service_account::*;
