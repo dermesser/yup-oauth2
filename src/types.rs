@@ -200,7 +200,7 @@ impl Token {
     /// # Panics
     /// * if our access_token is unset
     pub fn expired(&self) -> bool {
-        if self.access_token.len() == 0 || self.refresh_token.len() == 0 {
+        if self.access_token.len() == 0 {
             panic!("called expired() on unset token");
         }
         self.expiry_date() <= UTC::now()
