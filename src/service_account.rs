@@ -227,7 +227,6 @@ impl<'a, C> ServiceAccountAccess<C>
 
         try!(result.read_to_string(&mut response));
 
-        println!("{}", response);
         let token: Result<TokenResponse, serde_json::error::Error> =
             serde_json::from_str(&response);
 
