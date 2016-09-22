@@ -8,7 +8,6 @@
 
 extern crate hyper;
 extern crate yup_oauth2;
-extern crate serde_json;
 extern crate google_drive3;
 
 use std::path::Path;

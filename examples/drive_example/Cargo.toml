@@ -4,8 +4,6 @@ version = "0.1.0"
 authors = ["Lewin Bormann <lbo@spheniscida.de>"]
 
 [dependencies]
-yup-oauth2 = "0.6.4"
+yup-oauth2 = "0.6"
 google-drive3 = "0.1"
-url = "= 0.5"
 hyper = "0.9"
-serde_json = "0.8"
