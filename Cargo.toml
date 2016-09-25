@@ -12,14 +12,15 @@ build = "src/build.rs"
 
 [dependencies]
 chrono = ">= 0.2"
-log = ">= 0.3"
-mime = ">= 0.1"
-url = "= 0.5"
 hyper = "^ 0.9.0"
 itertools = ">= 0.4"
+log = ">= 0.3"
+openssl = "0.7"
+rustc-serialize = "0.3"
 serde = "0.8"
 serde_json = "0.8"
 serde_macros = { version = "0.8", optional = true }
+url = "= 0.5"
 
 [features]
 default = ["with-serde-codegen"]
