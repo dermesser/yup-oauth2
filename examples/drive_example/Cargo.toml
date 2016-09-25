@@ -1,0 +1,9 @@
+[package]
+name = "drive_example"
+version = "0.1.0"
+authors = ["Lewin Bormann <lbo@spheniscida.de>"]
+
+[dependencies]
+yup-oauth2 = "0.6"
+google-drive3 = "0.1"
+hyper = "0.9"
