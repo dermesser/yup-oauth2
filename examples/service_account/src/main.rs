@@ -79,7 +79,6 @@ fn ack_message(methods: &PubsubMethods, id: String) {
 
     match result {
         Err(e) => {
-            // There's a JSON decode error happening, even on successful returns. :/
             println!("Ack error: {:?}", e);
         }
         Ok(_) => (),
@@ -129,11 +128,9 @@ fn publish_stuff(methods: &PubsubMethods, message: &str) {
     check_or_create_topic(&methods);
 
     let message = pubsub::PubsubMessage {
-        attributes: None,
         // Base64 encoded!
         data: Some(base64::encode(message.as_bytes())),
-        publish_time: None,
-        message_id: None,
+        ..Default::default()
     };
     let request = pubsub::PublishRequest { messages: Some(vec![message]) };
 
