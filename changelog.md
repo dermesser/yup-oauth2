@@ -1,3 +1,25 @@
+<a name="v0.9.0"></a>
+### v0.9.0 (2016-09-25)
+
+#### Bug Fixes
+
+* **README:**  fix formatting ([c6bef14b](https://github.com/Byron/yup-oauth2/commit/c6bef14b870a1a795cccc1651936da18f1d40ef5))
+* **deps:**  Remove unnecessary dependencies in drive_example ([1ceaf604](https://github.com/Byron/yup-oauth2/commit/1ceaf6044e2e85f6fc94b891d0ad9b01e2f769f2))
+* **service_account:**  Remove debug println from code ([943f57e4](https://github.com/Byron/yup-oauth2/commit/943f57e42f44c2eac9fe78b8505c6fbd325da53b))
+* **travis:**  no need to build separately ([5787f61e](https://github.com/Byron/yup-oauth2/commit/5787f61ea9087b99e6dc13db1c5d499272f7b399))
+* **types::Token:**  Don't panic if refresh_token is empty ([ed0a3c49](https://github.com/Byron/yup-oauth2/commit/ed0a3c4990bdcf2d47d99cf9255da904c44c8776))
+
+#### Features
+
+* **service_account:**  Implement token source for service accounts ([1c1880cf](https://github.com/Byron/yup-oauth2/commit/1c1880cfe7d01b7a0839c4919cb416a1555640a0))
+* **examples:**  Add example for installed-interactive flow. ([e1eeeefe](https://github.com/Byron/yup-oauth2/commit/e1eeeefeffa1f0f5e405d18188ff46f5654e1dba))
+* **helpers:**
+  *  Add service account key helper ([d151e754](https://github.com/Byron/yup-oauth2/commit/d151e754546488ff9614c5f7774c7cddee5267aa))
+  *  Implement hash_scope() helper function ([0506ffaa](https://github.com/Byron/yup-oauth2/commit/0506ffaa44b7f51899f7591374c25bc3637e3524))
+* **refactor:**  Move StringError from authenticator to types module ([2bdb4737](https://github.com/Byron/yup-oauth2/commit/2bdb47375a8e9effed6ba8f0a3c952eddbab9e6b))
+
+
+
 <a name="v0.6.3"></a>
 ### v0.6.3 (2016-09-11)
 
