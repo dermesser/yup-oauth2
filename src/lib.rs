@@ -13,6 +13,12 @@
 //! as means to adhere to the protocol, and remain resilient to all kinds of errors
 //! that can occour on the way.
 //!
+//! # Service account "flow"
+//! When using service account credentials, no user interaction is required. The access token
+//! can be obtained automatically using the private key of the client (which you can download
+//! from the API provider). See `examples/service_account/` for an example on how to use service
+//! account credentials.
+//!
 //! # Installed Flow Usage
 //! The `InstalledFlow` involves showing a URL to the user (or opening it in a browser)
 //! and then either prompting the user to enter a displayed code, or make the authorizing
