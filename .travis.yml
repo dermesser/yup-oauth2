@@ -14,7 +14,6 @@ matrix:
 before_script:
   - pip install 'travis-cargo<0.2' --user  && export PATH=$HOME/Library/Python/2.7/bin:$HOME/.local/bin:$PATH
 script:
-  - travis-cargo build -- --features $FEATURE --no-default-features
   - travis-cargo test -- --features $FEATURE --no-default-features
   - travis-cargo doc -- --features $FEATURE --no-default-features
 after_success:
