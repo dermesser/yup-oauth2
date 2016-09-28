@@ -24,10 +24,10 @@ use storage::{hash_scopes, MemoryStorage, TokenStorage};
 use hyper::header;
 use url::form_urlencoded;
 
+use base64;
 use chrono;
 use hyper;
 use openssl;
-use rustc_serialize;
 use serde_json;
 
 const GRANT_TYPE: &'static str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
@@ -36,9 +36,7 @@ const GOOGLE_RS256_HEAD: &'static str = "{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
 
 // Encodes s as Base64
 fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
-    use rustc_serialize::base64::ToBase64;
-
-    s.as_ref().to_base64(rustc_serialize::base64::URL_SAFE)
+    base64::encode(s.as_ref())
 }
 
 // Calculates the SHA256 hash.
