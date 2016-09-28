@@ -31,7 +31,6 @@ use openssl;
 use serde_json;
 
 const GRANT_TYPE: &'static str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
-const TOKEN_REQUEST_URL: &'static str = "https://www.googleapis.com/oauth2/v4/token";
 const GOOGLE_RS256_HEAD: &'static str = "{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
 
 // Encodes s as Base64
@@ -149,7 +148,7 @@ fn init_claims_from_key<'a, I, T>(key: &ServiceAccountKey, scopes: I) -> Claims
 
     Claims {
         iss: key.client_email.clone().unwrap(),
-        aud: TOKEN_REQUEST_URL.to_string(),
+        aud: key.token_uri.clone().unwrap(),
         exp: expiry,
         iat: iat,
         sub: None,
@@ -218,7 +217,7 @@ impl<'a, C> ServiceAccountAccess<C>
         let mut response = String::new();
         let mut result = try!(self.client
             .borrow_mut()
-            .post(TOKEN_REQUEST_URL)
+            .post(self.key.token_uri.as_ref().unwrap())
             .body(&body)
             .header(header::ContentType("application/x-www-form-urlencoded".parse().unwrap()))
             .send());
@@ -298,7 +297,7 @@ mod tests {
                    "oauth2-public-test@sanguine-rhythm-105020.iam.gserviceaccount.com".to_string());
         assert_eq!(claims.scope, "scope1 scope2 scope3".to_string());
         assert_eq!(claims.aud,
-                   "https://www.googleapis.com/oauth2/v4/token".to_string());
+                   "https://accounts.google.com/o/oauth2/token".to_string());
         assert!(claims.exp > 1000000000);
         assert!(claims.iat < claims.exp);
         assert_eq!(claims.exp - claims.iat, 3595);
