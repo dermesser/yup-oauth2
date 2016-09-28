@@ -11,12 +11,12 @@ license = "MIT OR Apache-2.0"
 build = "src/build.rs"
 
 [dependencies]
+base64 = "0.2"
 chrono = ">= 0.2"
 hyper = "^ 0.9.0"
 itertools = ">= 0.4"
 log = ">= 0.3"
 openssl = "0.7"
-rustc-serialize = "0.3"
 serde = "0.8"
 serde_json = "0.8"
 serde_macros = { version = "0.8", optional = true }
