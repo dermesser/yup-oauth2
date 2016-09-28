@@ -277,8 +277,7 @@ mod tests {
     // This is a valid but deactivated key.
     const TEST_PRIVATE_KEY_PATH: &'static str = "examples/Sanguine-69411a0c0eea.json";
 
-    // This only works if you have the right key file; if needed, download your own and test it
-    // with that.
+    // Uncomment this test to verify that we can successfully obtain tokens.
     // #[test]
     #[allow(dead_code)]
     fn test_service_account_e2e() {
