@@ -36,7 +36,7 @@ const GOOGLE_RS256_HEAD: &'static str = "{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
 
 // Encodes s as Base64
 fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
-    base64::encode(s.as_ref())
+    base64::encode_mode(s.as_ref(), base64::Base64Mode::UrlSafe)
 }
 
 // Calculates the SHA256 hash.
