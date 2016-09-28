@@ -5,6 +5,10 @@ authors = ["Lewin Bormann <lewin@lewin-bormann.info>"]
 
 [dependencies]
 base64 = "0.2"
-yup-oauth2 = "0.6.4"
-google-pubsub1 = { version = "0.1", path = "../../../google-apis-rs/gen/pubsub1" }
+# We can't just use the local version (../../), as google-pubsub1 will have a different
+# version of yup-oauth2, leading to type errors. For testing changes locally, download
+# github.com/Byron/google-apis-rs, and use the local yup-oauth2 crate in the google-pubsub1
+# crate as well as here.
+yup-oauth2 = "0.6"
+google-pubsub1 = "0.1"
 hyper = "0.9"
