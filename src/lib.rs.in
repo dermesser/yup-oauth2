@@ -22,7 +22,7 @@ mod service_account;
 mod storage;
 mod types;
 
-pub use device::DeviceFlow;
+pub use device::{GOOGLE_DEVICE_CODE_URL, DeviceFlow};
 pub use refresh::{RefreshFlow, RefreshResult};
 pub use types::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret, Scheme, TokenType};
 pub use installed::{InstalledFlow, InstalledFlowReturnMethod};

@@ -8,7 +8,7 @@ use std::convert::From;
 
 use authenticator_delegate::{AuthenticatorDelegate, PollError, PollInformation};
 use types::{RequestError, StringError, Token, FlowType, ApplicationSecret};
-use device::DeviceFlow;
+use device::{GOOGLE_DEVICE_CODE_URL, DeviceFlow};
 use installed::{InstalledFlow, InstalledFlowReturnMethod};
 use refresh::{RefreshResult, RefreshFlow};
 use storage::TokenStorage;
@@ -76,7 +76,7 @@ impl<D, S, C> Authenticator<D, S, C>
                flow_type: Option<FlowType>)
                -> Authenticator<D, S, C> {
         Authenticator {
-            flow_type: flow_type.unwrap_or(FlowType::Device),
+            flow_type: flow_type.unwrap_or(FlowType::Device(GOOGLE_DEVICE_CODE_URL.to_string())),
             delegate: delegate,
             storage: storage,
             client: client,
@@ -102,15 +102,13 @@ impl<D, S, C> Authenticator<D, S, C>
         flow.obtain_token(&mut self.delegate, &self.secret, scopes.iter())
     }
 
-    fn retrieve_device_token(&mut self, scopes: &Vec<&str>) -> Result<Token, Box<Error>> {
-        let mut flow = DeviceFlow::new(self.client.borrow_mut());
+    fn retrieve_device_token(&mut self, scopes: &Vec<&str>, code_url: String) -> Result<Token, Box<Error>> {
+        let mut flow = DeviceFlow::new(self.client.borrow_mut(), &self.secret, &code_url);
 
         // PHASE 1: REQUEST CODE
         let pi: PollInformation;
         loop {
-            let res = flow.request_code(&self.secret.client_id,
-                                        &self.secret.client_secret,
-                                        scopes.iter());
+            let res = flow.request_code(scopes.iter());
 
             pi = match res {
                 Err(res_err) => {
@@ -214,9 +212,8 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                     if t.expired() {
                         let mut rf = RefreshFlow::new(self.client.borrow_mut());
                         loop {
-                            match *rf.refresh_token(self.flow_type,
-                                                    &self.secret.client_id,
-                                                    &self.secret.client_secret,
+                            match *rf.refresh_token(self.flow_type.clone(),
+                                                    &self.secret,
                                                     &t.refresh_token) {
                                 RefreshResult::Error(ref err) => {
                                     match self.delegate.connection_error(err) {
@@ -263,8 +260,8 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                 Ok(None) => {
                     // Nothing was in storage - get a new token
                     // get new token. The respective sub-routine will do all the logic.
-                    match match self.flow_type {
-                        FlowType::Device => self.retrieve_device_token(&scopes),
+                    match match self.flow_type.clone() {
+                        FlowType::Device(url) => self.retrieve_device_token(&scopes, url),
                         FlowType::InstalledInteractive => self.do_installed_flow(&scopes),
                         FlowType::InstalledRedirect(_) => self.do_installed_flow(&scopes),
                     } {

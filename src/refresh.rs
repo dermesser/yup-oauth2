@@ -1,5 +1,4 @@
-use types::{FlowType, JsonError};
-use device::GOOGLE_TOKEN_URL;
+use types::{ApplicationSecret, FlowType, JsonError};
 
 use chrono::UTC;
 use hyper;
@@ -57,8 +56,7 @@ impl<C> RefreshFlow<C>
     /// Please see the crate landing page for an example.
     pub fn refresh_token(&mut self,
                          flow_type: FlowType,
-                         client_id: &str,
-                         client_secret: &str,
+                         client_secret: &ApplicationSecret,
                          refresh_token: &str)
                          -> &RefreshResult {
         let _ = flow_type;
@@ -66,14 +64,14 @@ impl<C> RefreshFlow<C>
             return &self.result;
         }
 
-        let req = form_urlencoded::serialize(&[("client_id", client_id),
-                                               ("client_secret", client_secret),
+        let req = form_urlencoded::serialize(&[("client_id", client_secret.client_id.as_ref()),
+                                               ("client_secret", client_secret.client_secret.as_ref()),
                                                ("refresh_token", refresh_token),
                                                ("grant_type", "refresh_token")]);
 
-        let json_str = match self.client
+        let json_str: String = match self.client
             .borrow_mut()
-            .post(GOOGLE_TOKEN_URL)
+            .post(&client_secret.token_uri)
             .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
             .body(&*req)
             .send() {
@@ -125,6 +123,8 @@ mod tests {
     use super::*;
     use super::super::FlowType;
     use yup_hyper_mock::{MockStream, SequentialConnector};
+        use helper::parse_application_secret;
+        use device::GOOGLE_DEVICE_CODE_URL;
 
     struct MockGoogleRefresh(SequentialConnector);
 
@@ -153,13 +153,18 @@ mod tests {
         }
     }
 
+    const TEST_APP_SECRET: &'static str = r#"{"installed":{"client_id":"384278056379-tr5pbot1mil66749n639jo54i4840u77.apps.googleusercontent.com","project_id":"sanguine-rhythm-105020","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://accounts.google.com/o/oauth2/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"QeQUnhzsiO4t--ZGmj9muUAu","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"#;
+
     #[test]
     fn refresh_flow() {
+
+        let appsecret = parse_application_secret(&TEST_APP_SECRET.to_string()).unwrap();
+
         let mut c = hyper::Client::with_connector(<MockGoogleRefresh as Default>::default());
         let mut flow = RefreshFlow::new(&mut c);
 
 
-        match *flow.refresh_token(FlowType::Device, "bogus", "secret", "bogus_refresh_token") {
+        match *flow.refresh_token(FlowType::Device(GOOGLE_DEVICE_CODE_URL.to_string()), &appsecret, "bogus_refresh_token") {
             RefreshResult::Success(ref t) => {
                 assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
                 assert!(!t.expired());
