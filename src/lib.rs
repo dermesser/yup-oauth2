@@ -56,33 +56,14 @@
 //! match res {
 //!     Ok(t) => {
 //!     // now you can use t.access_token to authenticate API calls within your
-//!     // given scopes. It will not be valid forever, which is when you have to
-//!     // refresh it using the `RefreshFlow`
+//!     // given scopes. It will not be valid forever, but Authenticator will automatically
+//!     // refresh the token for you.
 //!     },
 //!     Err(err) => println!("Failed to acquire token: {}", err),
 //! }
 //! # }
 //! ```
 //!
-//! # Refresh Flow Usage
-//! As the `Token` you retrieved previously will only be valid for a certain time, you will have
-//! to use the information from the `Token.refresh_token` field to get a new `access_token`.
-//!
-//! ```test_harness,no_run
-//! extern crate hyper;
-//! extern crate yup_oauth2 as oauth2;
-//! use oauth2::{RefreshFlow, FlowType, RefreshResult};
-//!
-//! # #[test] fn refresh() {
-//! let mut f = RefreshFlow::new(hyper::Client::new());
-//! let new_token = match *f.refresh_token(FlowType::Device,
-//!                                        "my_client_id", "my_secret",
-//!                                        "my_refresh_token") {
-//!                        RefreshResult::Success(ref t) => t,
-//!                        _ => panic!("bad luck ;)")
-//!                };
-//! # }
-//! ```
 #![cfg_attr(feature = "nightly", feature(custom_derive, custom_attribute, plugin))]
 #![cfg_attr(feature = "nightly", plugin(serde_macros))]
 

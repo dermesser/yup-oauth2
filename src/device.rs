@@ -12,10 +12,10 @@ use std::borrow::BorrowMut;
 use std::io::Read;
 use std::i64;
 
-use types::{Token, FlowType, Flow, RequestError, JsonError};
+use types::{ApplicationSecret, Token, FlowType, Flow, RequestError, JsonError};
 use authenticator_delegate::{PollError, PollInformation};
 
-pub const GOOGLE_TOKEN_URL: &'static str = "https://accounts.google.com/o/oauth2/token";
+pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/oauth2/device/code";
 
 /// Encapsulates all possible states of the Device Flow
 enum DeviceFlowState {
@@ -36,34 +36,25 @@ pub struct DeviceFlow<C> {
     device_code: String,
     state: Option<DeviceFlowState>,
     error: Option<PollError>,
-    secret: String,
-    id: String,
+    application_secret: ApplicationSecret,
+    device_code_url: String,
 }
 
 impl<C> Flow for DeviceFlow<C> {
     fn type_id() -> FlowType {
-        FlowType::Device
+        FlowType::Device(String::new())
     }
 }
 impl<C> DeviceFlow<C>
     where C: BorrowMut<hyper::Client>
 {
-    /// # Examples
-    /// ```test_harness
-    /// extern crate hyper;
-    /// extern crate yup_oauth2 as oauth2;
-    /// use oauth2::DeviceFlow;
-    ///
-    /// # #[test] fn new() {
-    /// let mut f = DeviceFlow::new(hyper::Client::new());
-    /// # }
-    /// ```
-    pub fn new(client: C) -> DeviceFlow<C> {
+
+    pub fn new<S: AsRef<str>>(client: C, secret: &ApplicationSecret, device_code_url: S) -> DeviceFlow<C> {
         DeviceFlow {
             client: client,
             device_code: Default::default(),
-            secret: Default::default(),
-            id: Default::default(),
+            application_secret: secret.clone(),
+            device_code_url: device_code_url.as_ref().to_string(),
             state: None,
             error: None,
         }
@@ -85,8 +76,6 @@ impl<C> DeviceFlow<C>
     /// # Examples
     /// See test-cases in source code for a more complete example.
     pub fn request_code<'b, T, I>(&mut self,
-                                  client_id: &str,
-                                  client_secret: &str,
                                   scopes: I)
                                   -> Result<PollInformation, RequestError>
         where T: AsRef<str> + 'b,
@@ -98,19 +87,19 @@ impl<C> DeviceFlow<C>
 
         // note: cloned() shouldn't be needed, see issue
         // https://github.com/servo/rust-url/issues/81
-        let req = form_urlencoded::serialize(&[("client_id", client_id),
+        let req = form_urlencoded::serialize(&[("client_id", &self.application_secret.client_id),
                                                ("scope",
-                                                scopes.into_iter()
+                                                &scopes.into_iter()
                                                    .map(|s| s.as_ref())
                                                    .intersperse(" ")
                                                    .collect::<String>()
-                                                   .as_ref())]);
+                                                   )]);
 
         // note: works around bug in rustlang
         // https://github.com/rust-lang/rust/issues/22252
         let ret = match self.client
             .borrow_mut()
-            .post(FlowType::Device.as_ref())
+            .post(&self.device_code_url)
             .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
             .body(&*req)
             .send() {
@@ -149,8 +138,6 @@ impl<C> DeviceFlow<C>
                 };
                 self.state = Some(DeviceFlowState::Pending(pi.clone()));
 
-                self.secret = client_secret.to_string();
-                self.id = client_id.to_string();
                 Ok(pi)
             }
         };
@@ -195,15 +182,15 @@ impl<C> DeviceFlow<C>
         }
 
         // We should be ready for a new request
-        let req = form_urlencoded::serialize(&[("client_id", &self.id[..]),
-                                               ("client_secret", &self.secret),
+        let req = form_urlencoded::serialize(&[("client_id", &self.application_secret.client_id[..]),
+                                               ("client_secret", &self.application_secret.client_secret),
                                                ("code", &self.device_code),
                                                ("grant_type",
                                                 "http://oauth.net/grant_type/device/1.0")]);
 
-        let json_str = match self.client
+        let json_str: String = match self.client
             .borrow_mut()
-            .post(GOOGLE_TOKEN_URL)
+            .post(&self.application_secret.token_uri)
             .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
             .body(&*req)
             .send() {
@@ -301,13 +288,17 @@ pub mod tests {
         }
     }
 
+    const TEST_APP_SECRET: &'static str = r#"{"installed":{"client_id":"384278056379-tr5pbot1mil66749n639jo54i4840u77.apps.googleusercontent.com","project_id":"sanguine-rhythm-105020","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://accounts.google.com/o/oauth2/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"QeQUnhzsiO4t--ZGmj9muUAu","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"#;
+
     #[test]
     fn working_flow() {
-        let mut flow = DeviceFlow::new(
-                    hyper::Client::with_connector(<MockGoogleAuth as Default>::default()));
+        use helper::parse_application_secret;
 
-        match flow.request_code("bogus_client_id",
-                                "bogus_secret",
+        let appsecret = parse_application_secret(&TEST_APP_SECRET.to_string()).unwrap();
+        let mut flow = DeviceFlow::new(
+                    hyper::Client::with_connector(<MockGoogleAuth as Default>::default()), &appsecret, GOOGLE_DEVICE_CODE_URL);
+
+        match flow.request_code(
                                 &["https://www.googleapis.com/auth/youtube.upload"]) {
             Ok(pi) => assert_eq!(pi.interval, Duration::from_secs(0)),
             _ => unreachable!(),

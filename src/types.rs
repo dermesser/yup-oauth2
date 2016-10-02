@@ -227,11 +227,13 @@ impl Token {
 }
 
 /// All known authentication types, for suitable constants
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum FlowType {
     /// [device authentication](https://developers.google.com/youtube/v3/guides/authentication#devices). Only works
     /// for certain scopes.
-    Device,
+    /// Contains the device token URL; for google, that is
+    /// https://accounts.google.com/o/oauth2/device/code (exported as `GOOGLE_DEVICE_CODE_URL`)
+    Device(String),
     /// [installed app flow](https://developers.google.com/identity/protocols/OAuth2InstalledApp). Required
     /// for Drive, Calendar, Gmail...; Requires user to paste a code from the browser.
     InstalledInteractive,
@@ -240,17 +242,6 @@ pub enum FlowType {
     /// Windows Firewall, but is more comfortable otherwise. The integer describes which port to
     /// bind to (default: 8080)
     InstalledRedirect(u32),
-}
-
-impl AsRef<str> for FlowType {
-    /// Converts itself into a URL string
-    fn as_ref(&self) -> &'static str {
-        match *self {
-            FlowType::Device => "https://accounts.google.com/o/oauth2/device/code",
-            FlowType::InstalledInteractive => "https://accounts.google.com/o/oauth2/v2/auth",
-            FlowType::InstalledRedirect(_) => "https://accounts.google.com/o/oauth2/v2/auth",
-        }
-    }
 }
 
 /// Represents either 'installed' or 'web' applications in a json secrets file.
