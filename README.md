@@ -1,5 +1,5 @@
 [![Build
-Status](https://travis-ci.org/dermesser/yup-oauth2.svg)](https://travis-ci.org/Byron/yup-oauth2)
+Status](https://travis-ci.org/dermesser/yup-oauth2.svg)](https://travis-ci.org/dermesser/yup-oauth2)
 [![Coverage
 Status](https://coveralls.io/repos/github/Byron/yup-oauth2/badge.svg?branch=master)](https://coveralls.io/github/Byron/yup-oauth2?branch=master)
 
