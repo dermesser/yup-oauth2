@@ -1,3 +1,29 @@
+<a name="v1.0.0"></a>
+### v1.0.0 (2016-10-09)
+
+
+#### Bug Fixes
+
+* **deps:**
+  *  Pin dependencies to specific (major) versions ([eb6267a2](https://github.com/Byron/yup-oauth2/commit/eb6267a2dd0721969aac399106aae15304ef1df8))
+  *  Use small base64 crate instead of rustc-serialize ([a4d60e75](https://github.com/Byron/yup-oauth2/commit/a4d60e754bd7f852118691c21f5e84d4e2c59320))
+* **example:**  Use crates.io version of google-pubsub1 for examples ([80b21bdd](https://github.com/Byron/yup-oauth2/commit/80b21bdddbe4e8cab6e1e9989f0433a5d15d1250))
+* **review comments:**  Implement @Byron's suggestions on #34 ([bb6ce78b](https://github.com/Byron/yup-oauth2/commit/bb6ce78b38a527edb8c25bbc7e581325eedd09c4))
+* **service_account:**  Use correct base64 encoding ([b143033a](https://github.com/Byron/yup-oauth2/commit/b143033ad18a2c848917ab30bb7effcd62e483f0))
+* **tests:**  A deactivated key leads to "Signature errors" ([08d79de3](https://github.com/Byron/yup-oauth2/commit/08d79de3132287976277f7934e4ecf176f15b89d))
+
+#### Breaking Changes
+
+* **device:**  Make the Device flow independent of Google ([a8479b8d](https://github.com/Byron/yup-oauth2/commit/a8479b8ddb70c32d01f907b64e0a2f61ec5b3370), breaks [#](https://github.com/Byron/yup-oauth2/issues/))
+
+#### Features
+
+* **device:**  Make the Device flow independent of Google ([a8479b8d](https://github.com/Byron/yup-oauth2/commit/a8479b8ddb70c32d01f907b64e0a2f61ec5b3370), breaks [#](https://github.com/Byron/yup-oauth2/issues/))
+* **examples:**  Add example for service accounts + Cloud Pubsub ([4ba43532](https://github.com/Byron/yup-oauth2/commit/4ba43532aa14b76bf3019c714db265ad825c079a))
+* **service_account:**  Enable service account oauth with other providers ([970d1887](https://github.com/Byron/yup-oauth2/commit/970d188794e7cefc99068d928374e561146546f4))
+
+
+
 <a name="v0.6.3"></a>
 ### v0.6.3 (2016-09-11)
 
