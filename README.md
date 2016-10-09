@@ -12,9 +12,9 @@ sources yielding HTTP Bearer tokens).
 
 * Device flow (user enters code on authorization page)
 * Installed application flow (user visits URL, copies code to application, application uses
-code to obtain token). Used for services like GMail, Drive, ...
+  code to obtain token). Used for services like GMail, Drive, ...
 * Service account flow: Non-interactive for server-to-server communication based on public key
-cryptography. Used for services like Cloud Pubsub, Cloud Storage, ...
+  cryptography. Used for services like Cloud Pubsub, Cloud Storage, ...
 
 ### Usage
 
@@ -45,7 +45,7 @@ work by you, as defined in the Apache-2.0 license, shall be dual licensed as abo
 additional terms or conditions.
 
 
-[API-docs]: http://byron.github.io/yup-oauth2
-[examples]: https://github.com/Byron/yup-oauth2/tree/master/examples
-[auth-usage]: https://raw.githubusercontent.com/Byron/yup-oauth2/master/examples/auth.rs-usage.gif
+[API-docs]: http://dermesser.github.io/yup-oauth2
+[examples]: https://github.com/dermesser/yup-oauth2/tree/master/examples
+[auth-usage]: https://raw.githubusercontent.com/dermesser/yup-oauth2/master/examples/auth.rs-usage.gif
 
