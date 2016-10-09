@@ -22,7 +22,7 @@ after_success:
 env:
   global:
     - TRAVIS_CARGO_NIGHTLY_FEATURE=""
-    - secure: Es8/QExA+XfWaTi2wQqpJL+yc4d3yU9/dfCpVFhyWpu+2XXIvbPbdqFuiZG6QVGaYOmwjlFJ5gCsAqxliG2wzVHkv+KhA1yeVn4ia41Vmx1mJlEU+O7ZNldfgjWemWKTD5kTEFtTBItswKUFH9LsFQ5sztV6/7I9kZZJAxWiXjs=
+    - secure: YLKS9UzfICZMbSzwZA5AjM9kM+S9dTXWD8/ZStSNvmGrQKBP1zm0B66Zn64ExfulmJi6Pf5c7imWQKVCfDbJdRb+jQHqrD+J9gfhglcCU0fbqQmak/n+2EWUy0NayJFZ/+7/Fm+Lda+JUICNhRn1Ck9nhx1bDPdLIQm12JTq86E=
   matrix:
     - FEATURE=with-serde-codegen
     - FEATURE=nightly
