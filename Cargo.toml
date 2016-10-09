@@ -19,12 +19,12 @@ log = "0.3"
 openssl = "0.7"
 serde = "0.8"
 serde_json = "0.8"
-serde_macros = { version = "0.8", optional = true }
+serde_derive = { version = "0.8", optional = true }
 url = "0.5"
 
 [features]
 default = ["with-serde-codegen"]
-nightly = ["serde_macros"]
+nightly = ["serde_derive"]
 with-serde-codegen = ["serde_codegen"]
 
 [build-dependencies]

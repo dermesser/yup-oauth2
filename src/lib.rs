@@ -35,8 +35,11 @@
 //! authorize future API requests to the same scopes.
 //!
 //! ```test_harness,no_run
-//! #![cfg_attr(feature = "nightly", feature(custom_derive, custom_attribute, plugin))]
-//! #![cfg_attr(feature = "nightly", plugin(serde_macros))]
+//! #![cfg_attr(feature = "nightly", feature(proc_macro))]
+//! #[cfg(feature = "nightly")]
+//! #[macro_use]
+//! extern crate serde_derive;
+//! 
 //! extern crate hyper;
 //! extern crate yup_oauth2 as oauth2;
 //! extern crate serde;
@@ -64,8 +67,7 @@
 //! # }
 //! ```
 //!
-#![cfg_attr(feature = "nightly", feature(custom_derive, custom_attribute, plugin))]
-#![cfg_attr(feature = "nightly", plugin(serde_macros))]
+#![cfg_attr(feature = "nightly", feature(proc_macro))]
 
 #[cfg(feature = "nightly")]
 include!("lib.rs.in");
