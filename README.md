@@ -46,7 +46,7 @@ work by you, as defined in the Apache-2.0 license, shall be dual licensed as abo
 additional terms or conditions.
 
 
-[API-docs]: http://dermesser.github.io/yup-oauth2
+[API-docs]: https://docs.rs/yup-oauth2/
 [examples]: https://github.com/dermesser/yup-oauth2/tree/master/examples
 [auth-usage]: https://raw.githubusercontent.com/dermesser/yup-oauth2/master/examples/auth.rs-usage.gif
 
