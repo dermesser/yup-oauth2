@@ -1,7 +1,7 @@
 //! This module provides a token source (`GetToken`) that obtains tokens for service accounts.
 //! Service accounts are usually used by software (i.e., non-human actors) to get access to
-//! resources. Currently, this module only works with RS256 JWTs, and uses the Google request URL
-//! by default (this can be amended by a patch).
+//! resources. Currently, this module only works with RS256 JWTs, which makes it at least suitable for
+//! authentication with Google services.
 //!
 //! Resources:
 //! - [Using OAuth 2.0 for Server to Server
