@@ -13,10 +13,10 @@ build = "src/build.rs"
 [dependencies]
 base64 = "0.2"
 chrono = "0.2"
-hyper = "0.9.0"
+hyper = "0.10.2"
 itertools = "0.4"
 log = "0.3"
-openssl = "0.7"
+openssl = "0.9.6"
 serde = "0.8"
 serde_json = "0.8"
 serde_derive = { version = "0.8", optional = true }
