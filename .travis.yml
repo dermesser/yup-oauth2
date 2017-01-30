@@ -17,6 +17,8 @@ before_script:
   - pip install 'travis-cargo<0.2' --user  && export PATH=$HOME/Library/Python/2.7/bin:$HOME/.local/bin:$PATH
 script:
   - travis-cargo test -- --features $FEATURE --no-default-features
+  - travis-cargo build -- --manifest-path examples/drive_example/Cargo.toml
+  - travis-cargo build -- --manifest-path examples/service_account/Cargo.toml
 after_success:
   - "[[ $TRAVIS_OS_NAME = linux ]] && travis-cargo --only stable coveralls"
 env:

@@ -5,5 +5,5 @@ authors = ["Lewin Bormann <lbo@spheniscida.de>"]
 
 [dependencies]
 yup-oauth2 = "1.0"
-google-drive3 = "0.1"
+google-drive3 = "1.0"
 hyper = "0.9"
