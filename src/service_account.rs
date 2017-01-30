@@ -16,6 +16,7 @@ use std::default::Default;
 use std::error;
 use std::io::{Read, Write};
 use std::result;
+use std::str;
 
 use authenticator::GetToken;
 use types::{StringError, Token};
@@ -36,33 +37,6 @@ const GOOGLE_RS256_HEAD: &'static str = "{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
 // Encodes s as Base64
 fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
     base64::encode_mode(s.as_ref(), base64::Base64Mode::UrlSafe)
-}
-
-// Calculates the SHA256 hash.
-fn hash_sha256(data: &[u8]) -> Vec<u8> {
-    let mut hasher = openssl::crypto::hash::Hasher::new(openssl::crypto::hash::Type::SHA256);
-    let _ = hasher.write(data);
-    hasher.finish()
-}
-
-// Signs the hash with key.
-fn sign_rsa(key: &openssl::crypto::rsa::RSA, hash: &[u8]) -> String {
-    let signature = key.sign(openssl::crypto::hash::Type::SHA256, hash).unwrap();
-    let b64_signature = encode_base64(signature);
-
-    b64_signature
-}
-
-// Reads an RSA key from pem_pkcs8 (the format of the 'private_key' field in the service account
-// key).
-fn decode_rsa_key(pem_pkcs8: &str) -> Result<openssl::crypto::rsa::RSA, Box<error::Error>> {
-    let private_key = pem_pkcs8.to_string().replace("\\n", "\n");
-    let privkey = openssl::crypto::rsa::RSA::private_key_from_pem(&mut private_key.as_bytes());
-
-    match privkey {
-        Err(e) => Err(Box::new(e)),
-        Ok(key) => Ok(key),
-    }
 }
 
 /// JSON schema of secret service account key. You can obtain the key from
@@ -121,12 +95,16 @@ impl JWT {
     fn sign(&self, private_key: &str) -> Result<String, Box<error::Error>> {
         let mut jwt_head = self.encode_claims();
 
-        let key = try!(decode_rsa_key(private_key));
-        let hash = hash_sha256(&jwt_head.as_bytes());
-        let signature = sign_rsa(&key, &hash);
+        let key = openssl::pkey::PKey::hmac(private_key.as_bytes()).unwrap();
+
+        let mut signer =
+            try!(openssl::sign::Signer::new(
+                 openssl::hash::MessageDigest::sha256(), &key));
+        signer.update(&jwt_head.as_bytes()).unwrap();
+        let signature = signer.finish().unwrap();
 
         jwt_head.push_str(".");
-        jwt_head.push_str(&signature);
+        jwt_head.push_str(str::from_utf8(&signature).unwrap());
 
         Ok(jwt_head)
     }
