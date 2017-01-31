@@ -1,20 +1,21 @@
-use std::iter::IntoIterator;
 use std::borrow::BorrowMut;
-use std::hash::{SipHasher, Hash, Hasher};
-use std::thread::sleep;
 use std::cmp::min;
-use std::error::Error;
+use std::collections::hash_map::DefaultHasher;
 use std::convert::From;
+use std::error::Error;
+use std::hash::{Hash, Hasher};
+use std::iter::IntoIterator;
+use std::thread::sleep;
 
 use authenticator_delegate::{AuthenticatorDelegate, PollError, PollInformation};
-use types::{RequestError, StringError, Token, FlowType, ApplicationSecret};
 use device::{GOOGLE_DEVICE_CODE_URL, DeviceFlow};
 use installed::{InstalledFlow, InstalledFlowReturnMethod};
 use refresh::{RefreshResult, RefreshFlow};
-use storage::TokenStorage;
 use std::time::Duration;
-use hyper;
+use storage::TokenStorage;
+use types::{RequestError, StringError, Token, FlowType, ApplicationSecret};
 
+use hyper;
 
 /// A generalized authenticator which will keep tokens valid and store them.
 ///
@@ -198,7 +199,7 @@ impl<D, S, C> GetToken for Authenticator<D, S, C>
                 .map(|s| s.as_ref())
                 .collect::<Vec<&str>>();
             sv.sort();
-            let mut sh = SipHasher::new();
+            let mut sh = DefaultHasher::new();
             &sv.hash(&mut sh);
             let sv = sv;
             (sh.finish(), sv)

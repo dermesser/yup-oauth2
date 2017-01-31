@@ -6,12 +6,13 @@
 extern crate serde_json;
 
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::fmt;
 use std::fs;
-use std::hash::{SipHasher, Hash, Hasher};
-use std::io;
+use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
+use std::io;
 
 use types::Token;
 
@@ -43,7 +44,7 @@ pub fn hash_scopes<'a, I, T>(scopes: I) -> (u64, Vec<&'a str>)
         .map(|s| s.as_ref())
         .collect::<Vec<&str>>();
     sv.sort();
-    let mut sh = SipHasher::new();
+    let mut sh = DefaultHasher::new();
     &sv.hash(&mut sh);
     let sv = sv;
     (sh.finish(), sv)

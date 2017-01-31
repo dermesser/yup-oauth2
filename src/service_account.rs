@@ -14,13 +14,13 @@
 use std::borrow::BorrowMut;
 use std::default::Default;
 use std::error;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::result;
 use std::str;
 
 use authenticator::GetToken;
-use types::{StringError, Token};
 use storage::{hash_scopes, MemoryStorage, TokenStorage};
+use types::{StringError, Token};
 
 use hyper::header;
 use url::form_urlencoded;
