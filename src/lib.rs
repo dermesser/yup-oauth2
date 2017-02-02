@@ -35,8 +35,6 @@
 //! authorize future API requests to the same scopes.
 //!
 //! ```test_harness,no_run
-//! #![cfg_attr(feature = "nightly", feature(proc_macro))]
-//! #[cfg(feature = "nightly")]
 //! #[macro_use]
 //! extern crate serde_derive;
 //! 
@@ -67,10 +65,41 @@
 //! # }
 //! ```
 //!
-#![cfg_attr(feature = "nightly", feature(proc_macro))]
+#[macro_use]
+extern crate serde_derive;
 
-#[cfg(feature = "nightly")]
-include!("lib.rs.in");
+extern crate serde;
+extern crate serde_json;
 
-#[cfg(feature = "with-serde-codegen")]
-include!(concat!(env!("OUT_DIR"), "/lib.rs"));
+extern crate base64;
+extern crate chrono;
+extern crate openssl;
+extern crate hyper;
+#[cfg(test)]
+extern crate log;
+#[cfg(test)]
+extern crate yup_hyper_mock;
+extern crate url;
+extern crate itertools;
+
+mod authenticator;
+mod authenticator_delegate;
+mod device;
+mod helper;
+mod installed;
+mod refresh;
+mod service_account;
+mod storage;
+mod types;
+
+pub use device::{GOOGLE_DEVICE_CODE_URL, DeviceFlow};
+pub use refresh::{RefreshFlow, RefreshResult};
+pub use types::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret, Scheme, TokenType};
+pub use installed::{InstalledFlow, InstalledFlowReturnMethod};
+pub use storage::{TokenStorage, NullStorage, MemoryStorage, DiskTokenStorage};
+pub use authenticator::{Authenticator, Retry, GetToken};
+pub use authenticator_delegate::{AuthenticatorDelegate, DefaultAuthenticatorDelegate, PollError,
+                                 PollInformation};
+pub use helper::*;
+pub use service_account::*;
+
