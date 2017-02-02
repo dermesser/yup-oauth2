@@ -4,6 +4,6 @@ version = "0.1.0"
 authors = ["Lewin Bormann <lbo@spheniscida.de>"]
 
 [dependencies]
-yup-oauth2 = "1.0"
-google-drive3 = "1.0"
-hyper = "0.9"
+yup-oauth2 = "^ 1.0"
+google-drive3 = "^ 1.0"
+hyper = "^ 0.10"
