@@ -1,3 +1,34 @@
+<a name=""></a>
+##  v1.0.4 (2017-02-03)
+
+
+#### Improvements
+
+* **serde:** use proc_macros and serde-derive ([59584b24](https://github.com/Byron/yup-oauth2/commit/59584b240e7d9dfa8d412fa5524d2420037373d1))
+
+
+
+<a name=""></a>
+##  v1.0.3 (2017-02-03)
+
+
+#### Bug Fixes
+
+* **deps:**  Fix dependency problems and openssl test failure. ([567ff12c](https://github.com/Byron/yup-oauth2/commit/567ff12cd4590683cc7f1e5e673d68dd1ae1a129))
+* **openssl:**  Update to 0.9.x ([fe0a094b](https://github.com/Byron/yup-oauth2/commit/fe0a094b4563ff66e67f86b1ad042b80e76eafed))
+
+
+<a name=""></a>
+##  v1.0.1 (2017-02-03)
+
+
+#### Bug Fixes
+
+* **serde:**  use serde_derive ([11baf2f7](https://github.com/Byron/yup-oauth2/commit/11baf2f7121973f5d466abdfc0842f5f53ad389f))
+* **travis-key:**  Fix typo in previous API key ([eaca1f22](https://github.com/Byron/yup-oauth2/commit/eaca1f2283fbe81157dd4321df1af340e67f0e91))
+
+
+
 <a name="v1.0.0"></a>
 ### v1.0.0 (2016-10-09)
 
