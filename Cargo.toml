@@ -1,14 +1,13 @@
 [package]
 
 name = "yup-oauth2"
-version = "1.0.3"
+version = "1.0.4"
 authors = ["Sebastian Thiel <byronimo@gmail.com>", "Lewin Bormann <lbo@spheniscida.de>"]
 repository = "https://github.com/dermesser/yup-oauth2"
 description = "An oauth2 implementation, providing the 'device', 'service account' and 'installed' authorization flows"
 documentation = "https://docs.rs/yup-oauth2/"
 keywords = ["google", "oauth", "v2"]
 license = "MIT OR Apache-2.0"
-build = "src/build.rs"
 
 [dependencies]
 base64 = "0.2"
@@ -17,18 +16,10 @@ hyper = "0.10.2"
 itertools = "0.4"
 log = "0.3"
 openssl = "0.9.6"
-serde = "0.8"
-serde_json = "0.8"
-serde_derive = { version = "0.8", optional = true }
+serde = "0.9"
+serde_json = "0.9"
+serde_derive = "0.9"
 url = "0.5"
-
-[features]
-default = ["with-serde-codegen"]
-nightly = ["serde_derive"]
-with-serde-codegen = ["serde_codegen"]
-
-[build-dependencies]
-serde_codegen = { version = "^ 0.8", optional = true }
 
 [dev-dependencies]
 getopts = "0.2"
