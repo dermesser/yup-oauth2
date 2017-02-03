@@ -13,3 +13,6 @@ script:
   - travis-cargo build -- --manifest-path examples/service_account/Cargo.toml
 after_success:
   - "[[ $TRAVIS_OS_NAME = linux ]] && travis-cargo --only stable coveralls"
+env:
+  global:
+    - TRAVIS_CARGO_NIGHTLY_FEATURE=""
