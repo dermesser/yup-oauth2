@@ -75,6 +75,8 @@ extern crate base64;
 extern crate chrono;
 extern crate openssl;
 extern crate hyper;
+extern crate hyper_rustls;
+
 #[cfg(test)]
 extern crate log;
 #[cfg(test)]

@@ -39,6 +39,16 @@ fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
     base64::encode_mode(s.as_ref(), base64::Base64Mode::UrlSafe)
 }
 
+fn decode_rsa_key(pem_pkcs8: &str) -> Result<openssl::rsa::Rsa, Box<error::Error>> {
+    let private = pem_pkcs8.to_string().replace("\\n", "\n");
+    let private_key = openssl::rsa::Rsa::private_key_from_pem(&mut private.as_bytes());
+
+    match private_key {
+        Err(e) => Err(Box::new(e)),
+        Ok(key) => Ok(key),
+    }
+}
+
 /// JSON schema of secret service account key. You can obtain the key from
 /// the Cloud Console at https://console.cloud.google.com/.
 ///
@@ -94,12 +104,12 @@ impl JWT {
 
     fn sign(&self, private_key: &str) -> Result<String, Box<error::Error>> {
         let mut jwt_head = self.encode_claims();
-
-        let key = openssl::pkey::PKey::hmac(private_key.as_bytes()).unwrap();
+        let key = try!(decode_rsa_key(private_key));
+        let pkey = try!(openssl::pkey::PKey::from_rsa(key));
 
         let mut signer =
             try!(openssl::sign::Signer::new(
-                 openssl::hash::MessageDigest::sha256(), &key));
+                 openssl::hash::MessageDigest::sha256(), &pkey));
         signer.update(&jwt_head.as_bytes()).unwrap();
         let signature = signer.finish().unwrap();
         let signature_b64 = encode_base64(signature);
@@ -250,17 +260,20 @@ mod tests {
     use super::*;
     use helper::service_account_key_from_file;
     use hyper;
+    use hyper::net::HttpsConnector;
+    use hyper_rustls;
     use authenticator::GetToken;
 
     // This is a valid but deactivated key.
     const TEST_PRIVATE_KEY_PATH: &'static str = "examples/Sanguine-69411a0c0eea.json";
 
     // Uncomment this test to verify that we can successfully obtain tokens.
-    // #[test]
+    //#[test]
     #[allow(dead_code)]
     fn test_service_account_e2e() {
         let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
-        let mut acc = ServiceAccountAccess::new(key, hyper::client::Client::new());
+        let client = hyper::Client::with_connector(HttpsConnector::new(hyper_rustls::TlsClient::new()));
+        let mut acc = ServiceAccountAccess::new(key, client);
         println!("{:?}",
                  acc.token(vec![&"https://www.googleapis.com/auth/pubsub"]).unwrap());
     }
