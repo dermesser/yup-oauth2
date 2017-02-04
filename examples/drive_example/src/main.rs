@@ -7,10 +7,13 @@
 //! Copyright (c) 2016 Google, Inc. (Lewin Bormann <lbo@spheniscida.de>)
 
 extern crate hyper;
+extern crate hyper_rustls;
 extern crate yup_oauth2;
 extern crate google_drive3;
 
 use std::path::Path;
+
+use hyper::net::HttpsConnector;
 
 use yup_oauth2::{Authenticator, FlowType, ApplicationSecret, DiskTokenStorage,
                  DefaultAuthenticatorDelegate, read_application_secret};
@@ -25,13 +28,17 @@ fn read_client_secret(file: String) -> ApplicationSecret {
 
 fn main() {
     let secret = read_client_secret(CLIENT_SECRET_FILE.to_string());
+    let client = hyper::Client::with_connector(
+        HttpsConnector::new(hyper_rustls::TlsClient::new()));
     let authenticator = Authenticator::new(&secret,
                                            DefaultAuthenticatorDelegate,
-                                           hyper::Client::new(),
+                                           client,
                                            DiskTokenStorage::new(&"token_store.json".to_string())
                                                .unwrap(),
                                            Some(FlowType::InstalledInteractive));
-    let hub = Drive::new(hyper::Client::new(), authenticator);
+    let client = hyper::Client::with_connector(
+        HttpsConnector::new(hyper_rustls::TlsClient::new()));
+    let hub = Drive::new(client, authenticator);
 
     let (_resp, list_result) = hub.files().list().q("'root' in parents and trashed = false").doit().unwrap();
 
