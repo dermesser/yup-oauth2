@@ -158,6 +158,7 @@ pub struct ServiceAccountAccess<C> {
     client: C,
     key: ServiceAccountKey,
     cache: MemoryStorage,
+    sub: Option<String>,
 }
 
 /// This is the schema of the server's response.
@@ -192,11 +193,23 @@ impl<'a, C> ServiceAccountAccess<C>
             client: client,
             key: key,
             cache: MemoryStorage::default(),
+            sub: None,
+        }
+    }
+
+    pub fn with_sub(key: ServiceAccountKey, client: C, sub: String) -> ServiceAccountAccess<C> {
+        ServiceAccountAccess {
+            client: client,
+            key: key,
+            cache: MemoryStorage::default(),
+            sub: Some(sub),
         }
     }
 
     fn request_token(&mut self, scopes: &Vec<&str>) -> result::Result<Token, Box<error::Error>> {
-        let signed = try!(JWT::new(init_claims_from_key(&self.key, scopes))
+        let mut claims = init_claims_from_key(&self.key, scopes);
+        claims.sub = self.sub.clone();
+        let signed = try!(JWT::new(claims)
             .sign(self.key.private_key.as_ref().unwrap()));
 
         let body = form_urlencoded::serialize(vec![("grant_type".to_string(),
