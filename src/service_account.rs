@@ -197,12 +197,12 @@ impl<'a, C> ServiceAccountAccess<C>
         }
     }
 
-    pub fn with_sub(key: ServiceAccountKey, client: C, sub: Option<String>) -> ServiceAccountAccess<C> {
+    pub fn with_sub(key: ServiceAccountKey, client: C, sub: String) -> ServiceAccountAccess<C> {
         ServiceAccountAccess {
             client: client,
             key: key,
             cache: MemoryStorage::default(),
-            sub: sub,
+            sub: Some(sub),
         }
     }
 
