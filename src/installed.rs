@@ -38,7 +38,7 @@ fn build_authentication_request_url<'a, T, I>(auth_uri: &str,
     let mut url = String::new();
     let mut scopes_string = scopes.into_iter().fold(String::new(), |mut acc, sc| {
         acc.push_str(sc.as_ref());
-        acc.push_str(" ");
+        acc.push_str("+");
         acc
     });
     // Remove last space
