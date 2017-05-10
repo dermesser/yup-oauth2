@@ -36,7 +36,7 @@ const GOOGLE_RS256_HEAD: &'static str = "{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
 
 // Encodes s as Base64
 fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
-    base64::encode_mode(s.as_ref(), base64::Base64Mode::UrlSafe)
+    base64::encode_config(s.as_ref(), base64::URL_SAFE)
 }
 
 fn decode_rsa_key(pem_pkcs8: &str) -> Result<openssl::rsa::Rsa, Box<error::Error>> {

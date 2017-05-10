@@ -10,13 +10,13 @@ keywords = ["google", "oauth", "v2"]
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-base64 = "0.2"
+base64 = "0.5.2"
 chrono = "0.2"
 hyper = "0.10.2"
-hyper-rustls = "^0.3"
+hyper-rustls = "^0.5"
 itertools = "0.4"
 log = "0.3"
-openssl = "0.9.6"
+openssl = "0.9.11"
 serde = "0.9"
 serde_json = "0.9"
 serde_derive = "0.9"
