@@ -73,9 +73,9 @@ extern crate serde_json;
 
 extern crate base64;
 extern crate chrono;
-extern crate openssl;
 extern crate hyper;
 extern crate hyper_rustls;
+extern crate rustls;
 
 #[cfg(test)]
 extern crate log;

@@ -14,7 +14,7 @@
 use std::borrow::BorrowMut;
 use std::default::Default;
 use std::error;
-use std::io::Read;
+use std::io::{self, Read};
 use std::result;
 use std::str;
 
@@ -25,10 +25,13 @@ use types::{StringError, Token};
 use hyper::header;
 use url::form_urlencoded;
 
+use rustls::{self, PrivateKey};
+use rustls::sign::{self, Signer};
+use rustls::internal::pemfile;
+
 use base64;
 use chrono;
 use hyper;
-use openssl;
 use serde_json;
 
 const GRANT_TYPE: &'static str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
@@ -39,13 +42,20 @@ fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
     base64::encode_config(s.as_ref(), base64::URL_SAFE)
 }
 
-fn decode_rsa_key(pem_pkcs8: &str) -> Result<openssl::rsa::Rsa, Box<error::Error>> {
-    let private = pem_pkcs8.to_string().replace("\\n", "\n");
-    let private_key = openssl::rsa::Rsa::private_key_from_pem(&mut private.as_bytes());
+fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<error::Error>> {
+    let private = pem_pkcs8.to_string().replace("\\n", "\n").into_bytes();
+    let mut private_reader: &[u8] = private.as_ref();
+    let private_keys = pemfile::pkcs8_private_keys(&mut private_reader);
 
-    match private_key {
-        Err(e) => Err(Box::new(e)),
-        Ok(key) => Ok(key),
+    if let Ok(pk) = private_keys {
+        if pk.len() > 0 {
+            Ok(pk[0].clone())
+        } else {
+            Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput,
+                                        "Not enough private keys in PEM")))
+        }
+    } else {
+        Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput, "Error reading key from PEM")))
     }
 }
 
@@ -105,13 +115,11 @@ impl JWT {
     fn sign(&self, private_key: &str) -> Result<String, Box<error::Error>> {
         let mut jwt_head = self.encode_claims();
         let key = try!(decode_rsa_key(private_key));
-        let pkey = try!(openssl::pkey::PKey::from_rsa(key));
-
-        let mut signer =
-            try!(openssl::sign::Signer::new(
-                 openssl::hash::MessageDigest::sha256(), &pkey));
-        signer.update(&jwt_head.as_bytes()).unwrap();
-        let signature = signer.finish().unwrap();
+        let signer = try!(sign::RSASigner::new(&key)
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't initialize signer")));
+        let signature = try!(signer.sign(rustls::SignatureScheme::RSA_PKCS1_SHA256,
+                                         jwt_head.as_bytes())
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't sign claims")));
         let signature_b64 = encode_base64(signature);
 
         jwt_head.push_str(".");
