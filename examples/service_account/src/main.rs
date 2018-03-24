@@ -17,6 +17,10 @@
 //! message <95491011624393> 'Hello oh wonderful world' at 2016-09-21T20:04:53.187Z
 //! Published message #95491011626206
 //! message <95491011626206> 'Hello oh wonderful world' at 2016-09-21T20:04:55.233Z
+//! ```
+//!
+//! (note that this program won't work as-is, because the credentials are invalid; it will work if
+//! you supply a valid client secret)
 //!
 //! Copyright (c) 2016 Google, Inc. (Lewin Bormann <lbo@spheniscida.de>)
 //!
@@ -65,6 +69,8 @@ fn check_or_create_subscription(methods: &PubsubMethods) -> Subscription {
             topic: Some(TOPIC_NAME.to_string()),
             ack_deadline_seconds: Some(30),
             push_config: None,
+            message_retention_duration: None,
+            retain_acked_messages: None,
             name: Some(SUBSCRIPTION_NAME.to_string()),
         };
         let (_resp, sub) = methods.subscriptions_create(sub, SUBSCRIPTION_NAME).doit().unwrap();
