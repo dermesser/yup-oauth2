@@ -6,7 +6,7 @@ rust:
   - stable
   - nightly
 before_script:
-  - pip install 'travis-cargo<0.2' --user  && export PATH=$HOME/Library/Python/2.7/bin:$HOME/.local/bin:$PATH
+  - pip2 install 'travis-cargo<0.2' --user  && export PATH=$HOME/Library/Python/2.7/bin:$HOME/.local/bin:$PATH
 script:
   - travis-cargo test
   - travis-cargo build -- --manifest-path examples/drive_example/Cargo.toml
