@@ -1,6 +1,6 @@
 use types::{ApplicationSecret, FlowType, JsonError};
 
-use chrono::UTC;
+use chrono::Utc;
 use hyper;
 use hyper::header::ContentType;
 use serde_json as json;
@@ -107,7 +107,7 @@ impl<C> RefreshFlow<C>
             token_type: t.token_type,
             refresh_token: refresh_token.to_string(),
             expires_in: None,
-            expires_in_timestamp: Some(UTC::now().timestamp() + t.expires_in),
+            expires_in_timestamp: Some(Utc::now().timestamp() + t.expires_in),
         });
 
         &self.result

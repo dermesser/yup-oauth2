@@ -1,4 +1,4 @@
-use chrono::{DateTime, UTC, TimeZone};
+use chrono::{DateTime, Utc, TimeZone};
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
@@ -203,12 +203,12 @@ impl Token {
         if self.access_token.len() == 0 {
             panic!("called expired() on unset token");
         }
-        self.expiry_date() <= UTC::now()
+        self.expiry_date() <= Utc::now()
     }
 
     /// Returns a DateTime object representing our expiry date.
-    pub fn expiry_date(&self) -> DateTime<UTC> {
-        UTC.timestamp(self.expires_in_timestamp
+    pub fn expiry_date(&self) -> DateTime<Utc> {
+        Utc.timestamp(self.expires_in_timestamp
                           .expect("Tokens without an absolute expiry are invalid"),
                       0)
     }
@@ -220,7 +220,7 @@ impl Token {
             return self;
         }
 
-        self.expires_in_timestamp = Some(UTC::now().timestamp() + self.expires_in.unwrap());
+        self.expires_in_timestamp = Some(Utc::now().timestamp() + self.expires_in.unwrap());
         self.expires_in = None;
         self
     }

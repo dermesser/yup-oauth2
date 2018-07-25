@@ -7,7 +7,7 @@ use std::error::Error;
 use authenticator::Retry;
 use types::RequestError;
 
-use chrono::{DateTime, Local, UTC};
+use chrono::{DateTime, Local, Utc};
 use std::time::Duration;
 
 /// Contains state of pending authentication requests
@@ -20,7 +20,7 @@ pub struct PollInformation {
 
     /// The `user_code` expires at the given time
     /// It's the time the user has left to authenticate your application
-    pub expires_at: DateTime<UTC>,
+    pub expires_at: DateTime<Utc>,
     /// The interval in which we may poll for a status change
     /// The server responds with errors of we poll too fast.
     pub interval: Duration,
@@ -38,7 +38,7 @@ pub enum PollError {
     /// Connection failure - retry if you think it's worth it
     HttpError(hyper::Error),
     /// indicates we are expired, including the expiration date
-    Expired(DateTime<UTC>),
+    Expired(DateTime<Utc>),
     /// Indicates that the user declined access. String is server response
     AccessDenied,
 }
@@ -83,7 +83,7 @@ pub trait AuthenticatorDelegate {
     /// Called if the request code is expired. You will have to start over in this case.
     /// This will be the last call the delegate receives.
     /// Given `DateTime` is the expiration date
-    fn expired(&mut self, &DateTime<UTC>) {}
+    fn expired(&mut self, &DateTime<Utc>) {}
 
     /// Called if the user denied access. You would have to start over.
     /// This will be the last call the delegate receives.

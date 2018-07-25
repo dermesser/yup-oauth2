@@ -133,7 +133,7 @@ fn init_claims_from_key<'a, I, T>(key: &ServiceAccountKey, scopes: I) -> Claims
     where T: AsRef<str> + 'a,
           I: IntoIterator<Item = &'a T>
 {
-    let iat = chrono::UTC::now().timestamp();
+    let iat = chrono::Utc::now().timestamp();
     let expiry = iat + 3600 - 5; // Max validity is 1h.
 
     let mut scopes_string = scopes.into_iter().fold(String::new(), |mut acc, sc| {
@@ -179,7 +179,7 @@ struct TokenResponse {
 
 impl TokenResponse {
     fn to_oauth_token(self) -> Token {
-        let expires_ts = chrono::UTC::now().timestamp() + self.expires_in.unwrap_or(0);
+        let expires_ts = chrono::Utc::now().timestamp() + self.expires_in.unwrap_or(0);
 
         Token {
             access_token: self.access_token.unwrap(),
