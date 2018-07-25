@@ -87,13 +87,14 @@ impl<C> DeviceFlow<C>
 
         // note: cloned() shouldn't be needed, see issue
         // https://github.com/servo/rust-url/issues/81
-        let req = form_urlencoded::serialize(&[("client_id", &self.application_secret.client_id),
-                                               ("scope",
-                                                &scopes.into_iter()
-                                                   .map(|s| s.as_ref())
-                                                   .intersperse(" ")
-                                                   .collect::<String>()
-                                                   )]);
+        let req = form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(&[("client_id", &self.application_secret.client_id),
+                            ("scope", &scopes
+                                          .into_iter()
+                                          .map(|s| s.as_ref())
+                                          .intersperse(" ")
+                                          .collect::<String>())])
+            .finish();
 
         // note: works around bug in rustlang
         // https://github.com/rust-lang/rust/issues/22252
@@ -182,11 +183,12 @@ impl<C> DeviceFlow<C>
         }
 
         // We should be ready for a new request
-        let req = form_urlencoded::serialize(&[("client_id", &self.application_secret.client_id[..]),
-                                               ("client_secret", &self.application_secret.client_secret),
-                                               ("code", &self.device_code),
-                                               ("grant_type",
-                                                "http://oauth.net/grant_type/device/1.0")]);
+        let req = form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(&[("client_id", &self.application_secret.client_id[..]),
+                            ("client_secret", &self.application_secret.client_secret),
+                            ("code", &self.device_code),
+                            ("grant_type", "http://oauth.net/grant_type/device/1.0")])
+            .finish();
 
         let json_str: String = match self.client
             .borrow_mut()

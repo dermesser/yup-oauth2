@@ -220,9 +220,10 @@ impl<'a, C> ServiceAccountAccess<C>
         let signed = try!(JWT::new(claims)
             .sign(self.key.private_key.as_ref().unwrap()));
 
-        let body = form_urlencoded::serialize(vec![("grant_type".to_string(),
-                                                    GRANT_TYPE.to_string()),
-                                                   ("assertion".to_string(), signed)]);
+        let body = form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(vec![("grant_type".to_string(), GRANT_TYPE.to_string()),
+                               ("assertion".to_string(), signed)])
+            .finish();
 
         let mut response = String::new();
         let mut result = try!(self.client
