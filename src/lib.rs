@@ -78,7 +78,7 @@ extern crate base64;
 extern crate chrono;
 extern crate hyper;
 extern crate hyper_native_tls;
-extern crate rustls;
+extern crate openssl;
 
 #[cfg(test)]
 extern crate log;
