@@ -283,7 +283,7 @@ mod tests {
     use helper::service_account_key_from_file;
     use hyper;
     use hyper::net::HttpsConnector;
-    use hyper_rustls;
+    use hyper_native_tls::NativeTlsClient;
     use authenticator::GetToken;
 
     // This is a valid but deactivated key.
@@ -294,7 +294,7 @@ mod tests {
     #[allow(dead_code)]
     fn test_service_account_e2e() {
         let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
-        let client = hyper::Client::with_connector(HttpsConnector::new(hyper_rustls::TlsClient::new()));
+        let client = hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
         let mut acc = ServiceAccountAccess::new(key, client);
         println!("{:?}",
                  acc.token(vec![&"https://www.googleapis.com/auth/pubsub"]).unwrap());

@@ -28,13 +28,14 @@ extern crate base64;
 extern crate yup_oauth2 as oauth;
 extern crate google_pubsub1 as pubsub;
 extern crate hyper;
-extern crate hyper_rustls;
+extern crate hyper_native_tls;
 
 use std::env;
 use std::time;
 use std::thread;
 
 use hyper::net::HttpsConnector;
+use hyper_native_tls::NativeTlsClient;
 use pubsub::{Topic, Subscription};
 
 // The prefixes are important!
@@ -166,14 +167,14 @@ fn publish_stuff(methods: &PubsubMethods, message: &str) {
 fn main() {
     let client_secret = oauth::service_account_key_from_file(&"pubsub-auth.json".to_string())
         .unwrap();
-    let client = hyper::Client::with_connector(HttpsConnector::new(hyper_rustls::TlsClient::new()));
+    let client = hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
     let mut access = oauth::ServiceAccountAccess::new(client_secret, client);
 
     use oauth::GetToken;
     println!("{:?}",
              access.token(&vec!["https://www.googleapis.com/auth/pubsub"]).unwrap());
 
-    let client = hyper::Client::with_connector(HttpsConnector::new(hyper_rustls::TlsClient::new()));
+    let client = hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
     let hub = pubsub::Pubsub::new(client, access);
     let methods = hub.projects();
 
