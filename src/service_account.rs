@@ -14,7 +14,7 @@
 use std::borrow::BorrowMut;
 use std::default::Default;
 use std::error;
-use std::io::{self, Read};
+use std::io::Read;
 use std::result;
 use std::str;
 
@@ -25,9 +25,10 @@ use types::{StringError, Token};
 use hyper::header;
 use url::form_urlencoded;
 
-use rustls::{self, PrivateKey};
-use rustls::sign::{self, Signer};
-use rustls::internal::pemfile;
+use openssl::sign::Signer;
+use openssl::hash::MessageDigest;
+use openssl::pkey::{PKey, Private};
+use openssl::rsa::Padding;
 
 use base64;
 use chrono;
@@ -42,21 +43,9 @@ fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
     base64::encode_config(s.as_ref(), base64::URL_SAFE)
 }
 
-fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<error::Error>> {
+fn decode_rsa_key(pem_pkcs8: &str) -> Result<PKey<Private>, Box<error::Error>> {
     let private = pem_pkcs8.to_string().replace("\\n", "\n").into_bytes();
-    let mut private_reader: &[u8] = private.as_ref();
-    let private_keys = pemfile::pkcs8_private_keys(&mut private_reader);
-
-    if let Ok(pk) = private_keys {
-        if pk.len() > 0 {
-            Ok(pk[0].clone())
-        } else {
-            Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput,
-                                        "Not enough private keys in PEM")))
-        }
-    } else {
-        Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput, "Error reading key from PEM")))
-    }
+    Ok(try!(PKey::private_key_from_pem(&private)))
 }
 
 /// JSON schema of secret service account key. You can obtain the key from
@@ -115,11 +104,10 @@ impl JWT {
     fn sign(&self, private_key: &str) -> Result<String, Box<error::Error>> {
         let mut jwt_head = self.encode_claims();
         let key = try!(decode_rsa_key(private_key));
-        let signer = try!(sign::RSASigner::new(&key)
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't initialize signer")));
-        let signature = try!(signer.sign(rustls::SignatureScheme::RSA_PKCS1_SHA256,
-                                         jwt_head.as_bytes())
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't sign claims")));
+        let mut signer = try!(Signer::new(MessageDigest::sha256(), &key));
+        try!(signer.set_rsa_padding(Padding::PKCS1));
+        try!(signer.update(jwt_head.as_bytes()));
+        let signature = try!(signer.sign_to_vec());
         let signature_b64 = encode_base64(signature);
 
         jwt_head.push_str(".");
@@ -133,7 +121,7 @@ fn init_claims_from_key<'a, I, T>(key: &ServiceAccountKey, scopes: I) -> Claims
     where T: AsRef<str> + 'a,
           I: IntoIterator<Item = &'a T>
 {
-    let iat = chrono::UTC::now().timestamp();
+    let iat = chrono::Utc::now().timestamp();
     let expiry = iat + 3600 - 5; // Max validity is 1h.
 
     let mut scopes_string = scopes.into_iter().fold(String::new(), |mut acc, sc| {
@@ -179,7 +167,7 @@ struct TokenResponse {
 
 impl TokenResponse {
     fn to_oauth_token(self) -> Token {
-        let expires_ts = chrono::UTC::now().timestamp() + self.expires_in.unwrap_or(0);
+        let expires_ts = chrono::Utc::now().timestamp() + self.expires_in.unwrap_or(0);
 
         Token {
             access_token: self.access_token.unwrap(),
@@ -220,9 +208,10 @@ impl<'a, C> ServiceAccountAccess<C>
         let signed = try!(JWT::new(claims)
             .sign(self.key.private_key.as_ref().unwrap()));
 
-        let body = form_urlencoded::serialize(vec![("grant_type".to_string(),
-                                                    GRANT_TYPE.to_string()),
-                                                   ("assertion".to_string(), signed)]);
+        let body = form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(vec![("grant_type".to_string(), GRANT_TYPE.to_string()),
+                               ("assertion".to_string(), signed)])
+            .finish();
 
         let mut response = String::new();
         let mut result = try!(self.client
@@ -282,7 +271,7 @@ mod tests {
     use helper::service_account_key_from_file;
     use hyper;
     use hyper::net::HttpsConnector;
-    use hyper_rustls;
+    use hyper_native_tls::NativeTlsClient;
     use authenticator::GetToken;
 
     // This is a valid but deactivated key.
@@ -293,7 +282,7 @@ mod tests {
     #[allow(dead_code)]
     fn test_service_account_e2e() {
         let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
-        let client = hyper::Client::with_connector(HttpsConnector::new(hyper_rustls::TlsClient::new()));
+        let client = hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
         let mut acc = ServiceAccountAccess::new(key, client);
         println!("{:?}",
                  acc.token(vec![&"https://www.googleapis.com/auth/pubsub"]).unwrap());

@@ -7,4 +7,4 @@ authors = ["Lewin Bormann <lbo@spheniscida.de>"]
 yup-oauth2 = "^ 1.0"
 google-drive3 = "^ 1.0"
 hyper = "^ 0.10"
-hyper-rustls = "0.6.1"
+hyper-native-tls = "0.2"

@@ -39,7 +39,7 @@
 //! extern crate serde_derive;
 //! 
 //! extern crate hyper;
-//! extern crate hyper_rustls;
+//! extern crate hyper_native_tls;
 //! extern crate yup_oauth2 as oauth2;
 //! extern crate serde;
 //! extern crate serde_json;
@@ -48,13 +48,13 @@
 //! use serde_json as json;
 //! use std::default::Default;
 //! use hyper::{Client, net::HttpsConnector};
-//! use hyper_rustls::TlsClient;
+//! use hyper_native_tls::NativeTlsClient;
 //! # const SECRET: &'static str = "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.googleusercontent.com\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\"}}";
 //!
 //! # #[test] fn device() {
 //! let secret = json::from_str::<ConsoleApplicationSecret>(SECRET).unwrap().installed.unwrap();
 //! let res = Authenticator::new(&secret, DefaultAuthenticatorDelegate,
-//!                         Client::with_connector(HttpsConnector::new(TlsClient::new())),
+//!                         Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap())),
 //!                         <MemoryStorage as Default>::default(), None)
 //!                         .token(&["https://www.googleapis.com/auth/youtube.upload"]);
 //! match res {
@@ -77,8 +77,8 @@ extern crate serde_json;
 extern crate base64;
 extern crate chrono;
 extern crate hyper;
-extern crate hyper_rustls;
-extern crate rustls;
+extern crate hyper_native_tls;
+extern crate openssl;
 
 #[cfg(test)]
 extern crate log;

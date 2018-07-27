@@ -52,7 +52,7 @@ fn build_authentication_request_url<'a, T, I>(auth_uri: &str,
          format!("&client_id={}", client_id)]
         .into_iter()
         .fold(url, |mut u, param| {
-            u.push_str(&percent_encode(param.as_ref(), QUERY_ENCODE_SET));
+            u.push_str(&percent_encode(param.as_ref(), QUERY_ENCODE_SET).to_string());
             u
         })
 }
@@ -221,14 +221,13 @@ impl<C> InstalledFlow<C>
             Some(p) => redirect_uri = format!("http://localhost:{}", p),
         }
 
-        let body = form_urlencoded::serialize(vec![("code".to_string(), authcode.to_string()),
-                                                   ("client_id".to_string(),
-                                                    appsecret.client_id.clone()),
-                                                   ("client_secret".to_string(),
-                                                    appsecret.client_secret.clone()),
-                                                   ("redirect_uri".to_string(), redirect_uri),
-                                                   ("grant_type".to_string(),
-                                                    "authorization_code".to_string())]);
+        let body = form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(vec![("code".to_string(), authcode.to_string()),
+                               ("client_id".to_string(), appsecret.client_id.clone()),
+                               ("client_secret".to_string(), appsecret.client_secret.clone()),
+                               ("redirect_uri".to_string(), redirect_uri),
+                               ("grant_type".to_string(), "authorization_code".to_string())])
+            .finish();
 
         let result: Result<client::Response, hyper::Error> = self.client
             .borrow_mut()
