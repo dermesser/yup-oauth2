@@ -52,7 +52,7 @@ fn check_or_create_topic(methods: &PubsubMethods) -> Topic {
 
     if result.is_err() {
         println!("Assuming topic doesn't exist; creating topic");
-        let topic = pubsub::Topic { name: Some(TOPIC_NAME.to_string()) };
+        let topic = pubsub::Topic { name: Some(TOPIC_NAME.to_string()), labels: None };
         let result = methods.topics_create(topic, TOPIC_NAME).doit().unwrap();
         result.1
     } else {
@@ -73,6 +73,7 @@ fn check_or_create_subscription(methods: &PubsubMethods) -> Subscription {
             message_retention_duration: None,
             retain_acked_messages: None,
             name: Some(SUBSCRIPTION_NAME.to_string()),
+            labels: None,
         };
         let (_resp, sub) = methods.subscriptions_create(sub, SUBSCRIPTION_NAME).doit().unwrap();
 
