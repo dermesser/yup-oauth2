@@ -17,11 +17,16 @@ hyper = "0.10.2"
 hyper-native-tls = "0.3"
 itertools = "0.7"
 log = "0.3"
-openssl = "0.10"
+openssl = {version = "0.10", optional = true}
+rustls = {version = "0.14", optional = true}
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
 url = "1"
+
+[features]
+default = ["openssl"]
+no-openssl = ["rustls"]
 
 [dev-dependencies]
 getopts = "0.2"
