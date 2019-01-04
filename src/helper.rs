@@ -13,16 +13,16 @@ use std::io::{self, Read};
 use std::fs;
 use std::path::Path;
 
-use service_account::ServiceAccountKey;
-use types::{ConsoleApplicationSecret, ApplicationSecret};
+use crate::service_account::ServiceAccountKey;
+use crate::types::{ConsoleApplicationSecret, ApplicationSecret};
 
 /// Read an application secret from a file.
 pub fn read_application_secret(path: &Path) -> io::Result<ApplicationSecret> {
     use std::io::Read;
 
     let mut secret = String::new();
-    let mut file = try!(fs::OpenOptions::new().read(true).open(path));
-    try!(file.read_to_string(&mut secret));
+    let mut file = fs::OpenOptions::new().read(true).open(path)?;
+    file.read_to_string(&mut secret)?;
 
     parse_application_secret(&secret)
 }
@@ -52,8 +52,8 @@ pub fn parse_application_secret(secret: &String) -> io::Result<ApplicationSecret
 /// Cloud Console or the respective console of your service provider.
 pub fn service_account_key_from_file(path: &String) -> io::Result<ServiceAccountKey> {
     let mut key = String::new();
-    let mut file = try!(fs::OpenOptions::new().read(true).open(path));
-    try!(file.read_to_string(&mut key));
+    let mut file = fs::OpenOptions::new().read(true).open(path)?;
+    file.read_to_string(&mut key)?;
 
     match serde_json::from_str(&key) {
         Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, format!("{}", e))),

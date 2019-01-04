@@ -19,8 +19,8 @@ use serde_json::error;
 use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
-use types::{ApplicationSecret, Token};
-use authenticator_delegate::AuthenticatorDelegate;
+use crate::types::{ApplicationSecret, Token};
+use crate::authenticator_delegate::AuthenticatorDelegate;
 
 const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
 
@@ -134,8 +134,8 @@ impl<C> InstalledFlow<C>
         where T: AsRef<str> + 'a,
               S: Iterator<Item = &'a T>
     {
-        let authcode = try!(self.get_authorization_code(auth_delegate, &appsecret, scopes));
-        let tokens = try!(self.request_token(&appsecret, &authcode));
+        let authcode = self.get_authorization_code(auth_delegate, &appsecret, scopes)?;
+        let tokens = self.request_token(&appsecret, &authcode)?;
 
         // Successful response
         if tokens.access_token.is_some() {

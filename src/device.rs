@@ -12,8 +12,8 @@ use std::borrow::BorrowMut;
 use std::io::Read;
 use std::i64;
 
-use types::{ApplicationSecret, Token, FlowType, Flow, RequestError, JsonError};
-use authenticator_delegate::{PollError, PollInformation};
+use crate::types::{ApplicationSecret, Token, FlowType, Flow, RequestError, JsonError};
+use crate::authenticator_delegate::{PollError, PollInformation};
 
 pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/oauth2/device/code";
 
@@ -294,7 +294,7 @@ pub mod tests {
 
     #[test]
     fn working_flow() {
-        use helper::parse_application_secret;
+        use crate::helper::parse_application_secret;
 
         let appsecret = parse_application_secret(&TEST_APP_SECRET.to_string()).unwrap();
         let mut flow = DeviceFlow::new(

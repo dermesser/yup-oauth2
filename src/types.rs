@@ -50,9 +50,9 @@ impl fmt::Display for RequestError {
             RequestError::InvalidClient => "Invalid Client".fmt(f),
             RequestError::InvalidScope(ref scope) => writeln!(f, "Invalid Scope: '{}'", scope),
             RequestError::NegativeServerResponse(ref error, ref desc) => {
-                try!(error.fmt(f));
+                error.fmt(f)?;
                 if let &Some(ref desc) = desc {
-                    try!(write!(f, ": {}", desc));
+                    write!(f, ": {}", desc)?;
                 }
                 "\n".fmt(f)
             }

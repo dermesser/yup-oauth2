@@ -14,7 +14,7 @@ use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use std::io;
 
-use types::Token;
+use crate::types::Token;
 
 /// Implements a specialized storage to set and retrieve `Token` instances.
 /// The `scope_hash` represents the signature of the scopes for which the given token
@@ -149,7 +149,7 @@ impl DiskTokenStorage {
     }
 
     fn load_from_file(&mut self) -> Result<(), io::Error> {
-        let mut f = try!(fs::OpenOptions::new().read(true).open(&self.location));
+        let mut f = fs::OpenOptions::new().read(true).open(&self.location)?;
         let mut contents = String::new();
 
         match f.read_to_string(&mut contents) {
@@ -187,11 +187,11 @@ impl DiskTokenStorage {
             Result::Ok(s) => serialized = s,
         }
 
-        let mut f = try!(fs::OpenOptions::new()
+        let mut f = fs::OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
-            .open(&self.location));
+            .open(&self.location)?;
         f.write(serialized.as_ref()).map(|_| ())
     }
 }

@@ -2,6 +2,7 @@
 name = "drive_example"
 version = "0.1.0"
 authors = ["Lewin Bormann <lbo@spheniscida.de>"]
+edition = "2018"
 
 [dependencies]
 yup-oauth2 = "^ 1.0"

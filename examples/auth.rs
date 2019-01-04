@@ -1,11 +1,5 @@
-extern crate yup_oauth2 as oauth2;
-extern crate yup_hyper_mock as mock;
-extern crate hyper;
-extern crate chrono;
-extern crate getopts;
-extern crate open;
-
-use oauth2::GetToken;
+use yup_oauth2::{self as oauth2, GetToken};
+use yup_hyper_mock as mock;
 use chrono::{Local};
 use getopts::{HasArg,Options,Occur,Fail};
 use std::env;
