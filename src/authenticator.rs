@@ -6,14 +6,14 @@ use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::iter::IntoIterator;
 use std::thread::sleep;
-
-use authenticator_delegate::{AuthenticatorDelegate, PollError, PollInformation};
-use device::{GOOGLE_DEVICE_CODE_URL, DeviceFlow};
-use installed::{InstalledFlow, InstalledFlowReturnMethod};
-use refresh::{RefreshResult, RefreshFlow};
 use std::time::Duration;
-use storage::TokenStorage;
-use types::{RequestError, StringError, Token, FlowType, ApplicationSecret};
+
+use crate::authenticator_delegate::{AuthenticatorDelegate, PollError, PollInformation};
+use crate::device::{GOOGLE_DEVICE_CODE_URL, DeviceFlow};
+use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
+use crate::refresh::{RefreshResult, RefreshFlow};
+use crate::storage::TokenStorage;
+use crate::types::{RequestError, StringError, Token, FlowType, ApplicationSecret};
 
 use hyper;
 
@@ -326,8 +326,8 @@ mod tests {
     use super::super::device::tests::MockGoogleAuth;
     use super::super::types::tests::SECRET;
     use super::super::types::ConsoleApplicationSecret;
-    use authenticator_delegate::DefaultAuthenticatorDelegate;
-    use storage::MemoryStorage;
+    use crate::authenticator_delegate::DefaultAuthenticatorDelegate;
+    use crate::storage::MemoryStorage;
     use std::default::Default;
     use hyper;
 

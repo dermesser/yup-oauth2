@@ -18,9 +18,9 @@ use std::io::Read;
 use std::result;
 use std::str;
 
-use authenticator::GetToken;
-use storage::{hash_scopes, MemoryStorage, TokenStorage};
-use types::{StringError, Token};
+use crate::authenticator::GetToken;
+use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
+use crate::types::{StringError, Token};
 
 use hyper::header;
 use url::form_urlencoded;
@@ -45,7 +45,7 @@ fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
 
 fn decode_rsa_key(pem_pkcs8: &str) -> Result<PKey<Private>, Box<error::Error>> {
     let private = pem_pkcs8.to_string().replace("\\n", "\n").into_bytes();
-    Ok(try!(PKey::private_key_from_pem(&private)))
+    Ok(PKey::private_key_from_pem(&private)?)
 }
 
 /// JSON schema of secret service account key. You can obtain the key from
@@ -103,11 +103,11 @@ impl JWT {
 
     fn sign(&self, private_key: &str) -> Result<String, Box<error::Error>> {
         let mut jwt_head = self.encode_claims();
-        let key = try!(decode_rsa_key(private_key));
-        let mut signer = try!(Signer::new(MessageDigest::sha256(), &key));
-        try!(signer.set_rsa_padding(Padding::PKCS1));
-        try!(signer.update(jwt_head.as_bytes()));
-        let signature = try!(signer.sign_to_vec());
+        let key = decode_rsa_key(private_key)?;
+        let mut signer = Signer::new(MessageDigest::sha256(), &key)?;
+        signer.set_rsa_padding(Padding::PKCS1)?;
+        signer.update(jwt_head.as_bytes())?;
+        let signature = signer.sign_to_vec()?;
         let signature_b64 = encode_base64(signature);
 
         jwt_head.push_str(".");
@@ -205,8 +205,8 @@ impl<'a, C> ServiceAccountAccess<C>
     fn request_token(&mut self, scopes: &Vec<&str>) -> result::Result<Token, Box<error::Error>> {
         let mut claims = init_claims_from_key(&self.key, scopes);
         claims.sub = self.sub.clone();
-        let signed = try!(JWT::new(claims)
-            .sign(self.key.private_key.as_ref().unwrap()));
+        let signed = JWT::new(claims)
+            .sign(self.key.private_key.as_ref().unwrap())?;
 
         let body = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(vec![("grant_type".to_string(), GRANT_TYPE.to_string()),
@@ -214,14 +214,14 @@ impl<'a, C> ServiceAccountAccess<C>
             .finish();
 
         let mut response = String::new();
-        let mut result = try!(self.client
+        let mut result = self.client
             .borrow_mut()
             .post(self.key.token_uri.as_ref().unwrap())
             .body(&body)
             .header(header::ContentType("application/x-www-form-urlencoded".parse().unwrap()))
-            .send());
+            .send()?;
 
-        try!(result.read_to_string(&mut response));
+        result.read_to_string(&mut response)?;
 
         let token: Result<TokenResponse, serde_json::error::Error> =
             serde_json::from_str(&response);
@@ -248,13 +248,13 @@ impl<C: BorrowMut<hyper::Client>> GetToken for ServiceAccountAccess<C> {
     {
         let (hash, scps) = hash_scopes(scopes);
 
-        if let Some(token) = try!(self.cache.get(hash, &scps)) {
+        if let Some(token) = self.cache.get(hash, &scps)? {
             if !token.expired() {
                 return Ok(token);
             }
         }
 
-        let token = try!(self.request_token(&scps));
+        let token = self.request_token(&scps)?;
         let _ = self.cache.set(hash, &scps, Some(token.clone()));
 
         Ok(token)
@@ -268,11 +268,11 @@ impl<C: BorrowMut<hyper::Client>> GetToken for ServiceAccountAccess<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use helper::service_account_key_from_file;
+    use crate::helper::service_account_key_from_file;
     use hyper;
     use hyper::net::HttpsConnector;
     use hyper_native_tls::NativeTlsClient;
-    use authenticator::GetToken;
+    use crate::authenticator::GetToken;
 
     // This is a valid but deactivated key.
     const TEST_PRIVATE_KEY_PATH: &'static str = "examples/Sanguine-69411a0c0eea.json";

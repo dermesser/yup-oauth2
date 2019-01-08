@@ -25,8 +25,6 @@
 //! Copyright (c) 2016 Google, Inc. (Lewin Bormann <lbo@spheniscida.de>)
 //!
 extern crate base64;
-extern crate yup_oauth2 as oauth;
-extern crate google_pubsub1 as pubsub;
 extern crate hyper;
 extern crate hyper_native_tls;
 
@@ -34,9 +32,10 @@ use std::env;
 use std::time;
 use std::thread;
 
+use yup_oauth2 as oauth;
 use hyper::net::HttpsConnector;
 use hyper_native_tls::NativeTlsClient;
-use pubsub::{Topic, Subscription};
+use google_pubsub1::{self as pubsub, Topic, Subscription};
 
 // The prefixes are important!
 const SUBSCRIPTION_NAME: &'static str = "projects/sanguine-rhythm-105020/subscriptions/rust_authd_sub_1";
@@ -52,7 +51,7 @@ fn check_or_create_topic(methods: &PubsubMethods) -> Topic {
 
     if result.is_err() {
         println!("Assuming topic doesn't exist; creating topic");
-        let topic = pubsub::Topic { name: Some(TOPIC_NAME.to_string()) };
+        let topic = pubsub::Topic { name: Some(TOPIC_NAME.to_string()), labels: None };
         let result = methods.topics_create(topic, TOPIC_NAME).doit().unwrap();
         result.1
     } else {
@@ -73,6 +72,7 @@ fn check_or_create_subscription(methods: &PubsubMethods) -> Subscription {
             message_retention_duration: None,
             retain_acked_messages: None,
             name: Some(SUBSCRIPTION_NAME.to_string()),
+            labels: None,
         };
         let (_resp, sub) = methods.subscriptions_create(sub, SUBSCRIPTION_NAME).doit().unwrap();
 
@@ -170,7 +170,7 @@ fn main() {
     let client = hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
     let mut access = oauth::ServiceAccountAccess::new(client_secret, client);
 
-    use oauth::GetToken;
+    use yup_oauth2::GetToken;
     println!("{:?}",
              access.token(&vec!["https://www.googleapis.com/auth/pubsub"]).unwrap());
 

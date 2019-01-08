@@ -1,4 +1,4 @@
-use types::{ApplicationSecret, FlowType, JsonError};
+use crate::types::{ApplicationSecret, FlowType, JsonError};
 
 use chrono::Utc;
 use hyper;
@@ -125,8 +125,8 @@ mod tests {
     use super::*;
     use super::super::FlowType;
     use yup_hyper_mock::{MockStream, SequentialConnector};
-        use helper::parse_application_secret;
-        use device::GOOGLE_DEVICE_CODE_URL;
+        use crate::helper::parse_application_secret;
+        use crate::device::GOOGLE_DEVICE_CODE_URL;
 
     struct MockGoogleRefresh(SequentialConnector);
 

@@ -38,13 +38,7 @@
 //! #[macro_use]
 //! extern crate serde_derive;
 //! 
-//! extern crate hyper;
-//! extern crate hyper_native_tls;
-//! extern crate yup_oauth2 as oauth2;
-//! extern crate serde;
-//! extern crate serde_json;
-//!
-//! use oauth2::{Authenticator, DefaultAuthenticatorDelegate, PollInformation, ConsoleApplicationSecret, MemoryStorage, GetToken};
+//! use yup_oauth2::{Authenticator, DefaultAuthenticatorDelegate, PollInformation, ConsoleApplicationSecret, MemoryStorage, GetToken};
 //! use serde_json as json;
 //! use std::default::Default;
 //! use hyper::{Client, net::HttpsConnector};
@@ -78,7 +72,6 @@ extern crate base64;
 extern crate chrono;
 extern crate hyper;
 extern crate hyper_native_tls;
-extern crate openssl;
 
 #[cfg(test)]
 extern crate log;
@@ -97,14 +90,14 @@ mod service_account;
 mod storage;
 mod types;
 
-pub use device::{GOOGLE_DEVICE_CODE_URL, DeviceFlow};
-pub use refresh::{RefreshFlow, RefreshResult};
-pub use types::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret, Scheme, TokenType};
-pub use installed::{InstalledFlow, InstalledFlowReturnMethod};
-pub use storage::{TokenStorage, NullStorage, MemoryStorage, DiskTokenStorage};
-pub use authenticator::{Authenticator, Retry, GetToken};
-pub use authenticator_delegate::{AuthenticatorDelegate, DefaultAuthenticatorDelegate, PollError,
+pub use crate::device::{GOOGLE_DEVICE_CODE_URL, DeviceFlow};
+pub use crate::refresh::{RefreshFlow, RefreshResult};
+pub use crate::types::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret, Scheme, TokenType};
+pub use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
+pub use crate::storage::{TokenStorage, NullStorage, MemoryStorage, DiskTokenStorage};
+pub use crate::authenticator::{Authenticator, Retry, GetToken};
+pub use crate::authenticator_delegate::{AuthenticatorDelegate, DefaultAuthenticatorDelegate, PollError,
                                  PollInformation};
-pub use helper::*;
-pub use service_account::*;
+pub use crate::helper::*;
+pub use crate::service_account::*;
 

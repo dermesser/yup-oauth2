@@ -4,8 +4,8 @@ use std::fmt;
 use std::io;
 use std::error::Error;
 
-use authenticator::Retry;
-use types::RequestError;
+use crate::authenticator::Retry;
+use crate::types::RequestError;
 
 use chrono::{DateTime, Local, Utc};
 use std::time::Duration;
@@ -63,7 +63,7 @@ pub trait AuthenticatorDelegate {
     /// Called whenever there is an HttpError, usually if there are network problems.
     ///
     /// Return retry information.
-    fn connection_error(&mut self, &hyper::Error) -> Retry {
+    fn connection_error(&mut self, _: &hyper::Error) -> Retry {
         Retry::Abort
     }
 
@@ -78,12 +78,12 @@ pub trait AuthenticatorDelegate {
     }
 
     /// The server denied the attempt to obtain a request code
-    fn request_failure(&mut self, RequestError) {}
+    fn request_failure(&mut self, _: RequestError) {}
 
     /// Called if the request code is expired. You will have to start over in this case.
     /// This will be the last call the delegate receives.
     /// Given `DateTime` is the expiration date
-    fn expired(&mut self, &DateTime<Utc>) {}
+    fn expired(&mut self, _: &DateTime<Utc>) {}
 
     /// Called if the user denied access. You would have to start over.
     /// This will be the last call the delegate receives.
@@ -108,7 +108,7 @@ pub trait AuthenticatorDelegate {
     /// # Notes
     /// * Only used in `DeviceFlow`. Return value will only be used if it
     /// is larger than the interval desired by the server.
-    fn pending(&mut self, &PollInformation) -> Retry {
+    fn pending(&mut self, _: &PollInformation) -> Retry {
         Retry::After(Duration::from_secs(5))
     }
 
