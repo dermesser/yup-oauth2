@@ -25,10 +25,23 @@ use crate::types::{StringError, Token};
 use hyper::header;
 use url::form_urlencoded;
 
-use openssl::sign::Signer;
-use openssl::hash::MessageDigest;
-use openssl::pkey::{PKey, Private};
-use openssl::rsa::Padding;
+#[cfg(not(feature = "no-openssl"))]
+use openssl::{
+    sign::Signer,
+    hash::MessageDigest,
+    pkey::{PKey, Private},
+    rsa::Padding,
+};
+
+#[cfg(feature = "no-openssl")]
+use rustls::{
+    self,
+    PrivateKey,
+    sign::{self, SigningKey},
+    internal::pemfile,
+};
+#[cfg(feature = "no-openssl")]
+use std::io;
 
 use base64;
 use chrono;
@@ -43,9 +56,28 @@ fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
     base64::encode_config(s.as_ref(), base64::URL_SAFE)
 }
 
+#[cfg(not(feature = "no-openssl"))]
 fn decode_rsa_key(pem_pkcs8: &str) -> Result<PKey<Private>, Box<error::Error>> {
     let private = pem_pkcs8.to_string().replace("\\n", "\n").into_bytes();
     Ok(PKey::private_key_from_pem(&private)?)
+}
+
+#[cfg(feature = "no-openssl")]
+fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<error::Error>> {
+    let private = pem_pkcs8.to_string().replace("\\n", "\n").into_bytes();
+    let mut private_reader: &[u8] = private.as_ref();
+    let private_keys = pemfile::pkcs8_private_keys(&mut private_reader);
+
+    if let Ok(pk) = private_keys {
+        if pk.len() > 0 {
+            Ok(pk[0].clone())
+        } else {
+            Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput,
+                                        "Not enough private keys in PEM")))
+        }
+    } else {
+        Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput, "Error reading key from PEM")))
+    }
 }
 
 /// JSON schema of secret service account key. You can obtain the key from
@@ -101,6 +133,7 @@ impl JWT {
         head
     }
 
+    #[cfg(not(feature = "no-openssl"))]
     fn sign(&self, private_key: &str) -> Result<String, Box<error::Error>> {
         let mut jwt_head = self.encode_claims();
         let key = decode_rsa_key(private_key)?;
@@ -108,6 +141,23 @@ impl JWT {
         signer.set_rsa_padding(Padding::PKCS1)?;
         signer.update(jwt_head.as_bytes())?;
         let signature = signer.sign_to_vec()?;
+        let signature_b64 = encode_base64(signature);
+
+        jwt_head.push_str(".");
+        jwt_head.push_str(&signature_b64);
+
+        Ok(jwt_head)
+    }
+
+    #[cfg(feature = "no-openssl")]
+    fn sign(&self, private_key: &str) -> Result<String, Box<error::Error>> {
+        let mut jwt_head = self.encode_claims();
+        let key = decode_rsa_key(private_key)?;
+        let signing_key = sign::RSASigningKey::new(&key)
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't initialize signer"))?;
+        let signer = signing_key.choose_scheme(&[rustls::SignatureScheme::RSA_PKCS1_SHA256])
+            .ok_or(io::Error::new(io::ErrorKind::Other, "Couldn't choose signing scheme"))?;
+        let signature = signer.sign(jwt_head.as_bytes())?;
         let signature_b64 = encode_base64(signature);
 
         jwt_head.push_str(".");

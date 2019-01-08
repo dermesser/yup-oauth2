@@ -11,6 +11,7 @@ script:
   - travis-cargo test
   - travis-cargo build -- --manifest-path examples/drive_example/Cargo.toml
   - travis-cargo build -- --manifest-path examples/service_account/Cargo.toml
+  - travis-cargo test -- --no-default-features --features no-openssl
 after_success:
   - "[[ $TRAVIS_OS_NAME = linux ]] && travis-cargo --only stable coveralls"
 env:
