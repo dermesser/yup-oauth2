@@ -15,7 +15,7 @@ base64 = "0.10"
 chrono = "0.4"
 hyper = "0.10.2"
 hyper-native-tls = "0.3"
-itertools = "0.7"
+itertools = "0.8"
 log = "0.3"
 openssl = {version = "0.10", optional = true}
 rustls = {version = "0.14", optional = true}
