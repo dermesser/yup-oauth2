@@ -135,7 +135,7 @@ impl<C> InstalledFlow<C>
               S: Iterator<Item = &'a T>
     {
         let authcode = self.get_authorization_code(auth_delegate, &appsecret, scopes)?;
-        let tokens = self.request_token(&appsecret, &authcode)?;
+        let tokens = self.request_token(&appsecret, &authcode, auth_delegate.redirect_uri())?;
 
         // Successful response
         if tokens.access_token.is_some() {
@@ -175,7 +175,7 @@ impl<C> InstalledFlow<C>
                 let url = build_authentication_request_url(&appsecret.auth_uri,
                                                            &appsecret.client_id,
                                                            scopes,
-                                                           None);
+                                                           auth_delegate.redirect_uri());
                 match auth_delegate.present_user_url(&url, true /* need_code */) {
                     None => {
                         Result::Err(Box::new(io::Error::new(io::ErrorKind::UnexpectedEof,
@@ -194,9 +194,9 @@ impl<C> InstalledFlow<C>
                 let url = build_authentication_request_url(&appsecret.auth_uri,
                                                            &appsecret.client_id,
                                                            scopes,
-                                                           Some(format!("http://localhost:{}",
-                                                                        self.port
-                                                                            .unwrap_or(8080))));
+                                                           auth_delegate.redirect_uri().or_else(|| {
+                                                               Some(format!("http://localhost:{}", self.port.unwrap_or(8080)))
+                                                           }));
                 auth_delegate.present_user_url(&url, false /* need_code */);
 
                 match self.auth_code_rcv.as_ref().unwrap().recv() {
@@ -212,14 +212,15 @@ impl<C> InstalledFlow<C>
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.
     fn request_token(&mut self,
                      appsecret: &ApplicationSecret,
-                     authcode: &str)
+                     authcode: &str,
+                     custom_redirect_uri: Option<String>)
                      -> Result<JSONTokenResponse, Box<Error>> {
-        let redirect_uri;
-
-        match self.port {
-            None => redirect_uri = OOB_REDIRECT_URI.to_string(),
-            Some(p) => redirect_uri = format!("http://localhost:{}", p),
-        }
+        let redirect_uri = custom_redirect_uri.unwrap_or_else(|| {
+            match self.port {
+                None => OOB_REDIRECT_URI.to_string(),
+                Some(p) => format!("http://localhost:{}", p),
+            }
+        });
 
         let body = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(vec![("code".to_string(), authcode.to_string()),
