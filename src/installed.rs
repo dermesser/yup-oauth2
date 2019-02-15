@@ -181,9 +181,14 @@ impl<C> InstalledFlow<C>
                         Result::Err(Box::new(io::Error::new(io::ErrorKind::UnexpectedEof,
                                                             "couldn't read code")))
                     }
-                    // Remove newline
                     Some(mut code) => {
-                        code.pop();
+                        // Partial backwards compatibilty in case an implementation adds a new line
+                        // due to previous behaviour.
+                        let ends_with_newline =
+                            code.chars().last().map(|c| c == '\n').unwrap_or(false);
+                        if ends_with_newline {
+                            code.pop();
+                        }
                         Result::Ok(code)
                     }
                 }
