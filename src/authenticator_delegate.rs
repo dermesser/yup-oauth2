@@ -112,6 +112,11 @@ pub trait AuthenticatorDelegate {
         Retry::After(Duration::from_secs(5))
     }
 
+    /// Configure a custom redirect uri if needed.
+    fn redirect_uri(&self) -> Option<String> {
+        None
+    }
+
     /// The server has returned a `user_code` which must be shown to the user,
     /// along with the `verification_url`.
     /// # Notes
@@ -126,7 +131,7 @@ pub trait AuthenticatorDelegate {
                  pi.expires_at.with_timezone(&Local));
     }
 
-    /// Only method currently used by the InstalledFlow.
+    /// This method is used by the InstalledFlow.
     /// We need the user to navigate to a URL using their browser and potentially paste back a code
     /// (or maybe not). Whether they have to enter a code depends on the InstalledFlowReturnMethod
     /// used.
