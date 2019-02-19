@@ -11,10 +11,8 @@
 //! Copyright (c) 2016 Google Inc (lewinb@google.com).
 //!
 
-use std::borrow::BorrowMut;
 use std::default::Default;
 use std::error;
-use std::io::Read;
 use std::result;
 use std::str;
 
@@ -22,6 +20,8 @@ use crate::authenticator::GetToken;
 use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
 use crate::types::{StringError, Token};
 
+use futures::stream::Stream;
+use futures::Future;
 use hyper::header;
 use url::form_urlencoded;
 
@@ -211,7 +211,7 @@ fn set_sub_claim(mut claims: Claims, sub: String) -> Claims {
 /// A token source (`GetToken`) yielding OAuth tokens for services that use ServiceAccount authorization.
 /// This token source caches token and automatically renews expired ones.
 pub struct ServiceAccountAccess<C> {
-    client: C,
+    client: hyper::Client<C, hyper::Body>,
     key: ServiceAccountKey,
     cache: MemoryStorage,
     sub: Option<String>,
@@ -239,13 +239,16 @@ impl TokenResponse {
     }
 }
 
-impl<'a, C> ServiceAccountAccess<C>
+impl<'a, C: 'static> ServiceAccountAccess<C>
 where
-    C: BorrowMut<hyper::Client>,
+    C: hyper::client::connect::Connect,
 {
     /// Returns a new `ServiceAccountAccess` token source.
     #[allow(dead_code)]
-    pub fn new(key: ServiceAccountKey, client: C) -> ServiceAccountAccess<C> {
+    pub fn new(
+        key: ServiceAccountKey,
+        client: hyper::Client<C, hyper::Body>,
+    ) -> ServiceAccountAccess<C> {
         ServiceAccountAccess {
             client: client,
             key: key,
@@ -254,7 +257,11 @@ where
         }
     }
 
-    pub fn with_sub(key: ServiceAccountKey, client: C, sub: String) -> ServiceAccountAccess<C> {
+    pub fn with_sub(
+        key: ServiceAccountKey,
+        client: hyper::Client<C, hyper::Body>,
+        sub: String,
+    ) -> ServiceAccountAccess<C> {
         ServiceAccountAccess {
             client: client,
             key: key,
@@ -275,21 +282,21 @@ where
             ])
             .finish();
 
-        let mut response = String::new();
-        let mut result = self
-            .client
-            .borrow_mut()
-            .post(self.key.token_uri.as_ref().unwrap())
-            .body(&body)
-            .header(header::ContentType(
-                "application/x-www-form-urlencoded".parse().unwrap(),
-            ))
-            .send()?;
+        let request = hyper::Request::post(self.key.token_uri.as_ref().unwrap())
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(hyper::Body::from(body))
+            .unwrap(); // TOOD: error handling
+        let response = self.client.request(request).wait()?;
 
-        result.read_to_string(&mut response)?;
+        let json_str = response
+            .into_body()
+            .concat2()
+            .wait()
+            .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
+            .unwrap(); // TODO: error handling
 
         let token: Result<TokenResponse, serde_json::error::Error> =
-            serde_json::from_str(&response);
+            serde_json::from_str(&json_str);
 
         match token {
             Err(e) => return Err(Box::new(e)),
@@ -310,7 +317,10 @@ where
     }
 }
 
-impl<C: BorrowMut<hyper::Client>> GetToken for ServiceAccountAccess<C> {
+impl<C: 'static> GetToken for ServiceAccountAccess<C>
+where
+    C: hyper::client::connect::Connect,
+{
     fn token<'b, I, T>(&mut self, scopes: I) -> result::Result<Token, Box<error::Error>>
     where
         T: AsRef<str> + Ord + 'b,
@@ -341,8 +351,7 @@ mod tests {
     use crate::authenticator::GetToken;
     use crate::helper::service_account_key_from_file;
     use hyper;
-    use hyper::net::HttpsConnector;
-    use hyper_native_tls::NativeTlsClient;
+    use hyper_tls::HttpsConnector;
 
     // This is a valid but deactivated key.
     const TEST_PRIVATE_KEY_PATH: &'static str = "examples/Sanguine-69411a0c0eea.json";
@@ -351,9 +360,12 @@ mod tests {
     //#[test]
     #[allow(dead_code)]
     fn test_service_account_e2e() {
-        let key = service_account_key_from_file(TEST_PRIVATE_KEY_PATH).unwrap();
-        let client =
-            hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
+        let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
+        let https = HttpsConnector::new(4).unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let client = hyper::Client::builder()
+            .executor(runtime.executor())
+            .build(https);
         let mut acc = ServiceAccountAccess::new(key, client);
         println!(
             "{:?}",
