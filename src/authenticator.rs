@@ -1,4 +1,3 @@
-use std::borrow::BorrowMut;
 use std::cmp::min;
 use std::collections::hash_map::DefaultHasher;
 use std::convert::From;
@@ -37,7 +36,7 @@ pub struct Authenticator<D, S, C> {
     flow_type: FlowType,
     delegate: D,
     storage: S,
-    client: C,
+    client: hyper::Client<C, hyper::Body>,
     secret: ApplicationSecret,
 }
 
@@ -53,11 +52,11 @@ pub trait GetToken {
     fn api_key(&mut self) -> Option<String>;
 }
 
-impl<D, S, C> Authenticator<D, S, C>
+impl<'a, D, S, C: 'static> Authenticator<D, S, C>
 where
     D: AuthenticatorDelegate,
     S: TokenStorage,
-    C: BorrowMut<hyper::Client>,
+    C: hyper::client::connect::Connect,
 {
     /// Returns a new `Authenticator` instance
     ///
@@ -75,7 +74,7 @@ where
     pub fn new(
         secret: &ApplicationSecret,
         delegate: D,
-        client: C,
+        client: hyper::Client<C, hyper::Body>,
         storage: S,
         flow_type: Option<FlowType>,
     ) -> Authenticator<D, S, C> {
@@ -101,7 +100,7 @@ where
             _ => installed_type = None,
         }
 
-        let mut flow = InstalledFlow::new(self.client.borrow_mut(), installed_type);
+        let mut flow = InstalledFlow::new(self.client.clone(), installed_type);
         flow.obtain_token(&mut self.delegate, &self.secret, scopes.iter())
     }
 
@@ -110,7 +109,7 @@ where
         scopes: &Vec<&str>,
         code_url: String,
     ) -> Result<Token, Box<Error>> {
-        let mut flow = DeviceFlow::new(self.client.borrow_mut(), &self.secret, &code_url);
+        let mut flow = DeviceFlow::new(self.client.clone(), &self.secret, &code_url);
 
         // PHASE 1: REQUEST CODE
         let pi: PollInformation;
@@ -120,6 +119,12 @@ where
             pi = match res {
                 Err(res_err) => {
                     match res_err {
+                        RequestError::ClientError(err) => match self.delegate.client_error(&err) {
+                            Retry::Abort | Retry::Skip => {
+                                return Err(Box::new(StringError::from(&err as &Error)));
+                            }
+                            Retry::After(d) => sleep(d),
+                        },
                         RequestError::HttpError(err) => {
                             match self.delegate.connection_error(&err) {
                                 Retry::Abort | Retry::Skip => {
@@ -152,14 +157,12 @@ where
                 Err(ref poll_err) => {
                     let pts = poll_err.to_string();
                     match poll_err {
-                        &&PollError::HttpError(ref err) => {
-                            match self.delegate.connection_error(err) {
-                                Retry::Abort | Retry::Skip => {
-                                    return Err(Box::new(StringError::from(err as &Error)));
-                                }
-                                Retry::After(d) => sleep(d),
+                        &&PollError::HttpError(ref err) => match self.delegate.client_error(err) {
+                            Retry::Abort | Retry::Skip => {
+                                return Err(Box::new(StringError::from(err as &Error)));
                             }
-                        }
+                            Retry::After(d) => sleep(d),
+                        },
                         &&PollError::Expired(ref t) => {
                             self.delegate.expired(t);
                             return Err(Box::new(StringError::from(pts)));
@@ -185,11 +188,11 @@ where
     }
 }
 
-impl<D, S, C> GetToken for Authenticator<D, S, C>
+impl<D, S, C: 'static> GetToken for Authenticator<D, S, C>
 where
     D: AuthenticatorDelegate,
     S: TokenStorage,
-    C: BorrowMut<hyper::Client>,
+    C: hyper::client::connect::Connect,
 {
     /// Blocks until a token was retrieved from storage, from the server, or until the delegate
     /// decided to abort the attempt, or the user decided not to authorize the application.
@@ -219,15 +222,18 @@ where
                 Ok(Some(mut t)) => {
                     // t needs refresh ?
                     if t.expired() {
-                        let mut rf = RefreshFlow::new(self.client.borrow_mut());
+                        let mut rf = RefreshFlow::new(self.client.clone());
                         loop {
                             match *rf.refresh_token(
                                 self.flow_type.clone(),
                                 &self.secret,
                                 &t.refresh_token,
                             ) {
+                                RefreshResult::Uninitialized => {
+                                    panic!("Token flow should never get here");
+                                }
                                 RefreshResult::Error(ref err) => {
-                                    match self.delegate.connection_error(err) {
+                                    match self.delegate.client_error(err) {
                                         Retry::Abort | Retry::Skip => {
                                             return Err(Box::new(StringError::new(
                                                 err.description().to_string(),
@@ -345,17 +351,21 @@ mod tests {
     use std::default::Default;
 
     #[test]
-    fn flow() {
+    fn test_flow() {
         use serde_json as json;
 
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         let secret = json::from_str::<ConsoleApplicationSecret>(SECRET)
             .unwrap()
             .installed
             .unwrap();
+        let client = hyper::Client::builder()
+            .executor(runtime.executor())
+            .build(MockGoogleAuth::default());
         let res = Authenticator::new(
             &secret,
             DefaultAuthenticatorDelegate,
-            hyper::Client::with_connector(<MockGoogleAuth as Default>::default()),
+            client,
             <MemoryStorage as Default>::default(),
             None,
         )
@@ -363,7 +373,7 @@ mod tests {
 
         match res {
             Ok(t) => assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg"),
-            _ => panic!("Expected to retrieve token in one go"),
+            Err(err) => panic!("Expected to retrieve token in one go: {}", err),
         }
     }
 }

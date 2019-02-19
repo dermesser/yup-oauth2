@@ -58,10 +58,17 @@ impl fmt::Display for PollError {
 /// The only method that needs to be implemented manually is `present_user_code(...)`,
 /// as no assumptions are made on how this presentation should happen.
 pub trait AuthenticatorDelegate {
+    /// Called whenever there is an client, usually if there are network problems.
+    ///
+    /// Return retry information.
+    fn client_error(&mut self, _: &hyper::Error) -> Retry {
+        Retry::Abort
+    }
+
     /// Called whenever there is an HttpError, usually if there are network problems.
     ///
     /// Return retry information.
-    fn connection_error(&mut self, _: &hyper::Error) -> Retry {
+    fn connection_error(&mut self, _: &hyper::http::Error) -> Retry {
         Retry::Abort
     }
 

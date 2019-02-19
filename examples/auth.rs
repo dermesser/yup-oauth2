@@ -1,10 +1,10 @@
 use chrono::Local;
 use getopts::{Fail, HasArg, Occur, Options};
+use hyper_tls::HttpsConnector;
 use std::default::Default;
 use std::env;
 use std::thread::sleep;
 use std::time::Duration;
-use yup_hyper_mock as mock;
 use yup_oauth2::{self as oauth2, GetToken};
 
 fn usage(program: &str, opts: &Options, err: Option<Fail>) -> ! {
@@ -92,9 +92,8 @@ fn main() {
         }
     }
 
-    let client = hyper::Client::with_connector(mock::TeeConnector {
-        connector: hyper::net::HttpConnector,
-    });
+    let https = HttpsConnector::new(4).unwrap();
+    let client = hyper::Client::builder().build(https);
 
     match oauth2::Authenticator::new(&secret, StdoutHandler, client, oauth2::NullStorage, None)
         .token(&m.free)
@@ -109,5 +108,5 @@ fn main() {
             println!("Access token wasn't obtained: {}", err);
             std::process::exit(10);
         }
-    }
+    };
 }
