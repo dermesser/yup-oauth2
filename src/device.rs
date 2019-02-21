@@ -1,19 +1,19 @@
+use std::default::Default;
 use std::iter::IntoIterator;
 use std::time::Duration;
-use std::default::Default;
 
+use chrono::{self, Utc};
 use hyper;
 use hyper::header::ContentType;
-use url::form_urlencoded;
 use itertools::Itertools;
 use serde_json as json;
-use chrono::{self, Utc};
 use std::borrow::BorrowMut;
-use std::io::Read;
 use std::i64;
+use std::io::Read;
+use url::form_urlencoded;
 
-use crate::types::{ApplicationSecret, Token, FlowType, Flow, RequestError, JsonError};
 use crate::authenticator_delegate::{PollError, PollInformation};
+use crate::types::{ApplicationSecret, Flow, FlowType, JsonError, RequestError, Token};
 
 pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/oauth2/device/code";
 
@@ -46,10 +46,14 @@ impl<C> Flow for DeviceFlow<C> {
     }
 }
 impl<C> DeviceFlow<C>
-    where C: BorrowMut<hyper::Client>
+where
+    C: BorrowMut<hyper::Client>,
 {
-
-    pub fn new<S: AsRef<str>>(client: C, secret: &ApplicationSecret, device_code_url: S) -> DeviceFlow<C> {
+    pub fn new<S: AsRef<str>>(
+        client: C,
+        secret: &ApplicationSecret,
+        device_code_url: S,
+    ) -> DeviceFlow<C> {
         DeviceFlow {
             client: client,
             device_code: Default::default(),
@@ -75,11 +79,10 @@ impl<C> DeviceFlow<C>
     /// * If called after a successful result was returned at least once.
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    pub fn request_code<'b, T, I>(&mut self,
-                                  scopes: I)
-                                  -> Result<PollInformation, RequestError>
-        where T: AsRef<str> + 'b,
-              I: IntoIterator<Item = &'b T>
+    pub fn request_code<'b, T, I>(&mut self, scopes: I) -> Result<PollInformation, RequestError>
+    where
+        T: AsRef<str> + 'b,
+        I: IntoIterator<Item = &'b T>,
     {
         if self.state.is_some() {
             panic!("Must not be called after we have obtained a token and have no error");
@@ -88,28 +91,35 @@ impl<C> DeviceFlow<C>
         // note: cloned() shouldn't be needed, see issue
         // https://github.com/servo/rust-url/issues/81
         let req = form_urlencoded::Serializer::new(String::new())
-            .extend_pairs(&[("client_id", &self.application_secret.client_id),
-                            ("scope", &scopes
-                                          .into_iter()
-                                          .map(|s| s.as_ref())
-                                          .intersperse(" ")
-                                          .collect::<String>())])
+            .extend_pairs(&[
+                ("client_id", &self.application_secret.client_id),
+                (
+                    "scope",
+                    &scopes
+                        .into_iter()
+                        .map(|s| s.as_ref())
+                        .intersperse(" ")
+                        .collect::<String>(),
+                ),
+            ])
             .finish();
 
         // note: works around bug in rustlang
         // https://github.com/rust-lang/rust/issues/22252
-        let ret = match self.client
+        let ret = match self
+            .client
             .borrow_mut()
             .post(&self.device_code_url)
-            .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
+            .header(ContentType(
+                "application/x-www-form-urlencoded".parse().unwrap(),
+            ))
             .body(&*req)
-            .send() {
+            .send()
+        {
             Err(err) => {
                 return Err(RequestError::HttpError(err));
             }
             Ok(mut res) => {
-
-
                 #[derive(Deserialize)]
                 struct JsonData {
                     device_code: String,
@@ -166,13 +176,11 @@ impl<C> DeviceFlow<C>
     pub fn poll_token(&mut self) -> Result<Option<Token>, &PollError> {
         // clone, as we may re-assign our state later
         let pi = match self.state {
-            Some(ref s) => {
-                match *s {
-                    DeviceFlowState::Pending(ref pi) => pi.clone(),
-                    DeviceFlowState::Error => return Err(self.error.as_ref().unwrap()),
-                    DeviceFlowState::Success(ref t) => return Ok(Some(t.clone())),
-                }
-            }
+            Some(ref s) => match *s {
+                DeviceFlowState::Pending(ref pi) => pi.clone(),
+                DeviceFlowState::Error => return Err(self.error.as_ref().unwrap()),
+                DeviceFlowState::Success(ref t) => return Ok(Some(t.clone())),
+            },
             _ => panic!("You have to call request_code() beforehand"),
         };
 
@@ -184,18 +192,24 @@ impl<C> DeviceFlow<C>
 
         // We should be ready for a new request
         let req = form_urlencoded::Serializer::new(String::new())
-            .extend_pairs(&[("client_id", &self.application_secret.client_id[..]),
-                            ("client_secret", &self.application_secret.client_secret),
-                            ("code", &self.device_code),
-                            ("grant_type", "http://oauth.net/grant_type/device/1.0")])
+            .extend_pairs(&[
+                ("client_id", &self.application_secret.client_id[..]),
+                ("client_secret", &self.application_secret.client_secret),
+                ("code", &self.device_code),
+                ("grant_type", "http://oauth.net/grant_type/device/1.0"),
+            ])
             .finish();
 
-        let json_str: String = match self.client
+        let json_str: String = match self
+            .client
             .borrow_mut()
             .post(&self.application_secret.token_uri)
-            .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
+            .header(ContentType(
+                "application/x-www-form-urlencoded".parse().unwrap(),
+            ))
             .body(&*req)
-            .send() {
+            .send()
+        {
             Err(err) => {
                 self.error = Some(PollError::HttpError(err));
                 return Err(self.error.as_ref().unwrap());
@@ -237,48 +251,52 @@ impl<C> DeviceFlow<C>
     }
 }
 
-
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use hyper;
     use std::default::Default;
     use std::time::Duration;
-    use hyper;
-    use yup_hyper_mock::{SequentialConnector, MockStream};
+    use yup_hyper_mock::{MockStream, SequentialConnector};
 
     pub struct MockGoogleAuth(SequentialConnector);
 
     impl Default for MockGoogleAuth {
         fn default() -> MockGoogleAuth {
             let mut c = MockGoogleAuth(Default::default());
-            c.0.content.push("HTTP/1.1 200 OK\r\n\
-                                 Server: BOGUS\r\n\
-                                 \r\n\
-                                {\r\n\
-                                  \"device_code\" : \"4/L9fTtLrhY96442SEuf1Rl3KLFg3y\",\r\n\
-                                  \"user_code\" : \"a9xfwk9c\",\r\n\
-                                  \"verification_url\" : \"http://www.google.com/device\",\r\n\
-                                  \"expires_in\" : 1800,\r\n\
-                                  \"interval\" : 0\r\n\
-                                }"
-                .to_string());
+            c.0.content.push(
+                "HTTP/1.1 200 OK\r\n\
+                 Server: BOGUS\r\n\
+                 \r\n\
+                 {\r\n\
+                 \"device_code\" : \"4/L9fTtLrhY96442SEuf1Rl3KLFg3y\",\r\n\
+                 \"user_code\" : \"a9xfwk9c\",\r\n\
+                 \"verification_url\" : \"http://www.google.com/device\",\r\n\
+                 \"expires_in\" : 1800,\r\n\
+                 \"interval\" : 0\r\n\
+                 }"
+                .to_string(),
+            );
 
-            c.0.content.push("HTTP/1.1 200 OK\r\n\
-                             Server: BOGUS\r\n\
-                             \r\n\
-                            {\r\n\
-                                \"error\" : \"authorization_pending\"\r\n\
-                            }"
-                .to_string());
+            c.0.content.push(
+                "HTTP/1.1 200 OK\r\n\
+                 Server: BOGUS\r\n\
+                 \r\n\
+                 {\r\n\
+                 \"error\" : \"authorization_pending\"\r\n\
+                 }"
+                .to_string(),
+            );
 
-            c.0.content.push("HTTP/1.1 200 OK\r\nServer: \
-                              BOGUS\r\n\r\n{\r\n\"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\
-                              \r\n\"expires_in\":3920,\r\n\"token_type\":\"Bearer\",\
-                              \r\n\"refresh_token\":\
-                              \"1/6BMfW9j53gdGImsixUH6kU5RsR4zwI9lUVX-tqf8JXQ\"\r\n}"
-                .to_string());
+            c.0.content.push(
+                "HTTP/1.1 200 OK\r\nServer: \
+                 BOGUS\r\n\r\n{\r\n\"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\
+                 \r\n\"expires_in\":3920,\r\n\"token_type\":\"Bearer\",\
+                 \r\n\"refresh_token\":\
+                 \"1/6BMfW9j53gdGImsixUH6kU5RsR4zwI9lUVX-tqf8JXQ\"\r\n}"
+                    .to_string(),
+            );
             c
-
         }
     }
 
@@ -298,10 +316,12 @@ pub mod tests {
 
         let appsecret = parse_application_secret(&TEST_APP_SECRET.to_string()).unwrap();
         let mut flow = DeviceFlow::new(
-                    hyper::Client::with_connector(<MockGoogleAuth as Default>::default()), &appsecret, GOOGLE_DEVICE_CODE_URL);
+            hyper::Client::with_connector(<MockGoogleAuth as Default>::default()),
+            &appsecret,
+            GOOGLE_DEVICE_CODE_URL,
+        );
 
-        match flow.request_code(
-                                &["https://www.googleapis.com/auth/youtube.upload"]) {
+        match flow.request_code(&["https://www.googleapis.com/auth/youtube.upload"]) {
             Ok(pi) => assert_eq!(pi.interval, Duration::from_secs(0)),
             _ => unreachable!(),
         }

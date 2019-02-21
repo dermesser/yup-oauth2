@@ -44,7 +44,7 @@ jobs:
         - rustup component add clippy
         - rustup component add rustfmt
       script:
-        - cargo fmt --all -- --check || true
+        - cargo fmt --all -- --check
         - cargo clippy --all-targets --all-features -- -D warnings || true
 
     - stage: coverage

@@ -1,8 +1,8 @@
-use chrono::{DateTime, Utc, TimeZone};
+use chrono::{DateTime, TimeZone, Utc};
+use hyper;
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
-use hyper;
 
 /// A marker trait for all Flows
 pub trait Flow {
@@ -34,10 +34,11 @@ impl From<JsonError> for RequestError {
     fn from(value: JsonError) -> RequestError {
         match &*value.error {
             "invalid_client" => RequestError::InvalidClient,
-            "invalid_scope" => {
-                RequestError::InvalidScope(value.error_description
-                    .unwrap_or("no description provided".to_string()))
-            }
+            "invalid_scope" => RequestError::InvalidScope(
+                value
+                    .error_description
+                    .unwrap_or("no description provided".to_string()),
+            ),
             _ => RequestError::NegativeServerResponse(value.error, value.error_description),
         }
     }
@@ -101,7 +102,6 @@ impl Error for StringError {
     }
 }
 
-
 /// Represents all implemented token types
 #[derive(Clone, PartialEq, Debug)]
 pub enum TokenType {
@@ -126,7 +126,6 @@ impl FromStr for TokenType {
         }
     }
 }
-
 
 /// A scheme for use in `hyper::header::Authorization`
 #[derive(Clone, PartialEq, Debug)]
@@ -155,12 +154,10 @@ impl FromStr for Scheme {
             return Err("Expected two parts: <token_type> <token>");
         }
         match <TokenType as FromStr>::from_str(parts[0]) {
-            Ok(t) => {
-                Ok(Scheme {
-                    token_type: t,
-                    access_token: parts[1].to_string(),
-                })
-            }
+            Ok(t) => Ok(Scheme {
+                token_type: t,
+                access_token: parts[1].to_string(),
+            }),
             Err(_) => Err("Couldn't parse token type"),
         }
     }
@@ -208,9 +205,11 @@ impl Token {
 
     /// Returns a DateTime object representing our expiry date.
     pub fn expiry_date(&self) -> DateTime<Utc> {
-        Utc.timestamp(self.expires_in_timestamp
-                          .expect("Tokens without an absolute expiry are invalid"),
-                      0)
+        Utc.timestamp(
+            self.expires_in_timestamp
+                .expect("Tokens without an absolute expiry are invalid"),
+            0,
+        )
     }
 
     /// Adjust our stored expiry format to be absolute, using the current time.
@@ -307,8 +306,10 @@ pub mod tests {
         };
         let mut headers = hyper::header::Headers::new();
         headers.set(hyper::header::Authorization(s));
-        assert_eq!(headers.to_string(),
-                   "Authorization: Bearer foo\r\n".to_string());
+        assert_eq!(
+            headers.to_string(),
+            "Authorization: Bearer foo\r\n".to_string()
+        );
     }
 
     #[test]

@@ -1,8 +1,8 @@
 use hyper;
 
+use std::error::Error;
 use std::fmt;
 use std::io;
-use std::error::Error;
 
 use crate::authenticator::Retry;
 use crate::types::RequestError;
@@ -52,8 +52,6 @@ impl fmt::Display for PollError {
         }
     }
 }
-
-
 
 /// A partially implemented trait to interact with the `Authenticator`
 ///
@@ -123,12 +121,15 @@ pub trait AuthenticatorDelegate {
     /// * Will be called exactly once, provided we didn't abort during `request_code` phase.
     /// * Will only be called if the Authenticator's flow_type is `FlowType::Device`.
     fn present_user_code(&mut self, pi: &PollInformation) {
-        println!("Please enter {} at {} and grant access to this application",
-                 pi.user_code,
-                 pi.verification_url);
+        println!(
+            "Please enter {} at {} and grant access to this application",
+            pi.user_code, pi.verification_url
+        );
         println!("Do not close this application until you either denied or granted access.");
-        println!("You have time until {}.",
-                 pi.expires_at.with_timezone(&Local));
+        println!(
+            "You have time until {}.",
+            pi.expires_at.with_timezone(&Local)
+        );
     }
 
     /// This method is used by the InstalledFlow.
@@ -137,9 +138,11 @@ pub trait AuthenticatorDelegate {
     /// used.
     fn present_user_url(&mut self, url: &String, need_code: bool) -> Option<String> {
         if need_code {
-            println!("Please direct your browser to {}, follow the instructions and enter the \
-                      code displayed here: ",
-                     url);
+            println!(
+                "Please direct your browser to {}, follow the instructions and enter the \
+                 code displayed here: ",
+                url
+            );
 
             let mut code = String::new();
             io::stdin().read_line(&mut code).ok().map(|_| {
@@ -148,9 +151,11 @@ pub trait AuthenticatorDelegate {
                 code
             })
         } else {
-            println!("Please direct your browser to {} and follow the instructions displayed \
-                      there.",
-                     url);
+            println!(
+                "Please direct your browser to {} and follow the instructions displayed \
+                 there.",
+                url
+            );
             None
         }
     }

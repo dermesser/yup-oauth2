@@ -37,7 +37,7 @@
 //! ```test_harness,no_run
 //! #[macro_use]
 //! extern crate serde_derive;
-//! 
+//!
 //! use yup_oauth2::{Authenticator, DefaultAuthenticatorDelegate, PollInformation, ConsoleApplicationSecret, MemoryStorage, GetToken};
 //! use serde_json as json;
 //! use std::default::Default;
@@ -73,12 +73,12 @@ extern crate chrono;
 extern crate hyper;
 extern crate hyper_native_tls;
 
+extern crate itertools;
 #[cfg(test)]
 extern crate log;
+extern crate url;
 #[cfg(test)]
 extern crate yup_hyper_mock;
-extern crate url;
-extern crate itertools;
 
 mod authenticator;
 mod authenticator_delegate;
@@ -90,14 +90,16 @@ mod service_account;
 mod storage;
 mod types;
 
-pub use crate::device::{GOOGLE_DEVICE_CODE_URL, DeviceFlow};
-pub use crate::refresh::{RefreshFlow, RefreshResult};
-pub use crate::types::{Token, FlowType, ApplicationSecret, ConsoleApplicationSecret, Scheme, TokenType};
-pub use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
-pub use crate::storage::{TokenStorage, NullStorage, MemoryStorage, DiskTokenStorage};
-pub use crate::authenticator::{Authenticator, Retry, GetToken};
-pub use crate::authenticator_delegate::{AuthenticatorDelegate, DefaultAuthenticatorDelegate, PollError,
-                                 PollInformation};
+pub use crate::authenticator::{Authenticator, GetToken, Retry};
+pub use crate::authenticator_delegate::{
+    AuthenticatorDelegate, DefaultAuthenticatorDelegate, PollError, PollInformation,
+};
+pub use crate::device::{DeviceFlow, GOOGLE_DEVICE_CODE_URL};
 pub use crate::helper::*;
+pub use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
+pub use crate::refresh::{RefreshFlow, RefreshResult};
 pub use crate::service_account::*;
-
+pub use crate::storage::{DiskTokenStorage, MemoryStorage, NullStorage, TokenStorage};
+pub use crate::types::{
+    ApplicationSecret, ConsoleApplicationSecret, FlowType, Scheme, Token, TokenType,
+};

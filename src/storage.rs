@@ -5,14 +5,14 @@
 
 extern crate serde_json;
 
-use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::io::{Read, Write};
 use std::io;
+use std::io::{Read, Write};
 
 use crate::types::Token;
 
@@ -26,21 +26,24 @@ pub trait TokenStorage {
 
     /// If `token` is None, it is invalid or revoked and should be removed from storage.
     /// Otherwise, it should be saved.
-    fn set(&mut self,
-           scope_hash: u64,
-           scopes: &Vec<&str>,
-           token: Option<Token>)
-           -> Result<(), Self::Error>;
+    fn set(
+        &mut self,
+        scope_hash: u64,
+        scopes: &Vec<&str>,
+        token: Option<Token>,
+    ) -> Result<(), Self::Error>;
     /// A `None` result indicates that there is no token for the given scope_hash.
     fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, Self::Error>;
 }
 
 /// Calculate a hash value describing the scopes, and return a sorted Vec of the scopes.
 pub fn hash_scopes<'a, I, T>(scopes: I) -> (u64, Vec<&'a str>)
-    where T: AsRef<str> + Ord + 'a,
-          I: IntoIterator<Item = &'a T>
+where
+    T: AsRef<str> + Ord + 'a,
+    I: IntoIterator<Item = &'a T>,
 {
-    let mut sv: Vec<&str> = scopes.into_iter()
+    let mut sv: Vec<&str> = scopes
+        .into_iter()
         .map(|s| s.as_ref())
         .collect::<Vec<&str>>();
     sv.sort();
@@ -87,11 +90,12 @@ pub struct MemoryStorage {
 impl TokenStorage for MemoryStorage {
     type Error = NullError;
 
-    fn set(&mut self,
-           scope_hash: u64,
-           _: &Vec<&str>,
-           token: Option<Token>)
-           -> Result<(), NullError> {
+    fn set(
+        &mut self,
+        scope_hash: u64,
+        _: &Vec<&str>,
+        token: Option<Token>,
+    ) -> Result<(), NullError> {
         match token {
             Some(t) => self.tokens.insert(scope_hash, t),
             None => self.tokens.remove(&scope_hash),
@@ -142,7 +146,7 @@ impl DiskTokenStorage {
             Result::Err(e) => {
                 match e.kind() {
                     io::ErrorKind::NotFound => Result::Ok(dts), // File not found; ignore and create new one
-                    _ => Result::Err(e), // e.g. PermissionDenied
+                    _ => Result::Err(e),                        // e.g. PermissionDenied
                 }
             }
         }
@@ -198,11 +202,12 @@ impl DiskTokenStorage {
 
 impl TokenStorage for DiskTokenStorage {
     type Error = io::Error;
-    fn set(&mut self,
-           scope_hash: u64,
-           _: &Vec<&str>,
-           token: Option<Token>)
-           -> Result<(), Self::Error> {
+    fn set(
+        &mut self,
+        scope_hash: u64,
+        _: &Vec<&str>,
+        token: Option<Token>,
+    ) -> Result<(), Self::Error> {
         match token {
             None => {
                 self.tokens.remove(&scope_hash);

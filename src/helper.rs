@@ -9,12 +9,12 @@
 
 use serde_json;
 
-use std::io::{self, Read};
 use std::fs;
+use std::io::{self, Read};
 use std::path::Path;
 
 use crate::service_account::ServiceAccountKey;
-use crate::types::{ConsoleApplicationSecret, ApplicationSecret};
+use crate::types::{ApplicationSecret, ConsoleApplicationSecret};
 
 /// Read an application secret from a file.
 pub fn read_application_secret(path: &Path) -> io::Result<ApplicationSecret> {
@@ -31,18 +31,20 @@ pub fn read_application_secret(path: &Path) -> io::Result<ApplicationSecret> {
 pub fn parse_application_secret(secret: &String) -> io::Result<ApplicationSecret> {
     let result: serde_json::Result<ConsoleApplicationSecret> = serde_json::from_str(secret);
     match result {
-        Err(e) => {
-            Err(io::Error::new(io::ErrorKind::InvalidData,
-                               format!("Bad application secret: {}", e)))
-        }
+        Err(e) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Bad application secret: {}", e),
+        )),
         Ok(decoded) => {
             if decoded.web.is_some() {
                 Ok(decoded.web.unwrap())
             } else if decoded.installed.is_some() {
                 Ok(decoded.installed.unwrap())
             } else {
-                Err(io::Error::new(io::ErrorKind::InvalidData,
-                                   "Unknown application secret format"))
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Unknown application secret format",
+                ))
             }
         }
     }
