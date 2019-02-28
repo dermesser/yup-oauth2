@@ -1,13 +1,13 @@
 use crate::types::{ApplicationSecret, FlowType, JsonError};
 
+use super::Token;
 use chrono::Utc;
 use hyper;
 use hyper::header::ContentType;
 use serde_json as json;
-use url::form_urlencoded;
-use super::Token;
 use std::borrow::BorrowMut;
 use std::io::Read;
+use url::form_urlencoded;
 
 /// Implements the [Outh2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
 ///
@@ -18,7 +18,6 @@ pub struct RefreshFlow<C> {
     client: C,
     result: RefreshResult,
 }
-
 
 /// All possible outcomes of the refresh flow
 pub enum RefreshResult {
@@ -31,7 +30,8 @@ pub enum RefreshResult {
 }
 
 impl<C> RefreshFlow<C>
-    where C: BorrowMut<hyper::Client>
+where
+    C: BorrowMut<hyper::Client>,
 {
     pub fn new(client: C) -> RefreshFlow<C> {
         RefreshFlow {
@@ -54,29 +54,36 @@ impl<C> RefreshFlow<C>
     ///
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub fn refresh_token(&mut self,
-                         flow_type: FlowType,
-                         client_secret: &ApplicationSecret,
-                         refresh_token: &str)
-                         -> &RefreshResult {
+    pub fn refresh_token(
+        &mut self,
+        flow_type: FlowType,
+        client_secret: &ApplicationSecret,
+        refresh_token: &str,
+    ) -> &RefreshResult {
         let _ = flow_type;
         if let RefreshResult::Success(_) = self.result {
             return &self.result;
         }
 
         let req = form_urlencoded::Serializer::new(String::new())
-            .extend_pairs(&[("client_id", client_secret.client_id.as_ref()),
-                            ("client_secret", client_secret.client_secret.as_ref()),
-                            ("refresh_token", refresh_token),
-                            ("grant_type", "refresh_token")])
+            .extend_pairs(&[
+                ("client_id", client_secret.client_id.as_ref()),
+                ("client_secret", client_secret.client_secret.as_ref()),
+                ("refresh_token", refresh_token),
+                ("grant_type", "refresh_token"),
+            ])
             .finish();
 
-        let json_str: String = match self.client
+        let json_str: String = match self
+            .client
             .borrow_mut()
             .post(&client_secret.token_uri)
-            .header(ContentType("application/x-www-form-urlencoded".parse().unwrap()))
+            .header(ContentType(
+                "application/x-www-form-urlencoded".parse().unwrap(),
+            ))
             .body(&*req)
-            .send() {
+            .send()
+        {
             Err(err) => {
                 self.result = RefreshResult::Error(err);
                 return &self.result;
@@ -116,32 +123,32 @@ impl<C> RefreshFlow<C>
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
+    use super::super::FlowType;
+    use super::*;
+    use crate::device::GOOGLE_DEVICE_CODE_URL;
+    use crate::helper::parse_application_secret;
     use hyper;
     use std::default::Default;
-    use super::*;
-    use super::super::FlowType;
     use yup_hyper_mock::{MockStream, SequentialConnector};
-        use crate::helper::parse_application_secret;
-        use crate::device::GOOGLE_DEVICE_CODE_URL;
 
     struct MockGoogleRefresh(SequentialConnector);
 
     impl Default for MockGoogleRefresh {
         fn default() -> MockGoogleRefresh {
             let mut c = MockGoogleRefresh(Default::default());
-            c.0.content.push("HTTP/1.1 200 OK\r\n\
-                             Server: BOGUS\r\n\
-                             \r\n\
-                            {\r\n\
-                              \"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\r\n\
-                              \"expires_in\":3920,\r\n\
-                              \"token_type\":\"Bearer\"\r\n\
-                            }"
-                .to_string());
+            c.0.content.push(
+                "HTTP/1.1 200 OK\r\n\
+                 Server: BOGUS\r\n\
+                 \r\n\
+                 {\r\n\
+                 \"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\r\n\
+                 \"expires_in\":3920,\r\n\
+                 \"token_type\":\"Bearer\"\r\n\
+                 }"
+                .to_string(),
+            );
 
             c
         }
@@ -159,14 +166,16 @@ mod tests {
 
     #[test]
     fn refresh_flow() {
-
         let appsecret = parse_application_secret(&TEST_APP_SECRET.to_string()).unwrap();
 
         let mut c = hyper::Client::with_connector(<MockGoogleRefresh as Default>::default());
         let mut flow = RefreshFlow::new(&mut c);
 
-
-        match *flow.refresh_token(FlowType::Device(GOOGLE_DEVICE_CODE_URL.to_string()), &appsecret, "bogus_refresh_token") {
+        match *flow.refresh_token(
+            FlowType::Device(GOOGLE_DEVICE_CODE_URL.to_string()),
+            &appsecret,
+            "bogus_refresh_token",
+        ) {
             RefreshResult::Success(ref t) => {
                 assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
                 assert!(!t.expired());

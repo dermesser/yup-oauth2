@@ -10,8 +10,8 @@ use std::convert::AsRef;
 use std::error::Error;
 use std::io;
 use std::io::Read;
-use std::sync::Mutex;
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Mutex;
 
 use hyper;
 use hyper::{client, header, server, status, uri};
@@ -19,21 +19,23 @@ use serde_json::error;
 use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
-use crate::types::{ApplicationSecret, Token};
 use crate::authenticator_delegate::AuthenticatorDelegate;
+use crate::types::{ApplicationSecret, Token};
 
 const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
 
 /// Assembles a URL to request an authorization token (with user interaction).
 /// Note that the redirect_uri here has to be either None or some variation of
 /// http://localhost:{port}, or the authorization won't work (error "redirect_uri_mismatch")
-fn build_authentication_request_url<'a, T, I>(auth_uri: &str,
-                                              client_id: &str,
-                                              scopes: I,
-                                              redirect_uri: Option<String>)
-                                              -> String
-    where T: AsRef<str> + 'a,
-          I: IntoIterator<Item = &'a T>
+fn build_authentication_request_url<'a, T, I>(
+    auth_uri: &str,
+    client_id: &str,
+    scopes: I,
+    redirect_uri: Option<String>,
+) -> String
+where
+    T: AsRef<str> + 'a,
+    I: IntoIterator<Item = &'a T>,
 {
     let mut url = String::new();
     let mut scopes_string = scopes.into_iter().fold(String::new(), |mut acc, sc| {
@@ -45,16 +47,20 @@ fn build_authentication_request_url<'a, T, I>(auth_uri: &str,
     scopes_string.pop();
 
     url.push_str(auth_uri);
-    vec![format!("?scope={}", scopes_string),
-         format!("&redirect_uri={}",
-                 redirect_uri.unwrap_or(OOB_REDIRECT_URI.to_string())),
-         format!("&response_type=code"),
-         format!("&client_id={}", client_id)]
-        .into_iter()
-        .fold(url, |mut u, param| {
-            u.push_str(&percent_encode(param.as_ref(), QUERY_ENCODE_SET).to_string());
-            u
-        })
+    vec![
+        format!("?scope={}", scopes_string),
+        format!(
+            "&redirect_uri={}",
+            redirect_uri.unwrap_or(OOB_REDIRECT_URI.to_string())
+        ),
+        format!("&response_type=code"),
+        format!("&client_id={}", client_id),
+    ]
+    .into_iter()
+    .fold(url, |mut u, param| {
+        u.push_str(&percent_encode(param.as_ref(), QUERY_ENCODE_SET).to_string());
+        u
+    })
 }
 
 pub struct InstalledFlow<C> {
@@ -77,7 +83,8 @@ pub enum InstalledFlowReturnMethod {
 }
 
 impl<C> InstalledFlow<C>
-    where C: BorrowMut<hyper::Client>
+where
+    C: BorrowMut<hyper::Client>,
 {
     /// Starts a new Installed App auth flow.
     /// If HTTPRedirect is chosen as method and the server can't be started, the flow falls
@@ -100,19 +107,18 @@ impl<C> InstalledFlow<C>
                     Result::Err(_) => default,
                     Result::Ok(server) => {
                         let (tx, rx) = channel();
-                        let listening =
-                            server.handle(InstalledFlowHandler { auth_code_snd: Mutex::new(tx) });
+                        let listening = server.handle(InstalledFlowHandler {
+                            auth_code_snd: Mutex::new(tx),
+                        });
 
                         match listening {
                             Result::Err(_) => default,
-                            Result::Ok(listening) => {
-                                InstalledFlow {
-                                    client: default.client,
-                                    server: Some(listening),
-                                    port: Some(port),
-                                    auth_code_rcv: Some(rx),
-                                }
-                            }
+                            Result::Ok(listening) => InstalledFlow {
+                                client: default.client,
+                                server: Some(listening),
+                                port: Some(port),
+                                auth_code_rcv: Some(rx),
+                            },
                         }
                     }
                 }
@@ -126,13 +132,15 @@ impl<C> InstalledFlow<C>
     /// . Return that token
     ///
     /// It's recommended not to use the DefaultAuthenticatorDelegate, but a specialized one.
-    pub fn obtain_token<'a, AD: AuthenticatorDelegate, S, T>(&mut self,
-                                                             auth_delegate: &mut AD,
-                                                             appsecret: &ApplicationSecret,
-                                                             scopes: S)
-                                                             -> Result<Token, Box<Error>>
-        where T: AsRef<str> + 'a,
-              S: Iterator<Item = &'a T>
+    pub fn obtain_token<'a, AD: AuthenticatorDelegate, S, T>(
+        &mut self,
+        auth_delegate: &mut AD,
+        appsecret: &ApplicationSecret,
+        scopes: S,
+    ) -> Result<Token, Box<Error>>
+    where
+        T: AsRef<str> + 'a,
+        S: Iterator<Item = &'a T>,
     {
         let authcode = self.get_authorization_code(auth_delegate, &appsecret, scopes)?;
         let tokens = self.request_token(&appsecret, &authcode, auth_delegate.redirect_uri())?;
@@ -150,37 +158,44 @@ impl<C> InstalledFlow<C>
             token.set_expiry_absolute();
             Result::Ok(token)
         } else {
-            let err = io::Error::new(io::ErrorKind::Other,
-                                     format!("Token API error: {} {}",
-                                             tokens.error.unwrap_or("<unknown err>".to_string()),
-                                             tokens.error_description
-                                                 .unwrap_or("".to_string()))
-                                         .as_str());
+            let err = io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "Token API error: {} {}",
+                    tokens.error.unwrap_or("<unknown err>".to_string()),
+                    tokens.error_description.unwrap_or("".to_string())
+                )
+                .as_str(),
+            );
             Result::Err(Box::new(err))
         }
     }
 
     /// Obtains an authorization code either interactively or via HTTP redirect (see
     /// InstalledFlowReturnMethod).
-    fn get_authorization_code<'a, AD: AuthenticatorDelegate, S, T>(&mut self,
-                                                                   auth_delegate: &mut AD,
-                                                                   appsecret: &ApplicationSecret,
-                                                                   scopes: S)
-                                                                   -> Result<String, Box<Error>>
-        where T: AsRef<str> + 'a,
-              S: Iterator<Item = &'a T>
+    fn get_authorization_code<'a, AD: AuthenticatorDelegate, S, T>(
+        &mut self,
+        auth_delegate: &mut AD,
+        appsecret: &ApplicationSecret,
+        scopes: S,
+    ) -> Result<String, Box<Error>>
+    where
+        T: AsRef<str> + 'a,
+        S: Iterator<Item = &'a T>,
     {
         let result: Result<String, Box<Error>> = match self.server {
             None => {
-                let url = build_authentication_request_url(&appsecret.auth_uri,
-                                                           &appsecret.client_id,
-                                                           scopes,
-                                                           auth_delegate.redirect_uri());
+                let url = build_authentication_request_url(
+                    &appsecret.auth_uri,
+                    &appsecret.client_id,
+                    scopes,
+                    auth_delegate.redirect_uri(),
+                );
                 match auth_delegate.present_user_url(&url, true /* need_code */) {
-                    None => {
-                        Result::Err(Box::new(io::Error::new(io::ErrorKind::UnexpectedEof,
-                                                            "couldn't read code")))
-                    }
+                    None => Result::Err(Box::new(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "couldn't read code",
+                    ))),
                     Some(mut code) => {
                         // Partial backwards compatibilty in case an implementation adds a new line
                         // due to previous behaviour.
@@ -196,12 +211,14 @@ impl<C> InstalledFlow<C>
             Some(_) => {
                 // The redirect URI must be this very localhost URL, otherwise Google refuses
                 // authorization.
-                let url = build_authentication_request_url(&appsecret.auth_uri,
-                                                           &appsecret.client_id,
-                                                           scopes,
-                                                           auth_delegate.redirect_uri().or_else(|| {
-                                                               Some(format!("http://localhost:{}", self.port.unwrap_or(8080)))
-                                                           }));
+                let url = build_authentication_request_url(
+                    &appsecret.auth_uri,
+                    &appsecret.client_id,
+                    scopes,
+                    auth_delegate.redirect_uri().or_else(|| {
+                        Some(format!("http://localhost:{}", self.port.unwrap_or(8080)))
+                    }),
+                );
                 auth_delegate.present_user_url(&url, false /* need_code */);
 
                 match self.auth_code_rcv.as_ref().unwrap().recv() {
@@ -215,31 +232,35 @@ impl<C> InstalledFlow<C>
     }
 
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.
-    fn request_token(&mut self,
-                     appsecret: &ApplicationSecret,
-                     authcode: &str,
-                     custom_redirect_uri: Option<String>)
-                     -> Result<JSONTokenResponse, Box<Error>> {
-        let redirect_uri = custom_redirect_uri.unwrap_or_else(|| {
-            match self.port {
-                None => OOB_REDIRECT_URI.to_string(),
-                Some(p) => format!("http://localhost:{}", p),
-            }
+    fn request_token(
+        &mut self,
+        appsecret: &ApplicationSecret,
+        authcode: &str,
+        custom_redirect_uri: Option<String>,
+    ) -> Result<JSONTokenResponse, Box<Error>> {
+        let redirect_uri = custom_redirect_uri.unwrap_or_else(|| match self.port {
+            None => OOB_REDIRECT_URI.to_string(),
+            Some(p) => format!("http://localhost:{}", p),
         });
 
         let body = form_urlencoded::Serializer::new(String::new())
-            .extend_pairs(vec![("code".to_string(), authcode.to_string()),
-                               ("client_id".to_string(), appsecret.client_id.clone()),
-                               ("client_secret".to_string(), appsecret.client_secret.clone()),
-                               ("redirect_uri".to_string(), redirect_uri),
-                               ("grant_type".to_string(), "authorization_code".to_string())])
+            .extend_pairs(vec![
+                ("code".to_string(), authcode.to_string()),
+                ("client_id".to_string(), appsecret.client_id.clone()),
+                ("client_secret".to_string(), appsecret.client_secret.clone()),
+                ("redirect_uri".to_string(), redirect_uri),
+                ("grant_type".to_string(), "authorization_code".to_string()),
+            ])
             .finish();
 
-        let result: Result<client::Response, hyper::Error> = self.client
+        let result: Result<client::Response, hyper::Error> = self
+            .client
             .borrow_mut()
             .post(&appsecret.token_uri)
             .body(&body)
-            .header(header::ContentType("application/x-www-form-urlencoded".parse().unwrap()))
+            .header(header::ContentType(
+                "application/x-www-form-urlencoded".parse().unwrap(),
+            ))
             .send();
 
         let mut resp = String::new();
@@ -296,10 +317,11 @@ impl server::Handler for InstalledFlowHandler {
                 } else {
                     self.handle_url(url.unwrap());
                     *rp.status_mut() = status::StatusCode::Ok;
-                    let _ =
-                        rp.send("<html><head><title>Success</title></head><body>You may now \
-                                 close this window.</body></html>"
-                            .as_ref());
+                    let _ = rp.send(
+                        "<html><head><title>Success</title></head><body>You may now \
+                         close this window.</body></html>"
+                            .as_ref(),
+                    );
                 }
             }
             _ => {
@@ -321,7 +343,6 @@ impl InstalledFlowHandler {
                 let _ = self.auth_code_snd.lock().unwrap().send(val);
             }
         }
-
     }
 }
 
@@ -330,29 +351,34 @@ mod tests {
     use super::build_authentication_request_url;
     use super::InstalledFlowHandler;
 
-    use std::sync::Mutex;
     use std::sync::mpsc::channel;
+    use std::sync::Mutex;
 
     use hyper::Url;
 
     #[test]
     fn test_request_url_builder() {
-        assert_eq!("https://accounts.google.\
-                    com/o/oauth2/auth?scope=email%20profile&redirect_uri=urn:ietf:wg:oauth:2.0:\
-                    oob&response_type=code&client_id=812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5amr\
-                    f.apps.googleusercontent.com",
-                   build_authentication_request_url("https://accounts.google.com/o/oauth2/auth",
-                                                    "812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5am\
-                                                     rf.apps.googleusercontent.com",
-                                                    vec![&"email".to_string(),
-                                                         &"profile".to_string()],
-                                                    None));
+        assert_eq!(
+            "https://accounts.google.\
+             com/o/oauth2/auth?scope=email%20profile&redirect_uri=urn:ietf:wg:oauth:2.0:\
+             oob&response_type=code&client_id=812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5amr\
+             f.apps.googleusercontent.com",
+            build_authentication_request_url(
+                "https://accounts.google.com/o/oauth2/auth",
+                "812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5am\
+                 rf.apps.googleusercontent.com",
+                vec![&"email".to_string(), &"profile".to_string()],
+                None
+            )
+        );
     }
 
     #[test]
     fn test_http_handle_url() {
         let (tx, rx) = channel();
-        let handler = InstalledFlowHandler { auth_code_snd: Mutex::new(tx) };
+        let handler = InstalledFlowHandler {
+            auth_code_snd: Mutex::new(tx),
+        };
         // URLs are usually a bit botched
         let url = Url::parse("http://example.com:1234/?code=ab/c%2Fd#").unwrap();
         handler.handle_url(url);

@@ -27,18 +27,18 @@ use url::form_urlencoded;
 
 #[cfg(not(feature = "no-openssl"))]
 use openssl::{
-    sign::Signer,
     hash::MessageDigest,
     pkey::{PKey, Private},
     rsa::Padding,
+    sign::Signer,
 };
 
 #[cfg(feature = "no-openssl")]
 use rustls::{
     self,
-    PrivateKey,
-    sign::{self, SigningKey},
     internal::pemfile,
+    sign::{self, SigningKey},
+    PrivateKey,
 };
 #[cfg(feature = "no-openssl")]
 use std::io;
@@ -72,11 +72,16 @@ fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<error::Error>> {
         if pk.len() > 0 {
             Ok(pk[0].clone())
         } else {
-            Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput,
-                                        "Not enough private keys in PEM")))
+            Err(Box::new(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Not enough private keys in PEM",
+            )))
         }
     } else {
-        Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput, "Error reading key from PEM")))
+        Err(Box::new(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Error reading key from PEM",
+        )))
     }
 }
 
@@ -87,7 +92,7 @@ fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<error::Error>> {
 /// secret into a ServiceAccountKey.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServiceAccountKey {
-    #[serde(rename="type")]
+    #[serde(rename = "type")]
     pub key_type: Option<String>,
     pub project_id: Option<String>,
     pub private_key_id: Option<String>,
@@ -155,8 +160,12 @@ impl JWT {
         let key = decode_rsa_key(private_key)?;
         let signing_key = sign::RSASigningKey::new(&key)
             .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't initialize signer"))?;
-        let signer = signing_key.choose_scheme(&[rustls::SignatureScheme::RSA_PKCS1_SHA256])
-            .ok_or(io::Error::new(io::ErrorKind::Other, "Couldn't choose signing scheme"))?;
+        let signer = signing_key
+            .choose_scheme(&[rustls::SignatureScheme::RSA_PKCS1_SHA256])
+            .ok_or(io::Error::new(
+                io::ErrorKind::Other,
+                "Couldn't choose signing scheme",
+            ))?;
         let signature = signer.sign(jwt_head.as_bytes())?;
         let signature_b64 = encode_base64(signature);
 
@@ -168,8 +177,9 @@ impl JWT {
 }
 
 fn init_claims_from_key<'a, I, T>(key: &ServiceAccountKey, scopes: I) -> Claims
-    where T: AsRef<str> + 'a,
-          I: IntoIterator<Item = &'a T>
+where
+    T: AsRef<str> + 'a,
+    I: IntoIterator<Item = &'a T>,
 {
     let iat = chrono::Utc::now().timestamp();
     let expiry = iat + 3600 - 5; // Max validity is 1h.
@@ -230,7 +240,8 @@ impl TokenResponse {
 }
 
 impl<'a, C> ServiceAccountAccess<C>
-    where C: BorrowMut<hyper::Client>
+where
+    C: BorrowMut<hyper::Client>,
 {
     /// Returns a new `ServiceAccountAccess` token source.
     #[allow(dead_code)]
@@ -255,20 +266,24 @@ impl<'a, C> ServiceAccountAccess<C>
     fn request_token(&mut self, scopes: &Vec<&str>) -> result::Result<Token, Box<error::Error>> {
         let mut claims = init_claims_from_key(&self.key, scopes);
         claims.sub = self.sub.clone();
-        let signed = JWT::new(claims)
-            .sign(self.key.private_key.as_ref().unwrap())?;
+        let signed = JWT::new(claims).sign(self.key.private_key.as_ref().unwrap())?;
 
         let body = form_urlencoded::Serializer::new(String::new())
-            .extend_pairs(vec![("grant_type".to_string(), GRANT_TYPE.to_string()),
-                               ("assertion".to_string(), signed)])
+            .extend_pairs(vec![
+                ("grant_type".to_string(), GRANT_TYPE.to_string()),
+                ("assertion".to_string(), signed),
+            ])
             .finish();
 
         let mut response = String::new();
-        let mut result = self.client
+        let mut result = self
+            .client
             .borrow_mut()
             .post(self.key.token_uri.as_ref().unwrap())
             .body(&body)
-            .header(header::ContentType("application/x-www-form-urlencoded".parse().unwrap()))
+            .header(header::ContentType(
+                "application/x-www-form-urlencoded".parse().unwrap(),
+            ))
             .send()?;
 
         result.read_to_string(&mut response)?;
@@ -279,10 +294,14 @@ impl<'a, C> ServiceAccountAccess<C>
         match token {
             Err(e) => return Err(Box::new(e)),
             Ok(token) => {
-                if token.access_token.is_none() || token.token_type.is_none() ||
-                   token.expires_in.is_none() {
-                    Err(Box::new(StringError::new("Token response lacks fields".to_string(),
-                                                  Some(&format!("{:?}", token)))))
+                if token.access_token.is_none()
+                    || token.token_type.is_none()
+                    || token.expires_in.is_none()
+                {
+                    Err(Box::new(StringError::new(
+                        "Token response lacks fields".to_string(),
+                        Some(&format!("{:?}", token)),
+                    )))
                 } else {
                     Ok(token.to_oauth_token())
                 }
@@ -293,8 +312,9 @@ impl<'a, C> ServiceAccountAccess<C>
 
 impl<C: BorrowMut<hyper::Client>> GetToken for ServiceAccountAccess<C> {
     fn token<'b, I, T>(&mut self, scopes: I) -> result::Result<Token, Box<error::Error>>
-        where T: AsRef<str> + Ord + 'b,
-              I: IntoIterator<Item = &'b T>
+    where
+        T: AsRef<str> + Ord + 'b,
+        I: IntoIterator<Item = &'b T>,
     {
         let (hash, scps) = hash_scopes(scopes);
 
@@ -318,11 +338,11 @@ impl<C: BorrowMut<hyper::Client>> GetToken for ServiceAccountAccess<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::authenticator::GetToken;
     use crate::helper::service_account_key_from_file;
     use hyper;
     use hyper::net::HttpsConnector;
     use hyper_native_tls::NativeTlsClient;
-    use crate::authenticator::GetToken;
 
     // This is a valid but deactivated key.
     const TEST_PRIVATE_KEY_PATH: &'static str = "examples/Sanguine-69411a0c0eea.json";
@@ -332,10 +352,14 @@ mod tests {
     #[allow(dead_code)]
     fn test_service_account_e2e() {
         let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
-        let client = hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
+        let client =
+            hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
         let mut acc = ServiceAccountAccess::new(key, client);
-        println!("{:?}",
-                 acc.token(vec![&"https://www.googleapis.com/auth/pubsub"]).unwrap());
+        println!(
+            "{:?}",
+            acc.token(vec![&"https://www.googleapis.com/auth/pubsub"])
+                .unwrap()
+        );
     }
 
     #[test]
@@ -344,11 +368,15 @@ mod tests {
         let scopes = vec!["scope1", "scope2", "scope3"];
         let claims = super::init_claims_from_key(&key, &scopes);
 
-        assert_eq!(claims.iss,
-                   "oauth2-public-test@sanguine-rhythm-105020.iam.gserviceaccount.com".to_string());
+        assert_eq!(
+            claims.iss,
+            "oauth2-public-test@sanguine-rhythm-105020.iam.gserviceaccount.com".to_string()
+        );
         assert_eq!(claims.scope, "scope1 scope2 scope3".to_string());
-        assert_eq!(claims.aud,
-                   "https://accounts.google.com/o/oauth2/token".to_string());
+        assert_eq!(
+            claims.aud,
+            "https://accounts.google.com/o/oauth2/token".to_string()
+        );
         assert!(claims.exp > 1000000000);
         assert!(claims.iat < claims.exp);
         assert_eq!(claims.exp - claims.iat, 3595);
@@ -365,7 +393,9 @@ mod tests {
         assert!(signature.is_ok());
 
         let signature = signature.unwrap();
-        assert_eq!(signature.split(".").nth(0).unwrap(),
-                   "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9");
+        assert_eq!(
+            signature.split(".").nth(0).unwrap(),
+            "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9"
+        );
     }
 }
