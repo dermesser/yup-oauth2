@@ -28,6 +28,11 @@ server communication and improve protocol compliance.
 
 ![usage][auth-usage]
 
+## Versions
+
+Version 1.x for Hyper versions bellow 12
+Version 2.x for Hyper versions 12 and above
+
 ## License
 
 Licensed under either of
