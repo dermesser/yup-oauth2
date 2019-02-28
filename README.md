@@ -1,7 +1,6 @@
 [![Build
 Status](https://travis-ci.org/dermesser/yup-oauth2.svg)](https://travis-ci.org/dermesser/yup-oauth2)
-[![Coverage
-Status](https://coveralls.io/repos/github/dermesser/yup-oauth2/badge.svg?branch=master)](https://coveralls.io/github/dermesser/yup-oauth2?branch=master)
+[![codecov](https://codecov.io/gh/dermesser/yup-oauth2/branch/master/graph/badge.svg)](https://codecov.io/gh/dermesser/yup-oauth2)
 [![crates.io](https://img.shields.io/crates/v/yup-oauth2.svg)](https://crates.io/crates/yup-oauth2)
 
 **yup-oauth2** is a utility library which implements several OAuth 2.0 flows. It's mainly used by
