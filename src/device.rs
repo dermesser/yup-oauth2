@@ -314,7 +314,7 @@ pub mod tests {
     fn working_flow() {
         use crate::helper::parse_application_secret;
 
-        let appsecret = parse_application_secret(&TEST_APP_SECRET.to_string()).unwrap();
+        let appsecret = parse_application_secret(TEST_APP_SECRET).unwrap();
         let mut flow = DeviceFlow::new(
             hyper::Client::with_connector(<MockGoogleAuth as Default>::default()),
             &appsecret,

@@ -351,7 +351,7 @@ mod tests {
     //#[test]
     #[allow(dead_code)]
     fn test_service_account_e2e() {
-        let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
+        let key = service_account_key_from_file(TEST_PRIVATE_KEY_PATH).unwrap();
         let client =
             hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
         let mut acc = ServiceAccountAccess::new(key, client);
@@ -364,7 +364,7 @@ mod tests {
 
     #[test]
     fn test_jwt_initialize_claims() {
-        let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
+        let key = service_account_key_from_file(TEST_PRIVATE_KEY_PATH).unwrap();
         let scopes = vec!["scope1", "scope2", "scope3"];
         let claims = super::init_claims_from_key(&key, &scopes);
 
@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn test_jwt_sign() {
-        let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
+        let key = service_account_key_from_file(TEST_PRIVATE_KEY_PATH).unwrap();
         let scopes = vec!["scope1", "scope2", "scope3"];
         let claims = super::init_claims_from_key(&key, &scopes);
         let jwt = super::JWT::new(claims);

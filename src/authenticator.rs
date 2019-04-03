@@ -238,8 +238,7 @@ where
                                     }
                                 }
                                 RefreshResult::RefreshError(ref err_str, ref err_description) => {
-                                    self.delegate
-                                        .token_refresh_failed(&err_str, &err_description);
+                                    self.delegate.token_refresh_failed(err_str, err_description);
                                     let storage_err =
                                         match self.storage.set(scope_key, &scopes, None) {
                                             Ok(_) => String::new(),

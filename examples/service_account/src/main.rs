@@ -165,7 +165,7 @@ fn publish_stuff(methods: &PubsubMethods, message: &str) {
 // If called as '.../service_account pub', act as publisher; if called as '.../service_account
 // sub', act as subscriber.
 fn main() {
-    let client_secret = oauth::service_account_key_from_file(&"pubsub-auth.json".to_string())
+    let client_secret = oauth::service_account_key_from_file("pubsub-auth.json")
         .unwrap();
     let client = hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
     let mut access = oauth::ServiceAccountAccess::new(client_secret, client);

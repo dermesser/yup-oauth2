@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn refresh_flow() {
-        let appsecret = parse_application_secret(&TEST_APP_SECRET.to_string()).unwrap();
+        let appsecret = parse_application_secret(TEST_APP_SECRET).unwrap();
 
         let mut c = hyper::Client::with_connector(<MockGoogleRefresh as Default>::default());
         let mut flow = RefreshFlow::new(&mut c);
