@@ -34,7 +34,7 @@ fn main() {
     let authenticator = Authenticator::new(&secret,
                                            DefaultAuthenticatorDelegate,
                                            client,
-                                           DiskTokenStorage::new("token_store.json")
+                                           DiskTokenStorage::new(&"token_store.json".to_string())
                                                .unwrap(),
                                            Some(FlowType::InstalledInteractive));
     let client = hyper::Client::with_connector(
