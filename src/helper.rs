@@ -28,8 +28,9 @@ pub fn read_application_secret(path: &Path) -> io::Result<ApplicationSecret> {
 }
 
 /// Read an application secret from a JSON string.
-pub fn parse_application_secret(secret: &String) -> io::Result<ApplicationSecret> {
-    let result: serde_json::Result<ConsoleApplicationSecret> = serde_json::from_str(secret);
+pub fn parse_application_secret<S: AsRef<str>>(secret: S) -> io::Result<ApplicationSecret> {
+    let result: serde_json::Result<ConsoleApplicationSecret> =
+        serde_json::from_str(secret.as_ref());
     match result {
         Err(e) => Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -52,7 +53,7 @@ pub fn parse_application_secret(secret: &String) -> io::Result<ApplicationSecret
 
 /// Read a service account key from a JSON file. You can download the JSON keys from the Google
 /// Cloud Console or the respective console of your service provider.
-pub fn service_account_key_from_file(path: &String) -> io::Result<ServiceAccountKey> {
+pub fn service_account_key_from_file<S: AsRef<Path>>(path: S) -> io::Result<ServiceAccountKey> {
     let mut key = String::new();
     let mut file = fs::OpenOptions::new().read(true).open(path)?;
     file.read_to_string(&mut key)?;

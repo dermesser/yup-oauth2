@@ -90,7 +90,11 @@ pub trait AuthenticatorDelegate {
     /// Called if we could not acquire a refresh token for a reason possibly specified
     /// by the server.
     /// This call is made for the delegate's information only.
-    fn token_refresh_failed(&mut self, error: &String, error_description: &Option<String>) {
+    fn token_refresh_failed<S: AsRef<str>>(
+        &mut self,
+        error: S,
+        error_description: &Option<String>,
+    ) {
         {
             let _ = error;
         }
@@ -136,7 +140,11 @@ pub trait AuthenticatorDelegate {
     /// We need the user to navigate to a URL using their browser and potentially paste back a code
     /// (or maybe not). Whether they have to enter a code depends on the InstalledFlowReturnMethod
     /// used.
-    fn present_user_url(&mut self, url: &String, need_code: bool) -> Option<String> {
+    fn present_user_url<S: AsRef<str> + fmt::Display>(
+        &mut self,
+        url: S,
+        need_code: bool,
+    ) -> Option<String> {
         if need_code {
             println!(
                 "Please direct your browser to {}, follow the instructions and enter the \

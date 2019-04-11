@@ -132,9 +132,9 @@ pub struct DiskTokenStorage {
 }
 
 impl DiskTokenStorage {
-    pub fn new(location: &String) -> Result<DiskTokenStorage, io::Error> {
+    pub fn new<S: AsRef<str>>(location: S) -> Result<DiskTokenStorage, io::Error> {
         let mut dts = DiskTokenStorage {
-            location: location.clone(),
+            location: location.as_ref().to_owned(),
             tokens: HashMap::new(),
         };
 
