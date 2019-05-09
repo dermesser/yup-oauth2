@@ -101,7 +101,7 @@ pub struct ServiceAccountKey {
     pub client_id: Option<String>,
     pub auth_uri: Option<String>,
     pub token_uri: Option<String>,
-    pub auth_provier_x509_cert_url: Option<String>,
+    pub auth_provider_x509_cert_url: Option<String>,
     pub client_x509_cert_url: Option<String>,
 }
 
