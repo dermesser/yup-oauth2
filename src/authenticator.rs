@@ -166,7 +166,7 @@ where
                         &&PollError::Expired(ref t) => {
                             self.delegate.expired(t);
                             return Err(Box::new(StringError::from(pts)));
-                        }
+                        },
                         &&PollError::AccessDenied => {
                             self.delegate.denied();
                             return Err(Box::new(StringError::from(pts)));

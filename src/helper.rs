@@ -18,8 +18,6 @@ use crate::types::{ApplicationSecret, ConsoleApplicationSecret};
 
 /// Read an application secret from a file.
 pub fn read_application_secret(path: &Path) -> io::Result<ApplicationSecret> {
-    use std::io::Read;
-
     let mut secret = String::new();
     let mut file = fs::OpenOptions::new().read(true).open(path)?;
     file.read_to_string(&mut secret)?;
