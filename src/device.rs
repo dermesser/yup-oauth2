@@ -3,13 +3,12 @@ use std::iter::IntoIterator;
 use std::time::Duration;
 
 use chrono::{self, Utc};
+use futures::stream::Stream;
+use futures::Future;
 use hyper;
-use hyper::header::ContentType;
+use hyper::header;
 use itertools::Itertools;
 use serde_json as json;
-use std::borrow::BorrowMut;
-use std::i64;
-use std::io::Read;
 use url::form_urlencoded;
 
 use crate::authenticator_delegate::{PollError, PollInformation};
@@ -32,7 +31,7 @@ enum DeviceFlowState {
 /// * obtain a code to show to the user
 /// * (repeatedly) poll for the user to authenticate your application
 pub struct DeviceFlow<C> {
-    client: C,
+    client: hyper::Client<C, hyper::Body>,
     device_code: String,
     state: Option<DeviceFlowState>,
     error: Option<PollError>,
@@ -45,12 +44,15 @@ impl<C> Flow for DeviceFlow<C> {
         FlowType::Device(String::new())
     }
 }
+
 impl<C> DeviceFlow<C>
 where
-    C: BorrowMut<hyper::Client>,
+    C: hyper::client::connect::Connect + Sync + 'static,
+    C::Transport: 'static,
+    C::Future: 'static,
 {
     pub fn new<S: AsRef<str>>(
-        client: C,
+        client: hyper::Client<C, hyper::Body>,
         secret: &ApplicationSecret,
         device_code_url: S,
     ) -> DeviceFlow<C> {
@@ -106,20 +108,16 @@ where
 
         // note: works around bug in rustlang
         // https://github.com/rust-lang/rust/issues/22252
-        let ret = match self
-            .client
-            .borrow_mut()
-            .post(&self.device_code_url)
-            .header(ContentType(
-                "application/x-www-form-urlencoded".parse().unwrap(),
-            ))
-            .body(&*req)
-            .send()
-        {
+        let request = hyper::Request::post(&self.device_code_url)
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(hyper::Body::from(req))?;
+
+        // TODO: move the ? on request
+        let ret = match self.client.request(request).wait() {
             Err(err) => {
-                return Err(RequestError::HttpError(err));
+                return Err(RequestError::ClientError(err)); // TODO: failed here
             }
-            Ok(mut res) => {
+            Ok(res) => {
                 #[derive(Deserialize)]
                 struct JsonData {
                     device_code: String,
@@ -129,8 +127,12 @@ where
                     interval: i64,
                 }
 
-                let mut json_str = String::new();
-                res.read_to_string(&mut json_str).unwrap();
+                let json_str: String = res
+                    .into_body()
+                    .concat2()
+                    .wait()
+                    .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
+                    .unwrap(); // TODO: error handling
 
                 // check for error
                 match json::from_str::<JsonError>(&json_str) {
@@ -200,24 +202,21 @@ where
             ])
             .finish();
 
-        let json_str: String = match self
-            .client
-            .borrow_mut()
-            .post(&self.application_secret.token_uri)
-            .header(ContentType(
-                "application/x-www-form-urlencoded".parse().unwrap(),
-            ))
-            .body(&*req)
-            .send()
-        {
+        let request = hyper::Request::post(&self.application_secret.token_uri)
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(hyper::Body::from(req))
+            .unwrap(); // TODO: Error checking
+        let json_str: String = match self.client.request(request).wait() {
             Err(err) => {
                 self.error = Some(PollError::HttpError(err));
                 return Err(self.error.as_ref().unwrap());
             }
-            Ok(mut res) => {
-                let mut json_str = String::new();
-                res.read_to_string(&mut json_str).unwrap();
-                json_str
+            Ok(res) => {
+                res.into_body()
+                    .concat2()
+                    .wait()
+                    .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
+                    .unwrap() // TODO: error handling
             }
         };
 
@@ -254,59 +253,30 @@ where
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use hyper;
-    use std::default::Default;
-    use std::time::Duration;
-    use yup_hyper_mock::{MockStream, SequentialConnector};
 
-    pub struct MockGoogleAuth(SequentialConnector);
-
-    impl Default for MockGoogleAuth {
-        fn default() -> MockGoogleAuth {
-            let mut c = MockGoogleAuth(Default::default());
-            c.0.content.push(
-                "HTTP/1.1 200 OK\r\n\
-                 Server: BOGUS\r\n\
-                 \r\n\
-                 {\r\n\
+    mock_connector_in_order!(MockGoogleAuth {
+            "HTTP/1.1 200 OK\r\n\
+             Server: BOGUS\r\n\
+             \r\n\
+             {\r\n\
                  \"device_code\" : \"4/L9fTtLrhY96442SEuf1Rl3KLFg3y\",\r\n\
                  \"user_code\" : \"a9xfwk9c\",\r\n\
                  \"verification_url\" : \"http://www.google.com/device\",\r\n\
                  \"expires_in\" : 1800,\r\n\
                  \"interval\" : 0\r\n\
-                 }"
-                .to_string(),
-            );
-
-            c.0.content.push(
-                "HTTP/1.1 200 OK\r\n\
-                 Server: BOGUS\r\n\
-                 \r\n\
-                 {\r\n\
+             }"
+            "HTTP/1.1 200 OK\r\n\
+             Server: BOGUS\r\n\
+             \r\n\
+             {\r\n\
                  \"error\" : \"authorization_pending\"\r\n\
-                 }"
-                .to_string(),
-            );
-
-            c.0.content.push(
-                "HTTP/1.1 200 OK\r\nServer: \
-                 BOGUS\r\n\r\n{\r\n\"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\
-                 \r\n\"expires_in\":3920,\r\n\"token_type\":\"Bearer\",\
-                 \r\n\"refresh_token\":\
-                 \"1/6BMfW9j53gdGImsixUH6kU5RsR4zwI9lUVX-tqf8JXQ\"\r\n}"
-                    .to_string(),
-            );
-            c
-        }
-    }
-
-    impl hyper::net::NetworkConnector for MockGoogleAuth {
-        type Stream = MockStream;
-
-        fn connect(&self, host: &str, port: u16, scheme: &str) -> ::hyper::Result<MockStream> {
-            self.0.connect(host, port, scheme)
-        }
-    }
+             }"
+            "HTTP/1.1 200 OK\r\nServer: \
+             BOGUS\r\n\r\n{\r\n\"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\
+             \r\n\"expires_in\":3920,\r\n\"token_type\":\"Bearer\",\
+             \r\n\"refresh_token\":\
+             \"1/6BMfW9j53gdGImsixUH6kU5RsR4zwI9lUVX-tqf8JXQ\"\r\n}"
+    });
 
     const TEST_APP_SECRET: &'static str = r#"{"installed":{"client_id":"384278056379-tr5pbot1mil66749n639jo54i4840u77.apps.googleusercontent.com","project_id":"sanguine-rhythm-105020","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://accounts.google.com/o/oauth2/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"QeQUnhzsiO4t--ZGmj9muUAu","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"#;
 
@@ -314,16 +284,17 @@ pub mod tests {
     fn working_flow() {
         use crate::helper::parse_application_secret;
 
-        let appsecret = parse_application_secret(TEST_APP_SECRET).unwrap();
-        let mut flow = DeviceFlow::new(
-            hyper::Client::with_connector(<MockGoogleAuth as Default>::default()),
-            &appsecret,
-            GOOGLE_DEVICE_CODE_URL,
-        );
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let appsecret = parse_application_secret(&TEST_APP_SECRET.to_string()).unwrap();
+        let client = hyper::Client::builder()
+            .executor(runtime.executor())
+            .build(MockGoogleAuth::default());
+
+        let mut flow = DeviceFlow::new(client, &appsecret, GOOGLE_DEVICE_CODE_URL);
 
         match flow.request_code(&["https://www.googleapis.com/auth/youtube.upload"]) {
             Ok(pi) => assert_eq!(pi.interval, Duration::from_secs(0)),
-            _ => unreachable!(),
+            Err(err) => assert!(false, "request_code failed: {}", err),
         }
 
         match flow.poll_token() {

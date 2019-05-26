@@ -19,7 +19,9 @@ pub struct JsonError {
 /// Encapsulates all possible results of the `request_token(...)` operation
 pub enum RequestError {
     /// Indicates connection failure
-    HttpError(hyper::Error),
+    ClientError(hyper::Error),
+    /// Indicates HTTP status failure
+    HttpError(hyper::http::Error),
     /// The OAuth client was not found
     InvalidClient,
     /// Some requested scopes were invalid. String contains the scopes as part of
@@ -28,6 +30,18 @@ pub enum RequestError {
     /// A 'catch-all' variant containing the server error and description
     /// First string is the error code, the second may be a more detailed description
     NegativeServerResponse(String, Option<String>),
+}
+
+impl From<hyper::Error> for RequestError {
+    fn from(error: hyper::Error) -> RequestError {
+        RequestError::ClientError(error)
+    }
+}
+
+impl From<hyper::http::Error> for RequestError {
+    fn from(error: hyper::http::Error) -> RequestError {
+        RequestError::HttpError(error)
+    }
 }
 
 impl From<JsonError> for RequestError {
@@ -47,6 +61,7 @@ impl From<JsonError> for RequestError {
 impl fmt::Display for RequestError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
+            RequestError::ClientError(ref err) => err.fmt(f),
             RequestError::HttpError(ref err) => err.fmt(f),
             RequestError::InvalidClient => "Invalid Client".fmt(f),
             RequestError::InvalidScope(ref scope) => writeln!(f, "Invalid Scope: '{}'", scope),
@@ -136,13 +151,14 @@ pub struct Scheme {
     pub access_token: String,
 }
 
-impl hyper::header::Scheme for Scheme {
-    fn scheme() -> Option<&'static str> {
-        None
-    }
-
-    fn fmt_scheme(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {}", self.token_type.as_ref(), self.access_token)
+impl std::convert::Into<hyper::header::HeaderValue> for Scheme {
+    fn into(self) -> hyper::header::HeaderValue {
+        hyper::header::HeaderValue::from_str(&format!(
+            "{} {}",
+            self.token_type.as_ref(),
+            self.access_token
+        ))
+        .expect("Invalid Scheme header value")
     }
 }
 
@@ -240,7 +256,7 @@ pub enum FlowType {
     /// browser to a web server that is running on localhost. This may not work as well with the
     /// Windows Firewall, but is more comfortable otherwise. The integer describes which port to
     /// bind to (default: 8080)
-    InstalledRedirect(u32),
+    InstalledRedirect(u16),
 }
 
 /// Represents either 'installed' or 'web' applications in a json secrets file.
@@ -304,19 +320,18 @@ pub mod tests {
             token_type: TokenType::Bearer,
             access_token: "foo".to_string(),
         };
-        let mut headers = hyper::header::Headers::new();
-        headers.set(hyper::header::Authorization(s));
+        let mut headers = hyper::HeaderMap::new();
+        headers.insert(hyper::header::AUTHORIZATION, s.into());
         assert_eq!(
-            headers.to_string(),
-            "Authorization: Bearer foo\r\n".to_string()
+            format!("{:?}", headers),
+            "{\"authorization\": \"Bearer foo\"}".to_string()
         );
     }
 
     #[test]
     fn parse_schema() {
-        let auth: hyper::header::Authorization<Scheme> =
-            hyper::header::Header::parse_header(&[b"Bearer foo".to_vec()]).unwrap();
-        assert_eq!(auth.0.token_type, TokenType::Bearer);
-        assert_eq!(auth.0.access_token, "foo".to_string());
+        let auth = Scheme::from_str("Bearer foo").unwrap();
+        assert_eq!(auth.token_type, TokenType::Bearer);
+        assert_eq!(auth.access_token, "foo".to_string());
     }
 }
