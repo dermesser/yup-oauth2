@@ -15,6 +15,7 @@ use std::default::Default;
 use std::error;
 use std::result;
 use std::str;
+use std::sync::{Arc, RwLock};
 
 use crate::authenticator::GetToken;
 use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
@@ -286,12 +287,35 @@ where
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(body))
             .unwrap(); // TOOD: error handling
-        let response = self.client.request(request).wait()?;
 
-        let json_str = response
-            .into_body()
-            .concat2()
-            .wait()
+        let body = {
+            let result: Arc<RwLock<Result<hyper::Chunk, hyper::Error>>> =
+                Arc::new(RwLock::new(Ok(Default::default())));
+            let ok = Arc::clone(&result);
+            let err = Arc::clone(&result);
+            hyper::rt::run(
+                self.client
+                    .request(request)
+                    .and_then(|response| response.into_body().concat2())
+                    .map(move |body| {
+                        *ok.write().unwrap_or_else(|e| unreachable!("{}", e)) = Ok(body);
+
+                        ()
+                    })
+                    .map_err(move |e| {
+                        *err.write().unwrap_or_else(|e| unreachable!("{}", e)) = Err(e);
+
+                        ()
+                    }),
+            );
+
+            Arc::try_unwrap(result)
+                .unwrap_or_else(|e| unreachable!("{:?}", e))
+                .into_inner()
+                .unwrap_or_else(|e| unreachable!("{}", e))
+        };
+
+        let json_str = body
             .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
             .unwrap(); // TODO: error handling
 
