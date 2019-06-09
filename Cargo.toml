@@ -17,18 +17,13 @@ hyper = {version = "0.12", default-features = false}
 hyper-tls = "0.3"
 itertools = "0.8"
 log = "0.3"
-openssl = {version = "0.10", optional = true}
-rustls = {version = "0.14", optional = true}
+rustls = "0.14"
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
 url = "1"
 futures = "0.1"
 tokio-threadpool = "0.1"
-
-[features]
-default = ["openssl"]
-no-openssl = ["rustls"]
 
 [dev-dependencies]
 getopts = "0.2"

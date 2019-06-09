@@ -26,22 +26,12 @@ use futures::Future;
 use hyper::header;
 use url::form_urlencoded;
 
-#[cfg(not(feature = "no-openssl"))]
-use openssl::{
-    hash::MessageDigest,
-    pkey::{PKey, Private},
-    rsa::Padding,
-    sign::Signer,
-};
-
-#[cfg(feature = "no-openssl")]
 use rustls::{
     self,
     internal::pemfile,
     sign::{self, SigningKey},
     PrivateKey,
 };
-#[cfg(feature = "no-openssl")]
 use std::io;
 
 use base64;
@@ -57,13 +47,6 @@ fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
     base64::encode_config(s.as_ref(), base64::URL_SAFE)
 }
 
-#[cfg(not(feature = "no-openssl"))]
-fn decode_rsa_key(pem_pkcs8: &str) -> Result<PKey<Private>, Box<error::Error>> {
-    let private = pem_pkcs8.to_string().replace("\\n", "\n").into_bytes();
-    Ok(PKey::private_key_from_pem(&private)?)
-}
-
-#[cfg(feature = "no-openssl")]
 fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<error::Error>> {
     let private = pem_pkcs8.to_string().replace("\\n", "\n").into_bytes();
     let mut private_reader: &[u8] = private.as_ref();
@@ -139,23 +122,6 @@ impl JWT {
         head
     }
 
-    #[cfg(not(feature = "no-openssl"))]
-    fn sign(&self, private_key: &str) -> Result<String, Box<error::Error>> {
-        let mut jwt_head = self.encode_claims();
-        let key = decode_rsa_key(private_key)?;
-        let mut signer = Signer::new(MessageDigest::sha256(), &key)?;
-        signer.set_rsa_padding(Padding::PKCS1)?;
-        signer.update(jwt_head.as_bytes())?;
-        let signature = signer.sign_to_vec()?;
-        let signature_b64 = encode_base64(signature);
-
-        jwt_head.push_str(".");
-        jwt_head.push_str(&signature_b64);
-
-        Ok(jwt_head)
-    }
-
-    #[cfg(feature = "no-openssl")]
     fn sign(&self, private_key: &str) -> Result<String, Box<error::Error>> {
         let mut jwt_head = self.encode_claims();
         let key = decode_rsa_key(private_key)?;

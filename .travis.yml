@@ -32,7 +32,6 @@ install: true
 script: 
   - cargo build
   - cargo test
-  - cargo test --no-default-features --features no-openssl
 
 jobs:
   include:
