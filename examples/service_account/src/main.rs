@@ -26,21 +26,21 @@
 //!
 
 use std::env;
-use std::time;
 use std::thread;
+use std::time;
 
-use yup_oauth2 as oauth;
+use google_pubsub1::{self as pubsub, Subscription, Topic};
 use hyper::net::HttpsConnector;
 use hyper_native_tls::NativeTlsClient;
-use google_pubsub1::{self as pubsub, Topic, Subscription};
+use yup_oauth2 as oauth;
 
 // The prefixes are important!
-const SUBSCRIPTION_NAME: &'static str = "projects/sanguine-rhythm-105020/subscriptions/rust_authd_sub_1";
+const SUBSCRIPTION_NAME: &'static str =
+    "projects/sanguine-rhythm-105020/subscriptions/rust_authd_sub_1";
 const TOPIC_NAME: &'static str = "projects/sanguine-rhythm-105020/topics/topic-01";
 
-type PubsubMethods<'a> = pubsub::ProjectMethods<'a,
-                                                hyper::Client,
-                                                oauth::ServiceAccountAccess<hyper::Client>>;
+type PubsubMethods<'a> =
+    pubsub::ProjectMethods<'a, hyper::Client, oauth::ServiceAccountAccess<hyper::Client>>;
 
 // Verifies that the topic TOPIC_NAME exists, or creates it.
 fn check_or_create_topic(methods: &PubsubMethods) -> Topic {
@@ -48,7 +48,10 @@ fn check_or_create_topic(methods: &PubsubMethods) -> Topic {
 
     if result.is_err() {
         println!("Assuming topic doesn't exist; creating topic");
-        let topic = pubsub::Topic { name: Some(TOPIC_NAME.to_string()), labels: None };
+        let topic = pubsub::Topic {
+            name: Some(TOPIC_NAME.to_string()),
+            labels: None,
+        };
         let result = methods.topics_create(topic, TOPIC_NAME).doit().unwrap();
         result.1
     } else {
@@ -71,7 +74,10 @@ fn check_or_create_subscription(methods: &PubsubMethods) -> Subscription {
             name: Some(SUBSCRIPTION_NAME.to_string()),
             labels: None,
         };
-        let (_resp, sub) = methods.subscriptions_create(sub, SUBSCRIPTION_NAME).doit().unwrap();
+        let (_resp, sub) = methods
+            .subscriptions_create(sub, SUBSCRIPTION_NAME)
+            .doit()
+            .unwrap();
 
         sub
     } else {
@@ -80,8 +86,12 @@ fn check_or_create_subscription(methods: &PubsubMethods) -> Subscription {
 }
 
 fn ack_message(methods: &PubsubMethods, id: String) {
-    let request = pubsub::AcknowledgeRequest { ack_ids: Some(vec![id]) };
-    let result = methods.subscriptions_acknowledge(request, SUBSCRIPTION_NAME).doit();
+    let request = pubsub::AcknowledgeRequest {
+        ack_ids: Some(vec![id]),
+    };
+    let result = methods
+        .subscriptions_acknowledge(request, SUBSCRIPTION_NAME)
+        .doit();
 
     match result {
         Err(e) => {
@@ -100,9 +110,10 @@ fn subscribe_wait(methods: &PubsubMethods) {
         max_messages: Some(1),
     };
 
-
     loop {
-        let result = methods.subscriptions_pull(request.clone(), SUBSCRIPTION_NAME).doit();
+        let result = methods
+            .subscriptions_pull(request.clone(), SUBSCRIPTION_NAME)
+            .doit();
 
         match result {
             Err(e) => {
@@ -112,13 +123,15 @@ fn subscribe_wait(methods: &PubsubMethods) {
                 for msg in pullresponse.received_messages.unwrap_or(Vec::new()) {
                     let ack_id = msg.ack_id.unwrap_or(String::new());
                     let message = msg.message.unwrap_or(Default::default());
-                    println!("message <{}> '{}' at {}",
-                             message.message_id.unwrap_or(String::new()),
-                             String::from_utf8(base64::decode(&message.data
-                                         .unwrap_or(String::new()))
-                                     .unwrap())
-                                 .unwrap(),
-                             message.publish_time.unwrap_or(String::new()));
+                    println!(
+                        "message <{}> '{}' at {}",
+                        message.message_id.unwrap_or(String::new()),
+                        String::from_utf8(
+                            base64::decode(&message.data.unwrap_or(String::new())).unwrap()
+                        )
+                        .unwrap(),
+                        message.publish_time.unwrap_or(String::new())
+                    );
 
                     if ack_id != "" {
                         ack_message(methods, ack_id);
@@ -138,8 +151,9 @@ fn publish_stuff(methods: &PubsubMethods, message: &str) {
         data: Some(base64::encode(message.as_bytes())),
         ..Default::default()
     };
-    let request = pubsub::PublishRequest { messages: Some(vec![message]) };
-
+    let request = pubsub::PublishRequest {
+        messages: Some(vec![message]),
+    };
 
     loop {
         let result = methods.topics_publish(request.clone(), TOPIC_NAME).doit();
@@ -162,16 +176,22 @@ fn publish_stuff(methods: &PubsubMethods, message: &str) {
 // If called as '.../service_account pub', act as publisher; if called as '.../service_account
 // sub', act as subscriber.
 fn main() {
-    let client_secret = oauth::service_account_key_from_file(&"pubsub-auth.json".to_string())
-        .unwrap();
-    let client = hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
+    let client_secret =
+        oauth::service_account_key_from_file(&"pubsub-auth.json".to_string()).unwrap();
+    let client =
+        hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
     let mut access = oauth::ServiceAccountAccess::new(client_secret, client);
 
     use yup_oauth2::GetToken;
-    println!("{:?}",
-             access.token(&vec!["https://www.googleapis.com/auth/pubsub"]).unwrap());
+    println!(
+        "{:?}",
+        access
+            .token(&vec!["https://www.googleapis.com/auth/pubsub"])
+            .unwrap()
+    );
 
-    let client = hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
+    let client =
+        hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
     let hub = pubsub::Pubsub::new(client, access);
     let methods = hub.projects();
 
