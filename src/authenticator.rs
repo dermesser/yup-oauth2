@@ -102,7 +102,7 @@ where
         }
 
         let mut flow = InstalledFlow::new(self.client.clone(), installed_type);
-        flow.obtain_token(&mut self.delegate, &self.secret, scopes.iter())
+        flow.obtain_token(self.delegate, self.secret.clone(), scopes.iter())
     }
 
     fn retrieve_device_token(

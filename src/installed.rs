@@ -7,10 +7,9 @@ use std::error::Error;
 use std::io;
 use std::sync::{Arc, Mutex};
 
-use futures;
 use futures::stream::Stream;
 use futures::sync::oneshot;
-use futures::Future;
+use futures::{future, prelude::*};
 use hyper;
 use hyper::{header, StatusCode, Uri};
 use serde_json::error;
@@ -116,51 +115,54 @@ where
     /// It's recommended not to use the DefaultAuthenticatorDelegate, but a specialized one.
     pub fn obtain_token<'a, AD: AuthenticatorDelegate, S, T>(
         &mut self,
-        auth_delegate: &mut AD,
-        appsecret: &ApplicationSecret,
+        auth_delegate: AD,
+        appsecret: ApplicationSecret,
         scopes: S,
-    ) -> Result<Token, Box<Error>>
+    ) -> impl Future<Item = Token, Error = Box<Error>>
     where
         T: AsRef<str> + 'a,
         S: Iterator<Item = &'a T>,
     {
-        let authcode = self.get_authorization_code(auth_delegate, &appsecret, scopes)?;
-        let tokens = self.request_token(&appsecret, &authcode, auth_delegate.redirect_uri())?;
+        self.get_authorization_code(auth_delegate, appsecret, scopes)
+            .and_then(|authcode| {
+                self.request_token(&appsecret, &authcode, auth_delegate.redirect_uri())
+            })
+            .and_then(|tokens| {
+                // Successful response
+                if tokens.access_token.is_some() {
+                    let mut token = Token {
+                        access_token: tokens.access_token.unwrap(),
+                        refresh_token: tokens.refresh_token.unwrap(),
+                        token_type: tokens.token_type.unwrap(),
+                        expires_in: tokens.expires_in,
+                        expires_in_timestamp: None,
+                    };
 
-        // Successful response
-        if tokens.access_token.is_some() {
-            let mut token = Token {
-                access_token: tokens.access_token.unwrap(),
-                refresh_token: tokens.refresh_token.unwrap(),
-                token_type: tokens.token_type.unwrap(),
-                expires_in: tokens.expires_in,
-                expires_in_timestamp: None,
-            };
-
-            token.set_expiry_absolute();
-            Result::Ok(token)
-        } else {
-            let err = io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Token API error: {} {}",
-                    tokens.error.unwrap_or("<unknown err>".to_string()),
-                    tokens.error_description.unwrap_or("".to_string())
-                )
-                .as_str(),
-            );
-            Result::Err(Box::new(err))
-        }
+                    token.set_expiry_absolute();
+                    Result::Ok(token)
+                } else {
+                    let err = Box::new(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "Token API error: {} {}",
+                            tokens.error.unwrap_or("<unknown err>".to_string()),
+                            tokens.error_description.unwrap_or("".to_string())
+                        )
+                        .as_str(),
+                    )) as Box<dyn Error>;
+                    Result::Err(err)
+                }
+            })
     }
 
     /// Obtains an authorization code either interactively or via HTTP redirect (see
     /// InstalledFlowReturnMethod).
     fn get_authorization_code<'a, AD: AuthenticatorDelegate, S, T>(
         &mut self,
-        auth_delegate: &mut AD,
-        appsecret: &ApplicationSecret,
+        auth_delegate: AD,
+        appsecret: ApplicationSecret,
         scopes: S,
-    ) -> Result<String, Box<Error>>
+    ) -> impl Future<Item = String, Error = Box<Error>>
     where
         T: AsRef<str> + 'a,
         S: Iterator<Item = &'a T>,
@@ -211,7 +213,7 @@ where
             }
         };
 
-        result
+        result.into_future()
     }
 
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.
