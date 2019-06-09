@@ -22,7 +22,7 @@ use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
 use crate::types::{StringError, Token};
 
 use futures::stream::Stream;
-use futures::Future;
+use futures::{future, prelude::*};
 use hyper::header;
 use url::form_urlencoded;
 
@@ -311,23 +311,33 @@ impl<C: 'static> GetToken for ServiceAccountAccess<C>
 where
     C: hyper::client::connect::Connect,
 {
-    fn token<'b, I, T>(&mut self, scopes: I) -> result::Result<Token, Box<error::Error>>
+    fn token<'b, I, T>(
+        &mut self,
+        scopes: I,
+    ) -> Box<dyn Future<Item = Token, Error = Box<dyn error::Error>>>
     where
         T: AsRef<str> + Ord + 'b,
         I: IntoIterator<Item = &'b T>,
     {
         let (hash, scps) = hash_scopes(scopes);
 
-        if let Some(token) = self.cache.get(hash, &scps)? {
-            if !token.expired() {
-                return Ok(token);
+        match self.cache.get(hash, &scps) {
+            Ok(Some(token)) => {
+                if !token.expired() {
+                    return Box::new(future::ok(token));
+                }
             }
+            Err(e) => return Box::new(future::err(Box::new(e) as Box<dyn error::Error>)),
+            _ => {}
         }
 
-        let token = self.request_token(&scps)?;
-        let _ = self.cache.set(hash, &scps, Some(token.clone()));
-
-        Ok(token)
+        match self.request_token(&scps) {
+            Ok(token) => {
+                let _ = self.cache.set(hash, &scps, Some(token.clone()));
+                Box::new(future::ok(token))
+            }
+            Err(e) => Box::new(future::err(e)),
+        }
     }
 
     fn api_key(&mut self) -> Option<String> {

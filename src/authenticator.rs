@@ -14,6 +14,7 @@ use crate::refresh::{RefreshFlow, RefreshResult};
 use crate::storage::TokenStorage;
 use crate::types::{ApplicationSecret, FlowType, RequestError, StringError, Token};
 
+use futures::{future, prelude::*};
 use hyper;
 
 /// A generalized authenticator which will keep tokens valid and store them.
@@ -44,7 +45,7 @@ pub struct Authenticator<D, S, C> {
 /// The `api_key()` method is an alternative in case there are no scopes or
 /// if no user is involved.
 pub trait GetToken {
-    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<Error>>
+    fn token<'b, I, T>(&mut self, scopes: I) -> Box<dyn Future<Item = Token, Error = Box<Error>>>
     where
         T: AsRef<str> + Ord + 'b,
         I: IntoIterator<Item = &'b T>;
@@ -199,7 +200,10 @@ where
     /// In any failure case, the delegate will be provided with additional information, and
     /// the caller will be informed about storage related errors.
     /// Otherwise it is guaranteed to be valid for the given scopes.
-    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<Error>>
+    fn token<'b, I, T>(
+        &mut self,
+        scopes: I,
+    ) -> Box<dyn Future<Item = Token, Error = Box<dyn Error>>>
     where
         T: AsRef<str> + Ord + 'b,
         I: IntoIterator<Item = &'b T>,
@@ -235,10 +239,13 @@ where
                                 RefreshResult::Error(ref err) => {
                                     match self.delegate.client_error(err) {
                                         Retry::Abort | Retry::Skip => {
-                                            return Err(Box::new(StringError::new(
-                                                err.description().to_string(),
-                                                None,
-                                            )));
+                                            return Box::new(future::err(
+                                                Box::new(StringError::new(
+                                                    err.description().to_string(),
+                                                    None,
+                                                ))
+                                                    as Box<dyn Error>,
+                                            ));
                                         }
                                         Retry::After(d) => sleep(d),
                                     }
@@ -250,10 +257,11 @@ where
                                             Ok(_) => String::new(),
                                             Err(err) => err.to_string(),
                                         };
-                                    return Err(Box::new(StringError::new(
+                                    return Box::new(future::err(Box::new(StringError::new(
                                         storage_err + err_str,
                                         err_description.as_ref(),
-                                    )));
+                                    ))
+                                        as Box<dyn Error>));
                                 }
                                 RefreshResult::Success(ref new_t) => {
                                     t = new_t.clone();
@@ -263,7 +271,11 @@ where
                                         {
                                             match self.delegate.token_storage_failure(true, &err) {
                                                 Retry::Skip => break,
-                                                Retry::Abort => return Err(Box::new(err)),
+                                                Retry::Abort => {
+                                                    return Box::new(future::err(
+                                                        Box::new(err) as Box<dyn Error>
+                                                    ))
+                                                }
                                                 Retry::After(d) => {
                                                     sleep(d);
                                                     continue;
@@ -277,7 +289,7 @@ where
                             } // RefreshResult handling
                         } // refresh loop
                     } // handle expiration
-                    Ok(t)
+                    Box::new(future::ok(t))
                 }
                 Ok(None) => {
                     // Nothing was in storage - get a new token
@@ -294,7 +306,11 @@ where
                                 {
                                     match self.delegate.token_storage_failure(true, &err) {
                                         Retry::Skip => break,
-                                        Retry::Abort => return Err(Box::new(err)),
+                                        Retry::Abort => {
+                                            return Box::new(future::err(
+                                                Box::new(err) as Box<dyn Error>
+                                            ))
+                                        }
                                         Retry::After(d) => {
                                             sleep(d);
                                             continue;
@@ -303,13 +319,15 @@ where
                                 }
                                 break;
                             } // end attempt to save
-                            Ok(token)
+                            Box::new(future::ok(token))
                         }
-                        Err(err) => Err(err),
+                        Err(err) => Box::new(future::err(err)),
                     } // end match token retrieve result
                 }
                 Err(err) => match self.delegate.token_storage_failure(false, &err) {
-                    Retry::Abort | Retry::Skip => Err(Box::new(err)),
+                    Retry::Abort | Retry::Skip => {
+                        Box::new(future::err(Box::new(err) as Box<dyn Error>))
+                    }
                     Retry::After(d) => {
                         sleep(d);
                         continue;
