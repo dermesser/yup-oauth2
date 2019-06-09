@@ -65,24 +65,9 @@
 #[macro_use]
 extern crate serde_derive;
 
-extern crate serde;
-extern crate serde_json;
-
-extern crate base64;
-extern crate chrono;
-extern crate hyper;
-extern crate hyper_tls;
-
-#[cfg(test)]
-extern crate log;
 #[cfg(test)]
 #[macro_use]
 extern crate yup_hyper_mock as hyper_mock;
-extern crate itertools;
-#[cfg(test)]
-extern crate tokio;
-extern crate tokio_threadpool;
-extern crate url;
 
 mod authenticator;
 mod authenticator_delegate;

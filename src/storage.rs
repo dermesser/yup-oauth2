@@ -3,8 +3,6 @@
 // See project root for licensing information.
 //
 
-extern crate serde_json;
-
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::error::Error;

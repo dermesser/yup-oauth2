@@ -2,9 +2,6 @@
 //
 // Refer to the project root for licensing information.
 //
-extern crate serde_json;
-extern crate url;
-
 use std::convert::AsRef;
 use std::error::Error;
 use std::io;

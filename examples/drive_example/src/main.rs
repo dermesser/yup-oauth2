@@ -6,11 +6,6 @@
 //!
 //! Copyright (c) 2016 Google, Inc. (Lewin Bormann <lbo@spheniscida.de>)
 
-extern crate hyper;
-extern crate hyper_native_tls;
-extern crate yup_oauth2;
-extern crate google_drive3;
-
 use std::path::Path;
 
 use hyper::net::HttpsConnector;

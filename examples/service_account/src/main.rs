@@ -24,9 +24,6 @@
 //!
 //! Copyright (c) 2016 Google, Inc. (Lewin Bormann <lbo@spheniscida.de>)
 //!
-extern crate base64;
-extern crate hyper;
-extern crate hyper_native_tls;
 
 use std::env;
 use std::time;
