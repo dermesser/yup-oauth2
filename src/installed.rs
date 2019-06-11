@@ -243,9 +243,7 @@ where
 
         let result = self.client.request(request).wait();
 
-        let resp = String::new();
-
-        match result {
+        let resp = match result {
             Result::Err(e) => return Result::Err(Box::new(e)),
             Result::Ok(res) => {
                 let result = res
@@ -256,10 +254,10 @@ where
 
                 match result {
                     Result::Err(e) => return Result::Err(Box::new(e)),
-                    Result::Ok(_) => (),
+                    Result::Ok(s) => s,
                 }
             }
-        }
+        };
 
         let token_resp: Result<JSONTokenResponse, error::Error> = serde_json::from_str(&resp);
 
