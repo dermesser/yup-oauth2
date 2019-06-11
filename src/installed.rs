@@ -153,7 +153,7 @@ impl<'c, C: 'c + hyper::client::connect::Connect> InstalledFlow<C> {
                             Err(e) => {
                                 return Err(Box::new(e) as Box<dyn Error + Send>);
                             }
-                            Ok(tok) => Ok(tok) as Result<JSONTokenResponse, Box<Error + Send>>,
+                            Ok(tok) => Ok(tok) as Result<JSONTokenResponse, Box<dyn Error + Send>>,
                         }
                     })
             })
@@ -341,14 +341,15 @@ impl std::ops::Drop for InstalledFlowServer {
 
 pub struct InstalledFlowHandlerResponseFuture {
     inner: Box<
-        futures::Future<Item = hyper::Response<hyper::Body>, Error = hyper::http::Error> + Send,
+        dyn futures::Future<Item = hyper::Response<hyper::Body>, Error = hyper::http::Error> + Send,
     >,
 }
 
 impl InstalledFlowHandlerResponseFuture {
     fn new(
         fut: Box<
-            futures::Future<Item = hyper::Response<hyper::Body>, Error = hyper::http::Error> + Send,
+            dyn futures::Future<Item = hyper::Response<hyper::Body>, Error = hyper::http::Error>
+                + Send,
         >,
     ) -> Self {
         Self { inner: fut }

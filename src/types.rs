@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 
-use futures::{future, prelude::*};
+use futures::prelude::*;
 
 /// A marker trait for all Flows
 pub trait Flow {
@@ -101,8 +101,8 @@ impl StringError {
     }
 }
 
-impl<'a> From<&'a Error> for StringError {
-    fn from(err: &'a Error) -> StringError {
+impl<'a> From<&'a dyn Error> for StringError {
+    fn from(err: &'a dyn Error) -> StringError {
         StringError::new(err.description().to_string(), None)
     }
 }
@@ -185,7 +185,10 @@ impl FromStr for Scheme {
 /// The `api_key()` method is an alternative in case there are no scopes or
 /// if no user is involved.
 pub trait GetToken {
-    fn token<'b, I, T>(&mut self, scopes: I) -> Box<dyn Future<Item = Token, Error = Box<Error>>>
+    fn token<'b, I, T>(
+        &mut self,
+        scopes: I,
+    ) -> Box<dyn Future<Item = Token, Error = Box<dyn Error>>>
     where
         T: AsRef<str> + Ord + 'b,
         I: IntoIterator<Item = &'b T>;
