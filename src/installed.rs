@@ -142,22 +142,18 @@ impl<'c, C: 'c + hyper::client::connect::Connect> InstalledFlow<C> {
                             .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap()); // TODO: error handling
 
                         let resp = match result {
-                            Result::Err(e) => {
-                                return Result::Err(Box::new(e) as Box<dyn Error + Send>)
-                            }
-                            Result::Ok(s) => s,
+                            Err(e) => return Err(Box::new(e) as Box<dyn Error + Send>),
+                            Ok(s) => s,
                         };
 
                         let token_resp: Result<JSONTokenResponse, error::Error> =
                             serde_json::from_str(&resp);
 
                         match token_resp {
-                            Result::Err(e) => {
-                                return Result::Err(Box::new(e) as Box<dyn Error + Send>);
+                            Err(e) => {
+                                return Err(Box::new(e) as Box<dyn Error + Send>);
                             }
-                            Result::Ok(tok) => {
-                                Result::Ok(tok) as Result<JSONTokenResponse, Box<Error + Send>>
-                            }
+                            Ok(tok) => Ok(tok) as Result<JSONTokenResponse, Box<Error + Send>>,
                         }
                     })
             })

@@ -179,9 +179,7 @@ pub trait AuthenticatorDelegate {
                         println!("{:?}", e);
                         Box::new(e) as Box<dyn Error + Send>
                     })
-                    .and_then(|(l, _)| {
-                        Ok(l)
-                    }),
+                    .and_then(|(l, _)| Ok(l)),
             )
         } else {
             println!(

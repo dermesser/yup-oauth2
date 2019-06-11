@@ -10,7 +10,10 @@ use std::path::Path;
 fn main() {
     let https = HttpsConnector::new(1).expect("tls");
     let client = Client::builder().build::<_, hyper::Body>(https);
-    let mut inf = InstalledFlow::new(client, yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect(8081));
+    let mut inf = InstalledFlow::new(
+        client,
+        yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect(8081),
+    );
     let ad = yup_oauth2::DefaultAuthenticatorDelegate;
     let secret = yup_oauth2::read_application_secret(Path::new("clientsecret.json"))
         .expect("clientsecret.json");
