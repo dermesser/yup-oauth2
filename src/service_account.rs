@@ -17,9 +17,8 @@ use std::result;
 use std::str;
 use std::sync::{Arc, RwLock};
 
-use crate::authenticator::GetToken;
 use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
-use crate::types::{StringError, Token};
+use crate::types::{StringError, GetToken, Token};
 
 use futures::stream::Stream;
 use futures::{future, prelude::*};

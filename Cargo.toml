@@ -24,9 +24,12 @@ serde_derive = "1.0"
 url = "1"
 futures = "0.1"
 tokio-threadpool = "0.1"
+tokio = "0.1"
 
 [dev-dependencies]
 getopts = "0.2"
 open = "1.1"
 yup-hyper-mock = "3.14"
-tokio = "0.1"
+
+[workspace]
+members = ["examples/test-installed/"]

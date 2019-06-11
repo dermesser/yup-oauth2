@@ -7,9 +7,9 @@ use std::error::Error;
 use std::io;
 use std::sync::{Arc, Mutex};
 
+use futures::prelude::*;
 use futures::stream::Stream;
 use futures::sync::oneshot;
-use futures::{future, prelude::*};
 use hyper;
 use hyper::{header, StatusCode, Uri};
 use serde_json::error;
@@ -46,6 +46,7 @@ where
     url.push_str(auth_uri);
     vec![
         format!("?scope={}", scopes_string),
+        format!("&access_type=offline"),
         format!(
             "&redirect_uri={}",
             redirect_uri.unwrap_or(OOB_REDIRECT_URI.to_string())
@@ -60,9 +61,9 @@ where
     })
 }
 
-pub struct InstalledFlow<C> {
-    client: hyper::Client<C, hyper::Body>,
-    server: Option<InstalledFlowServer>,
+pub struct InstalledFlow<C: hyper::client::connect::Connect + 'static> {
+    method: InstalledFlowReturnMethod,
+    client: hyper::client::Client<C, hyper::Body>,
 }
 
 /// cf. https://developers.google.com/identity/protocols/OAuth2InstalledApp#choosingredirecturi
@@ -76,57 +77,91 @@ pub enum InstalledFlowReturnMethod {
     HTTPRedirect(u16),
 }
 
-impl<C: 'static> InstalledFlow<C>
-where
-    C: hyper::client::connect::Connect,
-{
+impl<'c, C: 'c + hyper::client::connect::Connect> InstalledFlow<C> {
     /// Starts a new Installed App auth flow.
     /// If HTTPRedirect is chosen as method and the server can't be started, the flow falls
     /// back to Interactive.
     pub fn new(
-        client: hyper::Client<C, hyper::Body>,
-        method: Option<InstalledFlowReturnMethod>,
+        client: hyper::client::Client<C, hyper::Body>,
+        method: InstalledFlowReturnMethod,
     ) -> InstalledFlow<C> {
-        let default = InstalledFlow {
+        InstalledFlow {
+            method: method,
             client: client,
-            server: None,
-        };
-        match method {
-            None => default,
-            Some(InstalledFlowReturnMethod::Interactive) => default,
-            // Start server on localhost to accept auth code.
-            Some(InstalledFlowReturnMethod::HTTPRedirect(port)) => {
-                match InstalledFlowServer::new(port) {
-                    Result::Err(_) => default,
-                    Result::Ok(server) => InstalledFlow {
-                        client: default.client,
-                        server: Some(server),
-                    },
-                }
-            }
         }
     }
 
     /// Handles the token request flow; it consists of the following steps:
-    /// . Obtain a auhorization code with user cooperation or internal redirect.
+    /// . Obtain a authorization code with user cooperation or internal redirect.
     /// . Obtain a token and refresh token using that code.
     /// . Return that token
     ///
     /// It's recommended not to use the DefaultAuthenticatorDelegate, but a specialized one.
-    pub fn obtain_token<'a, AD: AuthenticatorDelegate, S, T>(
+    pub fn obtain_token<'a, AD: 'a + AuthenticatorDelegate + Send>(
         &mut self,
         auth_delegate: AD,
         appsecret: ApplicationSecret,
-        scopes: S,
-    ) -> impl Future<Item = Token, Error = Box<Error>>
-    where
-        T: AsRef<str> + 'a,
-        S: Iterator<Item = &'a T>,
-    {
-        self.get_authorization_code(auth_delegate, appsecret, scopes)
-            .and_then(|authcode| {
-                self.request_token(&appsecret, &authcode, auth_delegate.redirect_uri())
+        scopes: Vec<String>,
+    ) -> impl 'a + Future<Item = Token, Error = Box<dyn 'a + Error + Send>> + Send {
+        let rduri = auth_delegate.redirect_uri();
+        // Start server on localhost to accept auth code.
+        let server = if let InstalledFlowReturnMethod::HTTPRedirect(port) = self.method {
+            match InstalledFlowServer::new(port) {
+                Result::Err(e) => Err(Box::new(e) as Box<dyn Error + Send>),
+                Result::Ok(server) => Ok(Some(server)),
+            }
+        } else {
+            Ok(None)
+        };
+        let port = if let Ok(Some(ref srv)) = server {
+            Some(srv.port)
+        } else {
+            None
+        };
+        let client = self.client.clone();
+        let appsecclone = appsecret.clone();
+        server
+            .into_future()
+            // First: Obtain authorization code from user.
+            .and_then(move |server| {
+                Self::ask_authorization_code(server, auth_delegate, &appsecclone, scopes.iter())
             })
+            // Exchange the authorization code provided by Google for a refresh and an access
+            // token.
+            .and_then(move |authcode| {
+                let request = Self::request_token(appsecret, authcode, rduri, port);
+                let result = client.request(request);
+                // Handle result here, it makes ownership tracking easier.
+                result
+                    .map_err(|e| Box::new(e) as Box<dyn Error + Send>)
+                    .and_then(move |r| {
+                        let result = r
+                            .into_body()
+                            .concat2()
+                            .wait()
+                            .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap()); // TODO: error handling
+
+                        let resp = match result {
+                            Result::Err(e) => {
+                                return Result::Err(Box::new(e) as Box<dyn Error + Send>)
+                            }
+                            Result::Ok(s) => s,
+                        };
+
+                        let token_resp: Result<JSONTokenResponse, error::Error> =
+                            serde_json::from_str(&resp);
+
+                        match token_resp {
+                            Result::Err(e) => {
+                                return Result::Err(Box::new(e) as Box<dyn Error + Send>);
+                            }
+                            Result::Ok(tok) => {
+                                Result::Ok(tok) as Result<JSONTokenResponse, Box<Error + Send>>
+                            }
+                        }
+                    })
+            })
+            // Return the combined token.
             .and_then(|tokens| {
                 // Successful response
                 if tokens.access_token.is_some() {
@@ -149,83 +184,82 @@ where
                             tokens.error_description.unwrap_or("".to_string())
                         )
                         .as_str(),
-                    )) as Box<dyn Error>;
+                    )) as Box<dyn Error + Send>;
                     Result::Err(err)
                 }
             })
     }
 
-    /// Obtains an authorization code either interactively or via HTTP redirect (see
-    /// InstalledFlowReturnMethod).
-    fn get_authorization_code<'a, AD: AuthenticatorDelegate, S, T>(
-        &mut self,
-        auth_delegate: AD,
-        appsecret: ApplicationSecret,
+    fn ask_authorization_code<'a, AD: AuthenticatorDelegate, S, T>(
+        server: Option<InstalledFlowServer>,
+        mut auth_delegate: AD,
+        appsecret: &ApplicationSecret,
         scopes: S,
-    ) -> impl Future<Item = String, Error = Box<Error>>
+    ) -> Box<dyn Future<Item = String, Error = Box<dyn Error + Send>> + Send>
     where
         T: AsRef<str> + 'a,
         S: Iterator<Item = &'a T>,
     {
-        let server = self.server.take(); // Will shutdown the server if present when goes out of scope
-        let result: Result<String, Box<Error>> = match server {
-            None => {
-                let url = build_authentication_request_url(
-                    &appsecret.auth_uri,
-                    &appsecret.client_id,
-                    scopes,
-                    auth_delegate.redirect_uri(),
-                );
-                match auth_delegate.present_user_url(&url, true /* need_code */) {
-                    None => Result::Err(Box::new(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        "couldn't read code",
-                    ))),
-                    Some(mut code) => {
-                        // Partial backwards compatibilty in case an implementation adds a new line
-                        // due to previous behaviour.
-                        let ends_with_newline =
-                            code.chars().last().map(|c| c == '\n').unwrap_or(false);
-                        if ends_with_newline {
-                            code.pop();
+        if server.is_none() {
+            let url = build_authentication_request_url(
+                &appsecret.auth_uri,
+                &appsecret.client_id,
+                scopes,
+                auth_delegate.redirect_uri(),
+            );
+            Box::new(
+                auth_delegate
+                    .present_user_url(&url, true /* need_code */)
+                    .then(|r| {
+                        match r {
+                            Ok(Some(mut code)) => {
+                                // Partial backwards compatibilty in case an implementation adds a new line
+                                // due to previous behaviour.
+                                let ends_with_newline =
+                                    code.chars().last().map(|c| c == '\n').unwrap_or(false);
+                                if ends_with_newline {
+                                    code.pop();
+                                }
+                                Ok(code)
+                            }
+                            _ => Err(Box::new(io::Error::new(
+                                io::ErrorKind::UnexpectedEof,
+                                "couldn't read code",
+                            )) as Box<dyn Error + Send>),
                         }
-                        Result::Ok(code)
-                    }
-                }
-            }
-            Some(mut server) => {
-                // The redirect URI must be this very localhost URL, otherwise Google refuses
-                // authorization.
-                let url = build_authentication_request_url(
-                    &appsecret.auth_uri,
-                    &appsecret.client_id,
-                    scopes,
-                    auth_delegate
-                        .redirect_uri()
-                        .or_else(|| Some(format!("http://localhost:{}", server.port))),
-                );
-                auth_delegate.present_user_url(&url, false /* need_code */);
-
-                match server.block_till_auth() {
-                    Result::Err(e) => Result::Err(Box::new(e)),
-                    Result::Ok(s) => Result::Ok(s),
-                }
-            }
-        };
-
-        result.into_future()
+                    }),
+            )
+        } else {
+            let mut server = server.unwrap();
+            // The redirect URI must be this very localhost URL, otherwise Google refuses
+            // authorization.
+            let url = build_authentication_request_url(
+                &appsecret.auth_uri,
+                &appsecret.client_id,
+                scopes,
+                auth_delegate
+                    .redirect_uri()
+                    .or_else(|| Some(format!("http://localhost:{}", server.port))),
+            );
+            Box::new(
+                auth_delegate
+                    .present_user_url(&url, false /* need_code */)
+                    .then(move |_| server.block_till_auth())
+                    .map_err(|e| Box::new(e) as Box<dyn Error + Send>),
+            )
+        }
     }
 
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.
-    fn request_token(
-        &self,
-        appsecret: &ApplicationSecret,
-        authcode: &str,
+    fn request_token<'a>(
+        appsecret: ApplicationSecret,
+        authcode: String,
         custom_redirect_uri: Option<String>,
-    ) -> Result<JSONTokenResponse, Box<Error>> {
-        let redirect_uri = custom_redirect_uri.unwrap_or_else(|| match &self.server {
+        port: Option<u16>,
+    ) -> hyper::Request<hyper::Body> {
+        let redirect_uri = custom_redirect_uri.unwrap_or_else(|| match port {
             None => OOB_REDIRECT_URI.to_string(),
-            Some(server) => format!("http://localhost:{}", server.port),
+            Some(port) => format!("http://localhost:{}", port),
         });
 
         let body = form_urlencoded::Serializer::new(String::new())
@@ -238,37 +272,11 @@ where
             ])
             .finish();
 
-        let request = hyper::Request::post(&appsecret.token_uri)
+        let request = hyper::Request::post(appsecret.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(body))
             .unwrap(); // TODO: error check
-
-        let result = self.client.request(request).wait();
-
-        let resp = String::new();
-
-        match result {
-            Result::Err(e) => return Result::Err(Box::new(e)),
-            Result::Ok(res) => {
-                let result = res
-                    .into_body()
-                    .concat2()
-                    .wait()
-                    .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap()); // TODO: error handling
-
-                match result {
-                    Result::Err(e) => return Result::Err(Box::new(e)),
-                    Result::Ok(_) => (),
-                }
-            }
-        }
-
-        let token_resp: Result<JSONTokenResponse, error::Error> = serde_json::from_str(&resp);
-
-        match token_resp {
-            Result::Err(e) => return Result::Err(Box::new(e)),
-            Result::Ok(tok) => Result::Ok(tok) as Result<JSONTokenResponse, Box<Error>>,
-        }
+        request
     }
 }
 
@@ -291,37 +299,32 @@ struct InstalledFlowServer {
 }
 
 impl InstalledFlowServer {
-    fn new(port: u16) -> Result<InstalledFlowServer, ()> {
-        let bound_port = hyper::server::conn::AddrIncoming::bind(&([127, 0, 0, 1], port).into());
-        match bound_port {
-            Result::Err(_) => Result::Err(()),
-            Result::Ok(bound_port) => {
-                let port = bound_port.local_addr().port();
+    fn new(port: u16) -> Result<InstalledFlowServer, hyper::error::Error> {
+        let (auth_code_tx, auth_code_rx) = oneshot::channel::<String>();
+        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
-                let (auth_code_tx, auth_code_rx) = oneshot::channel::<String>();
-                let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+        let threadpool = tokio_threadpool::Builder::new()
+            .pool_size(1)
+            .name_prefix("InstalledFlowServer-")
+            .build();
+        let service_maker = InstalledFlowServiceMaker::new(auth_code_tx);
 
-                let threadpool = tokio_threadpool::Builder::new()
-                    .pool_size(1)
-                    .name_prefix("InstalledFlowServer-")
-                    .build();
-                let service_maker = InstalledFlowServiceMaker::new(auth_code_tx);
-                let server = hyper::server::Server::builder(bound_port)
-                    .http1_only(true)
-                    .serve(service_maker)
-                    .with_graceful_shutdown(shutdown_rx)
-                    .map_err(|err| panic!("Failed badly: {}", err)); // TODO: Error handling
+        let addr = format!("127.0.0.1:{}", port);
+        let builder = hyper::server::Server::try_bind(&addr.parse().unwrap())?;
+        let server = builder
+            .http1_only(true)
+            .serve(service_maker)
+            .with_graceful_shutdown(shutdown_rx)
+            .map_err(|err| panic!("Failed badly: {}", err));
 
-                threadpool.spawn(server);
+        threadpool.spawn(server);
 
-                Result::Ok(InstalledFlowServer {
-                    port,
-                    shutdown_tx: Option::Some(shutdown_tx),
-                    auth_code_rx: Option::Some(auth_code_rx),
-                    threadpool: Option::Some(threadpool),
-                })
-            }
-        }
+        Result::Ok(InstalledFlowServer {
+            port,
+            shutdown_tx: Some(shutdown_tx),
+            auth_code_rx: Some(auth_code_rx),
+            threadpool: Some(threadpool),
+        })
     }
 
     fn block_till_auth(&mut self) -> Result<String, oneshot::Canceled> {
@@ -471,7 +474,7 @@ impl InstalledFlowService {
     fn handle_url(&mut self, url: hyper::Uri) {
         // Google redirects to the specified localhost URL, appending the authorization
         // code, like this: http://localhost:8080/xyz/?code=4/731fJ3BheyCouCniPufAd280GHNV5Ju35yYcGs
-        // We take that code and send it to the get_authorization_code() function that
+        // We take that code and send it to the ask_authorization_code() function that
         // waits for it.
         for (param, val) in form_urlencoded::parse(url.query().unwrap_or("").as_bytes()) {
             if param == "code".to_string() {

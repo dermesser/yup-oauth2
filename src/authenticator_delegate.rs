@@ -4,11 +4,24 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 
-use crate::authenticator::Retry;
 use crate::types::RequestError;
 
 use chrono::{DateTime, Local, Utc};
 use std::time::Duration;
+
+use futures::{future, prelude::*};
+use tokio::io as tio;
+
+/// A utility type to indicate how operations DeviceFlowHelper operations should be retried
+pub enum Retry {
+    /// Signal you don't want to retry
+    Abort,
+    /// Signals you want to retry after the given duration
+    After(Duration),
+    /// Instruct the caller to attempt to keep going, or choose an alternate path.
+    /// If this is not supported, it will have the same effect as `Abort`
+    Skip,
+}
 
 /// Contains state of pending authentication requests
 #[derive(Clone, Debug, PartialEq)]
@@ -151,7 +164,7 @@ pub trait AuthenticatorDelegate {
         &mut self,
         url: S,
         need_code: bool,
-    ) -> Option<String> {
+    ) -> Box<dyn Future<Item = Option<String>, Error = Box<dyn Error + Send>> + Send> {
         if need_code {
             println!(
                 "Please direct your browser to {}, follow the instructions and enter the \
@@ -159,19 +172,24 @@ pub trait AuthenticatorDelegate {
                 url
             );
 
-            let mut code = String::new();
-            io::stdin().read_line(&mut code).ok().map(|_| {
-                // Remove newline
-                code.pop();
-                code
-            })
+            Box::new(
+                tio::lines(io::BufReader::new(tio::stdin()))
+                    .into_future()
+                    .map_err(|(e, _)| {
+                        println!("{:?}", e);
+                        Box::new(e) as Box<dyn Error + Send>
+                    })
+                    .and_then(|(l, _)| {
+                        Ok(l)
+                    }),
+            )
         } else {
             println!(
                 "Please direct your browser to {} and follow the instructions displayed \
                  there.",
                 url
             );
-            None
+            Box::new(future::ok(None))
         }
     }
 }

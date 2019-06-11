@@ -4,6 +4,8 @@ use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 
+use futures::{future, prelude::*};
+
 /// A marker trait for all Flows
 pub trait Flow {
     fn type_id() -> FlowType;
@@ -177,6 +179,18 @@ impl FromStr for Scheme {
             Err(_) => Err("Couldn't parse token type"),
         }
     }
+}
+
+/// A provider for authorization tokens, yielding tokens valid for a given scope.
+/// The `api_key()` method is an alternative in case there are no scopes or
+/// if no user is involved.
+pub trait GetToken {
+    fn token<'b, I, T>(&mut self, scopes: I) -> Box<dyn Future<Item = Token, Error = Box<Error>>>
+    where
+        T: AsRef<str> + Ord + 'b,
+        I: IntoIterator<Item = &'b T>;
+
+    fn api_key(&mut self) -> Option<String>;
 }
 
 /// Represents a token as returned by OAuth2 servers.
