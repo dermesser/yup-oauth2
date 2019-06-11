@@ -35,31 +35,7 @@
 //! authorize future API requests to the same scopes.
 //!
 //! ```test_harness,no_run
-//! #[macro_use]
-//! extern crate serde_derive;
-//!
-//! use yup_oauth2::{Authenticator, DefaultAuthenticatorDelegate, PollInformation, ConsoleApplicationSecret, MemoryStorage, GetToken};
-//! use serde_json as json;
-//! use std::default::Default;
-//! use hyper::Client;
-//! use hyper_tls::HttpsConnector;
-//! # const SECRET: &'static str = "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.googleusercontent.com\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\"}}";
-//!
-//! # #[test] fn device() {
-//! let secret = json::from_str::<ConsoleApplicationSecret>(SECRET).unwrap().installed.unwrap();
-//! let res = Authenticator::new(&secret, DefaultAuthenticatorDelegate,
-//!                         Client::builder().build(HttpsConnector::new(4).unwrap()),
-//!                         <MemoryStorage as Default>::default(), None)
-//!                         .token(&["https://www.googleapis.com/auth/youtube.upload"]);
-//! match res {
-//!     Ok(t) => {
-//!     // now you can use t.access_token to authenticate API calls within your
-//!     // given scopes. It will not be valid forever, but Authenticator will automatically
-//!     // refresh the token for you.
-//!     },
-//!     Err(err) => println!("Failed to acquire token: {}", err),
-//! }
-//! # }
+//! // TODO: Rewrite example here once new authenticator works.
 //! ```
 //!
 #[macro_use]
@@ -88,5 +64,5 @@ pub use crate::refresh::{RefreshFlow, RefreshResult};
 pub use crate::service_account::*;
 pub use crate::storage::{DiskTokenStorage, MemoryStorage, NullStorage, TokenStorage};
 pub use crate::types::{
-    ApplicationSecret, ConsoleApplicationSecret, FlowType, Scheme, Token, TokenType,
+    ApplicationSecret, ConsoleApplicationSecret, FlowType, GetToken, Scheme, Token, TokenType,
 };

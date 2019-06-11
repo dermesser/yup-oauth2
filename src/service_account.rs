@@ -347,8 +347,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::authenticator::GetToken;
     use crate::helper::service_account_key_from_file;
+    use crate::types::GetToken;
     use hyper;
     use hyper_tls::HttpsConnector;
 
@@ -369,7 +369,7 @@ mod tests {
         println!(
             "{:?}",
             acc.token(vec![&"https://www.googleapis.com/auth/pubsub"])
-                .unwrap()
+                .wait()
         );
     }
 

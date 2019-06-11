@@ -22,7 +22,6 @@ rust:
 
 stages:
   - name: test
-  - name: examples
   - name: lint
   - name: coverage
 
@@ -44,13 +43,6 @@ jobs:
       script:
         - cargo fmt --all -- --check
         - cargo clippy --all-targets --all-features -- -D warnings || true
-
-    - stage: examples
-      if: os = linux
-      rust: stable
-      script:
-        - cargo build --manifest-path examples/drive_example/Cargo.toml
-        - cargo build --manifest-path examples/service_account/Cargo.toml
 
     - stage: coverage
       if: os = linux

@@ -307,16 +307,16 @@ impl InstalledFlowServer {
 
         let addr = format!("127.0.0.1:{}", port);
         let builder = hyper::server::Server::try_bind(&addr.parse().unwrap())?;
-        let server = builder
-            .http1_only(true)
-            .serve(service_maker)
+        let server = builder.http1_only(true).serve(service_maker);
+        let port = server.local_addr().port();
+        let server_future = server
             .with_graceful_shutdown(shutdown_rx)
             .map_err(|err| panic!("Failed badly: {}", err));
 
-        threadpool.spawn(server);
+        threadpool.spawn(server_future);
 
         Result::Ok(InstalledFlowServer {
-            port,
+            port: port,
             shutdown_tx: Some(shutdown_tx),
             auth_code_rx: Some(auth_code_rx),
             threadpool: Some(threadpool),
@@ -497,7 +497,7 @@ mod tests {
     fn test_request_url_builder() {
         assert_eq!(
             "https://accounts.google.\
-             com/o/oauth2/auth?scope=email%20profile&redirect_uri=urn:ietf:wg:oauth:2.0:\
+             com/o/oauth2/auth?scope=email%20profile&access_type=offline&redirect_uri=urn:ietf:wg:oauth:2.0:\
              oob&response_type=code&client_id=812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5amr\
              f.apps.googleusercontent.com",
             build_authentication_request_url(
