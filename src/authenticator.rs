@@ -44,7 +44,7 @@ pub struct Authenticator<D, S, C> {
 /// The `api_key()` method is an alternative in case there are no scopes or
 /// if no user is involved.
 pub trait GetToken {
-    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<Error>>
+    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<dyn Error>>
     where
         T: AsRef<str> + Ord + 'b,
         I: IntoIterator<Item = &'b T>;
@@ -87,7 +87,7 @@ where
         }
     }
 
-    fn do_installed_flow(&mut self, scopes: &Vec<&str>) -> Result<Token, Box<Error>> {
+    fn do_installed_flow(&mut self, scopes: &Vec<&str>) -> Result<Token, Box<dyn Error>> {
         let installed_type;
 
         match self.flow_type {
@@ -108,7 +108,7 @@ where
         &mut self,
         scopes: &Vec<&str>,
         code_url: String,
-    ) -> Result<Token, Box<Error>> {
+    ) -> Result<Token, Box<dyn Error>> {
         let mut flow = DeviceFlow::new(self.client.clone(), &self.secret, &code_url);
 
         // PHASE 1: REQUEST CODE
@@ -121,14 +121,14 @@ where
                     match res_err {
                         RequestError::ClientError(err) => match self.delegate.client_error(&err) {
                             Retry::Abort | Retry::Skip => {
-                                return Err(Box::new(StringError::from(&err as &Error)));
+                                return Err(Box::new(StringError::from(&err as &dyn Error)));
                             }
                             Retry::After(d) => sleep(d),
                         },
                         RequestError::HttpError(err) => {
                             match self.delegate.connection_error(&err) {
                                 Retry::Abort | Retry::Skip => {
-                                    return Err(Box::new(StringError::from(&err as &Error)));
+                                    return Err(Box::new(StringError::from(&err as &dyn Error)));
                                 }
                                 Retry::After(d) => sleep(d),
                             }
@@ -159,7 +159,7 @@ where
                     match poll_err {
                         &&PollError::HttpError(ref err) => match self.delegate.client_error(err) {
                             Retry::Abort | Retry::Skip => {
-                                return Err(Box::new(StringError::from(err as &Error)));
+                                return Err(Box::new(StringError::from(err as &dyn Error)));
                             }
                             Retry::After(d) => sleep(d),
                         },
@@ -199,7 +199,7 @@ where
     /// In any failure case, the delegate will be provided with additional information, and
     /// the caller will be informed about storage related errors.
     /// Otherwise it is guaranteed to be valid for the given scopes.
-    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<Error>>
+    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<dyn Error>>
     where
         T: AsRef<str> + Ord + 'b,
         I: IntoIterator<Item = &'b T>,

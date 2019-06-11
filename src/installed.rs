@@ -119,7 +119,7 @@ where
         auth_delegate: &mut AD,
         appsecret: &ApplicationSecret,
         scopes: S,
-    ) -> Result<Token, Box<Error>>
+    ) -> Result<Token, Box<dyn Error>>
     where
         T: AsRef<str> + 'a,
         S: Iterator<Item = &'a T>,
@@ -160,13 +160,13 @@ where
         auth_delegate: &mut AD,
         appsecret: &ApplicationSecret,
         scopes: S,
-    ) -> Result<String, Box<Error>>
+    ) -> Result<String, Box<dyn Error>>
     where
         T: AsRef<str> + 'a,
         S: Iterator<Item = &'a T>,
     {
         let server = self.server.take(); // Will shutdown the server if present when goes out of scope
-        let result: Result<String, Box<Error>> = match server {
+        let result: Result<String, Box<dyn Error>> = match server {
             None => {
                 let url = build_authentication_request_url(
                     &appsecret.auth_uri,
@@ -220,7 +220,7 @@ where
         appsecret: &ApplicationSecret,
         authcode: &str,
         custom_redirect_uri: Option<String>,
-    ) -> Result<JSONTokenResponse, Box<Error>> {
+    ) -> Result<JSONTokenResponse, Box<dyn Error>> {
         let redirect_uri = custom_redirect_uri.unwrap_or_else(|| match &self.server {
             None => OOB_REDIRECT_URI.to_string(),
             Some(server) => format!("http://localhost:{}", server.port),
@@ -263,7 +263,7 @@ where
 
         match token_resp {
             Result::Err(e) => return Result::Err(Box::new(e)),
-            Result::Ok(tok) => Result::Ok(tok) as Result<JSONTokenResponse, Box<Error>>,
+            Result::Ok(tok) => Result::Ok(tok) as Result<JSONTokenResponse, Box<dyn Error>>,
         }
     }
 }
@@ -338,14 +338,15 @@ impl std::ops::Drop for InstalledFlowServer {
 
 pub struct InstalledFlowHandlerResponseFuture {
     inner: Box<
-        futures::Future<Item = hyper::Response<hyper::Body>, Error = hyper::http::Error> + Send,
+        dyn futures::Future<Item = hyper::Response<hyper::Body>, Error = hyper::http::Error> + Send,
     >,
 }
 
 impl InstalledFlowHandlerResponseFuture {
     fn new(
         fut: Box<
-            futures::Future<Item = hyper::Response<hyper::Body>, Error = hyper::http::Error> + Send,
+            dyn futures::Future<Item = hyper::Response<hyper::Body>, Error = hyper::http::Error>
+                + Send,
         >,
     ) -> Self {
         Self { inner: fut }

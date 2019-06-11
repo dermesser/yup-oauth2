@@ -77,7 +77,7 @@ pub trait AuthenticatorDelegate {
     /// This can be useful if the underlying `TokenStorage` may fail occasionally.
     /// if `is_set` is true, the failure resulted from `TokenStorage.set(...)`. Otherwise,
     /// it was `TokenStorage.get(...)`
-    fn token_storage_failure(&mut self, is_set: bool, _: &Error) -> Retry {
+    fn token_storage_failure(&mut self, is_set: bool, _: &dyn Error) -> Retry {
         let _ = is_set;
         Retry::Abort
     }

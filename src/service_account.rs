@@ -47,7 +47,7 @@ fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
     base64::encode_config(s.as_ref(), base64::URL_SAFE)
 }
 
-fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<error::Error>> {
+fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<dyn error::Error>> {
     let private = pem_pkcs8.to_string().replace("\\n", "\n").into_bytes();
     let mut private_reader: &[u8] = private.as_ref();
     let private_keys = pemfile::pkcs8_private_keys(&mut private_reader);
@@ -122,7 +122,7 @@ impl JWT {
         head
     }
 
-    fn sign(&self, private_key: &str) -> Result<String, Box<error::Error>> {
+    fn sign(&self, private_key: &str) -> Result<String, Box<dyn error::Error>> {
         let mut jwt_head = self.encode_claims();
         let key = decode_rsa_key(private_key)?;
         let signing_key = sign::RSASigningKey::new(&key)
@@ -237,7 +237,10 @@ where
         }
     }
 
-    fn request_token(&mut self, scopes: &Vec<&str>) -> result::Result<Token, Box<error::Error>> {
+    fn request_token(
+        &mut self,
+        scopes: &Vec<&str>,
+    ) -> result::Result<Token, Box<dyn error::Error>> {
         let mut claims = init_claims_from_key(&self.key, scopes);
         claims.sub = self.sub.clone();
         let signed = JWT::new(claims).sign(self.key.private_key.as_ref().unwrap())?;
@@ -311,7 +314,7 @@ impl<C: 'static> GetToken for ServiceAccountAccess<C>
 where
     C: hyper::client::connect::Connect,
 {
-    fn token<'b, I, T>(&mut self, scopes: I) -> result::Result<Token, Box<error::Error>>
+    fn token<'b, I, T>(&mut self, scopes: I) -> result::Result<Token, Box<dyn error::Error>>
     where
         T: AsRef<str> + Ord + 'b,
         I: IntoIterator<Item = &'b T>,

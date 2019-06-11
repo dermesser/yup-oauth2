@@ -99,8 +99,8 @@ impl StringError {
     }
 }
 
-impl<'a> From<&'a Error> for StringError {
-    fn from(err: &'a Error) -> StringError {
+impl<'a> From<&'a dyn Error> for StringError {
+    fn from(err: &'a dyn Error) -> StringError {
         StringError::new(err.description().to_string(), None)
     }
 }
