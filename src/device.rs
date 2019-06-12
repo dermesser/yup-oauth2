@@ -13,7 +13,7 @@ use serde_json as json;
 use tokio_timer;
 use url::form_urlencoded;
 
-use crate::authenticator_delegate::{AuthenticatorDelegate, PollError, PollInformation};
+use crate::authenticator_delegate::{FlowDelegate, PollError, PollInformation};
 use crate::types::{ApplicationSecret, Flow, FlowType, GetToken, JsonError, RequestError, Token};
 
 pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/oauth2/device/code";
@@ -22,25 +22,25 @@ pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/
 /// It operates in two steps:
 /// * obtain a code to show to the user
 /// * (repeatedly) poll for the user to authenticate your application
-pub struct DeviceFlow<AD, C> {
+pub struct DeviceFlow<FD, C> {
     client: hyper::Client<C, hyper::Body>,
     application_secret: ApplicationSecret,
     /// Usually GOOGLE_DEVICE_CODE_URL
     device_code_url: String,
-    ad: AD,
+    fd: FD,
     wait: Duration,
 }
 
-impl<AD, C> Flow for DeviceFlow<AD, C> {
+impl<FD, C> Flow for DeviceFlow<FD, C> {
     fn type_id() -> FlowType {
         FlowType::Device(String::new())
     }
 }
 
 impl<
-        AD: AuthenticatorDelegate + Clone + Send + 'static,
+        FD: FlowDelegate + Clone + Send + 'static,
         C: hyper::client::connect::Connect + Sync + 'static,
-    > GetToken for DeviceFlow<AD, C>
+    > GetToken for DeviceFlow<FD, C>
 {
     fn token<'b, I, T>(
         &mut self,
@@ -57,19 +57,19 @@ impl<
     }
 }
 
-impl<AD, C> DeviceFlow<AD, C>
+impl<FD, C> DeviceFlow<FD, C>
 where
     C: hyper::client::connect::Connect + Sync + 'static,
     C::Transport: 'static,
     C::Future: 'static,
-    AD: AuthenticatorDelegate + Clone + Send + 'static,
+    FD: FlowDelegate + Clone + Send + 'static,
 {
     pub fn new<S: 'static + AsRef<str>>(
         client: hyper::Client<C, hyper::Body>,
         secret: ApplicationSecret,
-        ad: AD,
+        fd: FD,
         device_code_url: Option<S>,
-    ) -> DeviceFlow<AD, C> {
+    ) -> DeviceFlow<FD, C> {
         DeviceFlow {
             client: client,
             application_secret: secret,
@@ -77,7 +77,7 @@ where
                 .as_ref()
                 .map(|s| s.as_ref().to_string())
                 .unwrap_or(GOOGLE_DEVICE_CODE_URL.to_string()),
-            ad: ad,
+            fd: fd,
             wait: Duration::from_secs(120),
         }
     }
@@ -87,11 +87,13 @@ where
         self.wait = wait;
     }
 
+    /// Essentially what `GetToken::token` does: Retrieve a token for the given scopes without
+    /// caching.
     pub fn retrieve_device_token<'a>(
         &mut self,
         scopes: Vec<String>,
     ) -> Box<dyn Future<Item = Token, Error = Box<dyn Error + Send>> + Send> {
-        let mut ad = self.ad.clone();
+        let mut fd = self.fd.clone();
         let application_secret = self.application_secret.clone();
         let client = self.client.clone();
         let wait = self.wait;
@@ -102,14 +104,13 @@ where
             scopes,
         )
         .and_then(move |(pollinf, device_code)| {
-            ad.present_user_code(&pollinf);
+            fd.present_user_code(&pollinf);
             Ok((pollinf, device_code))
         });
         Box::new(request_code.and_then(move |(pollinf, device_code)| {
             future::loop_fn(0, move |i| {
                 // Make a copy of everything every time, because the loop function needs to be
                 // repeatable, i.e. we can't move anything out.
-                //
                 let pt = Self::poll_token(
                     application_secret.clone(),
                     client.clone(),

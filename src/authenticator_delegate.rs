@@ -134,7 +134,9 @@ pub trait AuthenticatorDelegate: Clone {
             let _ = error_description;
         }
     }
+}
 
+pub trait FlowDelegate: Clone {
     /// Called as long as we are waiting for the user to authorize us.
     /// Can be used to print progress information, or decide to time-out.
     ///
@@ -150,7 +152,6 @@ pub trait AuthenticatorDelegate: Clone {
     fn redirect_uri(&self) -> Option<String> {
         None
     }
-
     /// The server has returned a `user_code` which must be shown to the user,
     /// along with the `verification_url`.
     /// # Notes

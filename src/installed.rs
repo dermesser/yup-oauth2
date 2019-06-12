@@ -16,7 +16,7 @@ use serde_json::error;
 use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
-use crate::authenticator_delegate::AuthenticatorDelegate;
+use crate::authenticator_delegate::FlowDelegate;
 use crate::types::{ApplicationSecret, GetToken, Token};
 
 const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
@@ -62,9 +62,9 @@ where
 }
 
 impl<
-        AD: AuthenticatorDelegate + 'static + Send + Clone,
+        FD: FlowDelegate + 'static + Send + Clone,
         C: hyper::client::connect::Connect + 'static,
-    > GetToken for InstalledFlow<AD, C>
+    > GetToken for InstalledFlow<FD, C>
 {
     fn token<'b, I, T>(
         &mut self,
@@ -81,10 +81,10 @@ impl<
     }
 }
 
-pub struct InstalledFlow<AD: AuthenticatorDelegate, C: hyper::client::connect::Connect + 'static> {
+pub struct InstalledFlow<FD: FlowDelegate, C: hyper::client::connect::Connect + 'static> {
     method: InstalledFlowReturnMethod,
     client: hyper::client::Client<C, hyper::Body>,
-    ad: AD,
+    fd: FD,
     appsecret: ApplicationSecret,
 }
 
@@ -101,22 +101,22 @@ pub enum InstalledFlowReturnMethod {
 
 impl<
         'c,
-        AD: 'static + AuthenticatorDelegate + Clone + Send,
+        FD: 'static + FlowDelegate + Clone + Send,
         C: 'c + hyper::client::connect::Connect,
-    > InstalledFlow<AD, C>
+    > InstalledFlow<FD, C>
 {
     /// Starts a new Installed App auth flow.
     /// If HTTPRedirect is chosen as method and the server can't be started, the flow falls
     /// back to Interactive.
     pub fn new(
         client: hyper::client::Client<C, hyper::Body>,
-        ad: AD,
+        fd: FD,
         secret: ApplicationSecret,
         method: InstalledFlowReturnMethod,
-    ) -> InstalledFlow<AD, C> {
+    ) -> InstalledFlow<FD, C> {
         InstalledFlow {
             method: method,
-            ad: ad,
+            fd: fd,
             appsecret: secret,
             client: client,
         }
@@ -127,12 +127,12 @@ impl<
     /// . Obtain a token and refresh token using that code.
     /// . Return that token
     ///
-    /// It's recommended not to use the DefaultAuthenticatorDelegate, but a specialized one.
+    /// It's recommended not to use the DefaultFlowDelegate, but a specialized one.
     pub fn obtain_token<'a>(
         &mut self,
         scopes: Vec<String>, // Note: I haven't found a better way to give a list of strings here, due to ownership issues with futures.
     ) -> impl 'a + Future<Item = Token, Error = Box<dyn 'a + Error + Send>> + Send {
-        let rduri = self.ad.redirect_uri();
+        let rduri = self.fd.redirect_uri();
         // Start server on localhost to accept auth code.
         let server = if let InstalledFlowReturnMethod::HTTPRedirect(port) = self.method {
             match InstalledFlowServer::new(port) {
@@ -149,7 +149,7 @@ impl<
         };
         let client = self.client.clone();
         let (appsecclone, appsecclone2) = (self.appsecret.clone(), self.appsecret.clone());
-        let auth_delegate = self.ad.clone();
+        let auth_delegate = self.fd.clone();
         server
             .into_future()
             // First: Obtain authorization code from user.
@@ -218,7 +218,7 @@ impl<
 
     fn ask_authorization_code<'a, S, T>(
         server: Option<InstalledFlowServer>,
-        mut auth_delegate: AD,
+        mut auth_delegate: FD,
         appsecret: &ApplicationSecret,
         scopes: S,
     ) -> Box<dyn Future<Item = String, Error = Box<dyn Error + Send>> + Send>
