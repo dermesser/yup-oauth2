@@ -19,6 +19,7 @@ pub struct JsonError {
 }
 
 /// Encapsulates all possible results of the `request_token(...)` operation
+#[derive(Debug)]
 pub enum RequestError {
     /// Indicates connection failure
     ClientError(hyper::Error),
@@ -74,6 +75,16 @@ impl fmt::Display for RequestError {
                 }
                 "\n".fmt(f)
             }
+        }
+    }
+}
+
+impl Error for RequestError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match *self {
+            RequestError::ClientError(ref err) => Some(err),
+            RequestError::HttpError(ref err) => Some(err),
+            _ => None,
         }
     }
 }

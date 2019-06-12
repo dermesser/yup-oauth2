@@ -50,10 +50,12 @@ impl fmt::Display for PollInformation {
 pub enum PollError {
     /// Connection failure - retry if you think it's worth it
     HttpError(hyper::Error),
-    /// indicates we are expired, including the expiration date
+    /// Indicates we are expired, including the expiration date
     Expired(DateTime<Utc>),
     /// Indicates that the user declined access. String is server response
     AccessDenied,
+    /// Indicates that too many attempts failed.
+    TimedOut,
 }
 
 impl fmt::Display for PollError {
@@ -62,6 +64,16 @@ impl fmt::Display for PollError {
             PollError::HttpError(ref err) => err.fmt(f),
             PollError::Expired(ref date) => writeln!(f, "Authentication expired at {}", date),
             PollError::AccessDenied => "Access denied by user".fmt(f),
+            PollError::TimedOut => "Timed out waiting for token".fmt(f),
+        }
+    }
+}
+
+impl Error for PollError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match *self {
+            PollError::HttpError(ref e) => Some(e),
+            _ => None,
         }
     }
 }
