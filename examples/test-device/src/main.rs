@@ -1,9 +1,10 @@
 use futures::prelude::*;
-use yup_oauth2;
+use yup_oauth2::{self, GetToken};
 
 use hyper::client::Client;
 use hyper_tls::HttpsConnector;
 use std::path;
+use std::time::Duration;
 use tokio;
 
 fn main() {
@@ -16,11 +17,12 @@ fn main() {
 
     let ad = yup_oauth2::DefaultAuthenticatorDelegate;
     let mut df = yup_oauth2::DeviceFlow::new::<String>(client, creds, ad, None);
+    df.set_wait_duration(Duration::from_secs(120));
     let mut rt = tokio::runtime::Runtime::new().unwrap();
 
     let fut = df
-        .retrieve_device_token(scopes.to_vec())
+        .token(scopes.iter())
         .and_then(|tok| Ok(println!("{:?}", tok)));
 
-    rt.block_on(fut).unwrap()
+    println!("{:?}", rt.block_on(fut));
 }
