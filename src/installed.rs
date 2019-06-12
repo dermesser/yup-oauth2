@@ -101,7 +101,7 @@ impl<'c, C: 'c + hyper::client::connect::Connect> InstalledFlow<C> {
         &mut self,
         auth_delegate: AD,
         appsecret: ApplicationSecret,
-        scopes: Vec<String>,
+        scopes: Vec<String>, // Note: I haven't found a better way to give a list of strings here, due to ownership issues with futures.
     ) -> impl 'a + Future<Item = Token, Error = Box<dyn 'a + Error + Send>> + Send {
         let rduri = auth_delegate.redirect_uri();
         // Start server on localhost to accept auth code.

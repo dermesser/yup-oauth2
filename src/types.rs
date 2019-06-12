@@ -188,7 +188,7 @@ pub trait GetToken {
     fn token<'b, I, T>(
         &mut self,
         scopes: I,
-    ) -> Box<dyn Future<Item = Token, Error = Box<dyn Error>>>
+    ) -> Box<dyn Future<Item = Token, Error = Box<dyn Error + Send>> + Send>
     where
         T: AsRef<str> + Ord + 'b,
         I: IntoIterator<Item = &'b T>;

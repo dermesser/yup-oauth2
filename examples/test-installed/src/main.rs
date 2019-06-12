@@ -20,7 +20,7 @@ fn main() {
     let s = "https://www.googleapis.com/auth/drive.file".to_string();
     let scopes = vec![s];
 
-    let tok = inf.obtain_token(ad, secret, scopes);
+    let tok = inf.obtain_token(ad, secret, scopes.clone());
     let fut = tok.map_err(|e| println!("error: {:?}", e)).and_then(|t| {
         println!("The token is {:?}", t);
         Ok(())

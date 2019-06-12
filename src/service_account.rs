@@ -13,9 +13,7 @@
 
 use std::default::Default;
 use std::error;
-use std::result;
-use std::str;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 
 use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
 use crate::types::{GetToken, StringError, Token};
@@ -41,12 +39,13 @@ use serde_json;
 const GRANT_TYPE: &'static str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 const GOOGLE_RS256_HEAD: &'static str = "{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
 
-// Encodes s as Base64
+/// Encodes s as Base64
 fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
     base64::encode_config(s.as_ref(), base64::URL_SAFE)
 }
 
-fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<dyn error::Error>> {
+/// Decode a PKCS8 formatted RSA key.
+fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<dyn error::Error + Send>> {
     let private = pem_pkcs8.to_string().replace("\\n", "\n").into_bytes();
     let mut private_reader: &[u8] = private.as_ref();
     let private_keys = pemfile::pkcs8_private_keys(&mut private_reader);
@@ -88,6 +87,8 @@ pub struct ServiceAccountKey {
     pub client_x509_cert_url: Option<String>,
 }
 
+/// Permissions requested for a JWT.
+/// See https://developers.google.com/identity/protocols/OAuth2ServiceAccount#authorizingrequests.
 #[derive(Serialize, Debug)]
 struct Claims {
     iss: String,
@@ -98,20 +99,25 @@ struct Claims {
     scope: String,
 }
 
+/// A JSON Web Token ready for signing.
 struct JWT {
+    /// The value of GOOGLE_RS256_HEAD.
     header: String,
+    /// A Claims struct, expressing the set of desired permissions etc.
     claims: Claims,
 }
 
 impl JWT {
+    /// Create a new JWT from claims.
     fn new(claims: Claims) -> JWT {
         JWT {
             header: GOOGLE_RS256_HEAD.to_string(),
             claims: claims,
         }
     }
-    // Encodes the first two parts (header and claims) to base64 and assembles them into a form
-    // ready to be signed.
+
+    /// Encodes the first two parts (header and claims) to base64 and assembles them into a form
+    /// ready to be signed.
     fn encode_claims(&self) -> String {
         let mut head = encode_base64(&self.header);
         let claims = encode_base64(serde_json::to_string(&self.claims).unwrap());
@@ -121,18 +127,25 @@ impl JWT {
         head
     }
 
-    fn sign(&self, private_key: &str) -> Result<String, Box<dyn error::Error>> {
+    /// Sign a JWT base string with `private_key`, which is a PKCS8 string.
+    fn sign(&self, private_key: &str) -> Result<String, Box<dyn error::Error + Send>> {
         let mut jwt_head = self.encode_claims();
         let key = decode_rsa_key(private_key)?;
-        let signing_key = sign::RSASigningKey::new(&key)
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't initialize signer"))?;
+        let signing_key = sign::RSASigningKey::new(&key).map_err(|_| {
+            Box::new(io::Error::new(
+                io::ErrorKind::Other,
+                "Couldn't initialize signer",
+            )) as Box<dyn error::Error + Send>
+        })?;
         let signer = signing_key
             .choose_scheme(&[rustls::SignatureScheme::RSA_PKCS1_SHA256])
-            .ok_or(io::Error::new(
+            .ok_or(Box::new(io::Error::new(
                 io::ErrorKind::Other,
                 "Couldn't choose signing scheme",
-            ))?;
-        let signature = signer.sign(jwt_head.as_bytes())?;
+            )) as Box<dyn error::Error + Send>)?;
+        let signature = signer
+            .sign(jwt_head.as_bytes())
+            .map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)?;
         let signature_b64 = encode_base64(signature);
 
         jwt_head.push_str(".");
@@ -142,6 +155,8 @@ impl JWT {
     }
 }
 
+/// Set `iss`, `aud`, `exp`, `iat`, `scope` field in the returned `Claims`. `scopes` is an iterator
+/// yielding strings with OAuth scopes.
 fn init_claims_from_key<'a, I, T>(key: &ServiceAccountKey, scopes: I) -> Claims
 where
     T: AsRef<str> + 'a,
@@ -167,19 +182,12 @@ where
     }
 }
 
-/// See "Additional claims" at https://developers.google.com/identity/protocols/OAuth2ServiceAccount
-#[allow(dead_code)]
-fn set_sub_claim(mut claims: Claims, sub: String) -> Claims {
-    claims.sub = Some(sub);
-    claims
-}
-
 /// A token source (`GetToken`) yielding OAuth tokens for services that use ServiceAccount authorization.
 /// This token source caches token and automatically renews expired ones.
 pub struct ServiceAccountAccess<C> {
     client: hyper::Client<C, hyper::Body>,
     key: ServiceAccountKey,
-    cache: MemoryStorage,
+    cache: Arc<Mutex<MemoryStorage>>,
     sub: Option<String>,
 }
 
@@ -205,10 +213,7 @@ impl TokenResponse {
     }
 }
 
-impl<'a, C: 'static> ServiceAccountAccess<C>
-where
-    C: hyper::client::connect::Connect,
-{
+impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccess<C> {
     /// Returns a new `ServiceAccountAccess` token source.
     #[allow(dead_code)]
     pub fn new(
@@ -218,11 +223,13 @@ where
         ServiceAccountAccess {
             client: client,
             key: key,
-            cache: MemoryStorage::default(),
+            cache: Arc::new(Mutex::new(MemoryStorage::default())),
             sub: None,
         }
     }
 
+    /// Set `sub` claim in new `ServiceAccountKey` (see
+    /// https://developers.google.com/identity/protocols/OAuth2ServiceAccount#authorizingrequests).
     pub fn with_sub(
         key: ServiceAccountKey,
         client: hyper::Client<C, hyper::Body>,
@@ -231,81 +238,72 @@ where
         ServiceAccountAccess {
             client: client,
             key: key,
-            cache: MemoryStorage::default(),
+            cache: Arc::new(Mutex::new(MemoryStorage::default())),
             sub: Some(sub),
         }
     }
 
+    ///
     fn request_token(
-        &mut self,
-        scopes: &Vec<&str>,
-    ) -> result::Result<Token, Box<dyn error::Error>> {
-        let mut claims = init_claims_from_key(&self.key, scopes);
-        claims.sub = self.sub.clone();
-        let signed = JWT::new(claims).sign(self.key.private_key.as_ref().unwrap())?;
-
-        let body = form_urlencoded::Serializer::new(String::new())
-            .extend_pairs(vec![
-                ("grant_type".to_string(), GRANT_TYPE.to_string()),
-                ("assertion".to_string(), signed),
-            ])
-            .finish();
-
-        let request = hyper::Request::post(self.key.token_uri.as_ref().unwrap())
-            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body(hyper::Body::from(body))
-            .unwrap(); // TOOD: error handling
-
-        let body = {
-            let result: Arc<RwLock<Result<hyper::Chunk, hyper::Error>>> =
-                Arc::new(RwLock::new(Ok(Default::default())));
-            let ok = Arc::clone(&result);
-            let err = Arc::clone(&result);
-            hyper::rt::run(
-                self.client
+        client: hyper::client::Client<C>,
+        sub: Option<String>,
+        key: ServiceAccountKey,
+        scopes: Vec<String>,
+    ) -> impl Future<Item = Token, Error = Box<dyn 'static + error::Error + Send>> {
+        let mut claims = init_claims_from_key(&key, &scopes);
+        claims.sub = sub.clone();
+        let signed = JWT::new(claims)
+            .sign(key.private_key.as_ref().unwrap())
+            .into_future();
+        signed
+            .map(|signed| {
+                form_urlencoded::Serializer::new(String::new())
+                    .extend_pairs(vec![
+                        ("grant_type".to_string(), GRANT_TYPE.to_string()),
+                        ("assertion".to_string(), signed),
+                    ])
+                    .finish()
+            })
+            .map(|rqbody| {
+                hyper::Request::post(key.token_uri.unwrap())
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(hyper::Body::from(rqbody))
+                    .unwrap()
+            })
+            .and_then(move |request| {
+                client
                     .request(request)
-                    .and_then(|response| response.into_body().concat2())
-                    .map(move |body| {
-                        *ok.write().unwrap_or_else(|e| unreachable!("{}", e)) = Ok(body);
-
-                        ()
-                    })
-                    .map_err(move |e| {
-                        *err.write().unwrap_or_else(|e| unreachable!("{}", e)) = Err(e);
-
-                        ()
-                    }),
-            );
-
-            Arc::try_unwrap(result)
-                .unwrap_or_else(|e| unreachable!("{:?}", e))
-                .into_inner()
-                .unwrap_or_else(|e| unreachable!("{}", e))
-        };
-
-        let json_str = body
+                    .map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)
+            })
+            .and_then(|response| {
+                response
+                    .into_body()
+                    .concat2()
+                    .map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)
+            })
             .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
-            .unwrap(); // TODO: error handling
-
-        let token: Result<TokenResponse, serde_json::error::Error> =
-            serde_json::from_str(&json_str);
-
-        match token {
-            Err(e) => return Err(Box::new(e)),
-            Ok(token) => {
-                if token.access_token.is_none()
-                    || token.token_type.is_none()
-                    || token.expires_in.is_none()
-                {
-                    Err(Box::new(StringError::new(
-                        "Token response lacks fields".to_string(),
-                        Some(&format!("{:?}", token)),
-                    )))
-                } else {
-                    Ok(token.to_oauth_token())
-                }
-            }
-        }
+            .and_then(|s| {
+                serde_json::from_str(&s).map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)
+            })
+            .then(
+                |token: Result<TokenResponse, Box<dyn error::Error + Send>>| match token {
+                    Err(e) => return Err(e),
+                    Ok(token) => {
+                        if token.access_token.is_none()
+                            || token.token_type.is_none()
+                            || token.expires_in.is_none()
+                        {
+                            Err(Box::new(StringError::new(
+                                "Token response lacks fields".to_string(),
+                                Some(&format!("{:?}", token)),
+                            ))
+                                as Box<dyn error::Error + Send>)
+                        } else {
+                            Ok(token.to_oauth_token())
+                        }
+                    }
+                },
+            )
     }
 }
 
@@ -316,30 +314,48 @@ where
     fn token<'b, I, T>(
         &mut self,
         scopes: I,
-    ) -> Box<dyn Future<Item = Token, Error = Box<dyn error::Error>>>
+    ) -> Box<dyn Future<Item = Token, Error = Box<dyn error::Error + Send>> + Send>
     where
         T: AsRef<str> + Ord + 'b,
         I: IntoIterator<Item = &'b T>,
     {
         let (hash, scps) = hash_scopes(scopes);
 
-        match self.cache.get(hash, &scps) {
+        match self
+            .cache
+            .lock()
+            .unwrap()
+            .get(hash, &scps.iter().map(|s| s.as_str()).collect())
+        {
             Ok(Some(token)) => {
                 if !token.expired() {
                     return Box::new(future::ok(token));
                 }
             }
-            Err(e) => return Box::new(future::err(Box::new(e) as Box<dyn error::Error>)),
+            Err(e) => return Box::new(future::err(Box::new(e) as Box<dyn error::Error + Send>)),
             _ => {}
         }
 
-        match self.request_token(&scps) {
-            Ok(token) => {
-                let _ = self.cache.set(hash, &scps, Some(token.clone()));
-                Box::new(future::ok(token))
-            }
-            Err(e) => Box::new(future::err(e)),
-        }
+        let cache = self.cache.clone();
+        Box::new(
+            Self::request_token(
+                self.client.clone(),
+                self.sub.clone(),
+                self.key.clone(),
+                scps.iter().map(|s| s.to_string()).collect(),
+            )
+            .then(move |r| match r {
+                Ok(token) => {
+                    let _ = cache.lock().unwrap().set(
+                        hash,
+                        &scps.iter().map(|s| s.as_str()).collect(),
+                        Some(token.clone()),
+                    );
+                    Box::new(future::ok(token))
+                }
+                Err(e) => Box::new(future::err(e)),
+            }),
+        )
     }
 
     fn api_key(&mut self) -> Option<String> {
