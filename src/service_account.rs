@@ -317,7 +317,7 @@ where
     ) -> Box<dyn Future<Item = Token, Error = Box<dyn error::Error + Send>> + Send>
     where
         T: AsRef<str> + Ord + 'b,
-        I: IntoIterator<Item = &'b T>,
+        I: Iterator<Item = &'b T>,
     {
         let (hash, scps) = hash_scopes(scopes);
 
@@ -387,7 +387,7 @@ mod tests {
         let mut acc = ServiceAccountAccess::new(key, client);
         println!(
             "{:?}",
-            acc.token(vec![&"https://www.googleapis.com/auth/pubsub"])
+            acc.token(vec!["https://www.googleapis.com/auth/pubsub"].iter())
                 .wait()
         );
     }

@@ -70,7 +70,7 @@ impl fmt::Display for PollError {
 ///
 /// The only method that needs to be implemented manually is `present_user_code(...)`,
 /// as no assumptions are made on how this presentation should happen.
-pub trait AuthenticatorDelegate {
+pub trait AuthenticatorDelegate: Clone {
     /// Called whenever there is an client, usually if there are network problems.
     ///
     /// Return retry information.
@@ -194,5 +194,6 @@ pub trait AuthenticatorDelegate {
 
 /// Uses all default implementations by AuthenticatorDelegate, and makes the trait's
 /// implementation usable in the first place.
+#[derive(Clone)]
 pub struct DefaultAuthenticatorDelegate;
 impl AuthenticatorDelegate for DefaultAuthenticatorDelegate {}

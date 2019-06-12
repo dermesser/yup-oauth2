@@ -191,7 +191,7 @@ pub trait GetToken {
     ) -> Box<dyn Future<Item = Token, Error = Box<dyn Error + Send>> + Send>
     where
         T: AsRef<str> + Ord + 'b,
-        I: IntoIterator<Item = &'b T>;
+        I: Iterator<Item = &'b T>;
 
     fn api_key(&mut self) -> Option<String>;
 }

@@ -17,7 +17,7 @@ use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
 use crate::authenticator_delegate::AuthenticatorDelegate;
-use crate::types::{ApplicationSecret, Token};
+use crate::types::{ApplicationSecret, GetToken, Token};
 
 const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
 
@@ -61,9 +61,31 @@ where
     })
 }
 
-pub struct InstalledFlow<C: hyper::client::connect::Connect + 'static> {
+impl<
+        AD: AuthenticatorDelegate + 'static + Send + Clone,
+        C: hyper::client::connect::Connect + 'static,
+    > GetToken for InstalledFlow<AD, C>
+{
+    fn token<'b, I, T>(
+        &mut self,
+        scopes: I,
+    ) -> Box<dyn Future<Item = Token, Error = Box<dyn Error + Send>> + Send>
+    where
+        T: AsRef<str> + Ord + 'b,
+        I: Iterator<Item = &'b T>,
+    {
+        Box::new(self.obtain_token(scopes.into_iter().map(|s| s.as_ref().to_string()).collect()))
+    }
+    fn api_key(&mut self) -> Option<String> {
+        None
+    }
+}
+
+pub struct InstalledFlow<AD: AuthenticatorDelegate, C: hyper::client::connect::Connect + 'static> {
     method: InstalledFlowReturnMethod,
     client: hyper::client::Client<C, hyper::Body>,
+    ad: AD,
+    appsecret: ApplicationSecret,
 }
 
 /// cf. https://developers.google.com/identity/protocols/OAuth2InstalledApp#choosingredirecturi
@@ -77,16 +99,25 @@ pub enum InstalledFlowReturnMethod {
     HTTPRedirect(u16),
 }
 
-impl<'c, C: 'c + hyper::client::connect::Connect> InstalledFlow<C> {
+impl<
+        'c,
+        AD: 'static + AuthenticatorDelegate + Clone + Send,
+        C: 'c + hyper::client::connect::Connect,
+    > InstalledFlow<AD, C>
+{
     /// Starts a new Installed App auth flow.
     /// If HTTPRedirect is chosen as method and the server can't be started, the flow falls
     /// back to Interactive.
     pub fn new(
         client: hyper::client::Client<C, hyper::Body>,
+        ad: AD,
+        secret: ApplicationSecret,
         method: InstalledFlowReturnMethod,
-    ) -> InstalledFlow<C> {
+    ) -> InstalledFlow<AD, C> {
         InstalledFlow {
             method: method,
+            ad: ad,
+            appsecret: secret,
             client: client,
         }
     }
@@ -97,13 +128,11 @@ impl<'c, C: 'c + hyper::client::connect::Connect> InstalledFlow<C> {
     /// . Return that token
     ///
     /// It's recommended not to use the DefaultAuthenticatorDelegate, but a specialized one.
-    pub fn obtain_token<'a, AD: 'a + AuthenticatorDelegate + Send>(
+    pub fn obtain_token<'a>(
         &mut self,
-        auth_delegate: AD,
-        appsecret: ApplicationSecret,
         scopes: Vec<String>, // Note: I haven't found a better way to give a list of strings here, due to ownership issues with futures.
     ) -> impl 'a + Future<Item = Token, Error = Box<dyn 'a + Error + Send>> + Send {
-        let rduri = auth_delegate.redirect_uri();
+        let rduri = self.ad.redirect_uri();
         // Start server on localhost to accept auth code.
         let server = if let InstalledFlowReturnMethod::HTTPRedirect(port) = self.method {
             match InstalledFlowServer::new(port) {
@@ -119,7 +148,8 @@ impl<'c, C: 'c + hyper::client::connect::Connect> InstalledFlow<C> {
             None
         };
         let client = self.client.clone();
-        let appsecclone = appsecret.clone();
+        let (appsecclone, appsecclone2) = (self.appsecret.clone(), self.appsecret.clone());
+        let auth_delegate = self.ad.clone();
         server
             .into_future()
             // First: Obtain authorization code from user.
@@ -129,7 +159,7 @@ impl<'c, C: 'c + hyper::client::connect::Connect> InstalledFlow<C> {
             // Exchange the authorization code provided by Google for a refresh and an access
             // token.
             .and_then(move |authcode| {
-                let request = Self::request_token(appsecret, authcode, rduri, port);
+                let request = Self::request_token(appsecclone2, authcode, rduri, port);
                 let result = client.request(request);
                 // Handle result here, it makes ownership tracking easier.
                 result
@@ -186,7 +216,7 @@ impl<'c, C: 'c + hyper::client::connect::Connect> InstalledFlow<C> {
             })
     }
 
-    fn ask_authorization_code<'a, AD: AuthenticatorDelegate, S, T>(
+    fn ask_authorization_code<'a, S, T>(
         server: Option<InstalledFlowServer>,
         mut auth_delegate: AD,
         appsecret: &ApplicationSecret,
