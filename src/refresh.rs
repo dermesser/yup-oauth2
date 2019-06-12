@@ -1,5 +1,7 @@
 use crate::types::{ApplicationSecret, FlowType, JsonError};
 
+use std::error::Error;
+
 use super::Token;
 use chrono::Utc;
 use futures::stream::Stream;
@@ -14,10 +16,7 @@ use url::form_urlencoded;
 /// Refresh an expired access token, as obtained by any other authentication flow.
 /// This flow is useful when your `Token` is expired and allows to obtain a new
 /// and valid access token.
-pub struct RefreshFlow<C> {
-    client: hyper::Client<C, hyper::Body>,
-    result: RefreshResult,
-}
+pub struct RefreshFlow;
 
 /// All possible outcomes of the refresh flow
 pub enum RefreshResult {
@@ -31,17 +30,7 @@ pub enum RefreshResult {
     Success(Token),
 }
 
-impl<C: 'static> RefreshFlow<C>
-where
-    C: hyper::client::connect::Connect,
-{
-    pub fn new(client: hyper::Client<C, hyper::Body>) -> RefreshFlow<C> {
-        RefreshFlow {
-            client: client,
-            result: RefreshResult::Uninitialized,
-        }
-    }
-
+impl RefreshFlow {
     /// Attempt to refresh the given token, and obtain a new, valid one.
     /// If the `RefreshResult` is `RefreshResult::Error`, you may retry within an interval
     /// of your choice. If it is `RefreshResult:RefreshError`, your refresh token is invalid
@@ -56,69 +45,67 @@ where
     ///
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub fn refresh_token(
-        &mut self,
-        _flow_type: FlowType,
-        client_secret: &ApplicationSecret,
-        refresh_token: &str,
-    ) -> &RefreshResult {
-        if let RefreshResult::Success(_) = self.result {
-            return &self.result;
-        }
-
+    pub fn refresh_token<'a, C: 'static + hyper::client::connect::Connect>(
+        client: hyper::Client<C>,
+        client_secret: &'a ApplicationSecret,
+        refresh_token: &'a str,
+    ) -> impl 'a + Future<Item = RefreshResult, Error = Box<dyn 'static + Error + Send>> {
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
-                ("client_id", client_secret.client_id.as_ref()),
-                ("client_secret", client_secret.client_secret.as_ref()),
-                ("refresh_token", refresh_token),
-                ("grant_type", "refresh_token"),
+                ("client_id", client_secret.client_id.clone()),
+                ("client_secret", client_secret.client_secret.clone()),
+                ("refresh_token", refresh_token.to_string()),
+                ("grant_type", "refresh_token".to_string()),
             ])
             .finish();
 
-        let request = hyper::Request::post(&client_secret.token_uri)
+        let request = hyper::Request::post(client_secret.token_uri.clone())
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(req))
             .unwrap(); // TODO: error handling
 
-        let json_str: String = match self.client.request(request).wait() {
-            Err(err) => {
-                self.result = RefreshResult::Error(err);
-                return &self.result;
-            }
-            Ok(res) => {
-                res.into_body()
-                    .concat2()
-                    .wait()
-                    .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
-                    .unwrap() // TODO: error handling
-            }
-        };
+        client
+            .request(request)
+            .then(|r| {
+                match r {
+                    Err(err) => return Err(Box::new(err) as Box<dyn Error + Send + 'static>),
+                    Ok(res) => {
+                        Ok(res
+                            .into_body()
+                            .concat2()
+                            .wait()
+                            .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
+                            .unwrap()) // TODO: error handling
+                    }
+                }
+            })
+            .and_then(|json_str: String| {
+                #[derive(Deserialize)]
+                struct JsonToken {
+                    access_token: String,
+                    token_type: String,
+                    expires_in: i64,
+                }
 
-        #[derive(Deserialize)]
-        struct JsonToken {
-            access_token: String,
-            token_type: String,
-            expires_in: i64,
-        }
+                match json::from_str::<JsonError>(&json_str) {
+                    Err(_) => {}
+                    Ok(res) => {
+                        return Ok(RefreshResult::RefreshError(
+                            res.error,
+                            res.error_description,
+                        ))
+                    }
+                }
 
-        match json::from_str::<JsonError>(&json_str) {
-            Err(_) => {}
-            Ok(res) => {
-                self.result = RefreshResult::RefreshError(res.error, res.error_description);
-                return &self.result;
-            }
-        }
-
-        let t: JsonToken = json::from_str(&json_str).unwrap();
-        self.result = RefreshResult::Success(Token {
-            access_token: t.access_token,
-            token_type: t.token_type,
-            refresh_token: refresh_token.to_string(),
-            expires_in: None,
-            expires_in_timestamp: Some(Utc::now().timestamp() + t.expires_in),
-        });
-
-        &self.result
+                let t: JsonToken = json::from_str(&json_str).unwrap();
+                Ok(RefreshResult::Success(Token {
+                    access_token: t.access_token,
+                    token_type: t.token_type,
+                    refresh_token: refresh_token.to_string(),
+                    expires_in: None,
+                    expires_in_timestamp: Some(Utc::now().timestamp() + t.expires_in),
+                }))
+            })
     }
 }
 
