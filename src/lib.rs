@@ -45,6 +45,7 @@ extern crate serde_derive;
 #[macro_use]
 extern crate yup_hyper_mock as hyper_mock;
 
+mod authenticator;
 mod authenticator_delegate;
 mod device;
 mod helper;
@@ -54,8 +55,10 @@ mod service_account;
 mod storage;
 mod types;
 
+pub use crate::authenticator::Authenticator;
 pub use crate::authenticator_delegate::{
-    AuthenticatorDelegate, DefaultAuthenticatorDelegate, PollError, PollInformation,
+    AuthenticatorDelegate, DefaultAuthenticatorDelegate, DefaultFlowDelegate, FlowDelegate,
+    PollError, PollInformation,
 };
 pub use crate::device::{DeviceFlow, GOOGLE_DEVICE_CODE_URL};
 pub use crate::helper::*;

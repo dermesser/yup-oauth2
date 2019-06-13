@@ -1,4 +1,4 @@
-use crate::types::{ApplicationSecret, FlowType, JsonError};
+use crate::types::{ApplicationSecret, JsonError};
 
 use std::error::Error;
 
@@ -19,9 +19,8 @@ use url::form_urlencoded;
 pub struct RefreshFlow;
 
 /// All possible outcomes of the refresh flow
+#[derive(Debug)]
 pub enum RefreshResult {
-    // Indicates no attempt has been made to refresh yet
-    Uninitialized,
     /// Indicates connection failure
     Error(hyper::Error),
     /// The server did not answer with a new token, providing the server message
@@ -47,8 +46,8 @@ impl RefreshFlow {
     /// Please see the crate landing page for an example.
     pub fn refresh_token<'a, C: 'static + hyper::client::connect::Connect>(
         client: hyper::Client<C>,
-        client_secret: &'a ApplicationSecret,
-        refresh_token: &'a str,
+        client_secret: ApplicationSecret,
+        refresh_token: String,
     ) -> impl 'a + Future<Item = RefreshResult, Error = Box<dyn 'static + Error + Send>> {
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
@@ -68,7 +67,7 @@ impl RefreshFlow {
             .request(request)
             .then(|r| {
                 match r {
-                    Err(err) => return Err(Box::new(err) as Box<dyn Error + Send + 'static>),
+                    Err(err) => return Err(RefreshResult::Error(err)),
                     Ok(res) => {
                         Ok(res
                             .into_body()
@@ -79,7 +78,11 @@ impl RefreshFlow {
                     }
                 }
             })
-            .and_then(|json_str: String| {
+            .then(move |maybe_json_str: Result<String, RefreshResult>| {
+                if let Err(e) = maybe_json_str {
+                    return Ok(e);
+                }
+                let json_str = maybe_json_str.unwrap();
                 #[derive(Deserialize)]
                 struct JsonToken {
                     access_token: String,
@@ -106,58 +109,5 @@ impl RefreshFlow {
                     expires_in_timestamp: Some(Utc::now().timestamp() + t.expires_in),
                 }))
             })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::device::GOOGLE_DEVICE_CODE_URL;
-    use crate::helper::parse_application_secret;
-
-    mock_connector!(MockGoogleRefresh {
-        "https://accounts.google.com" =>
-            "HTTP/1.1 200 OK\r\n\
-             Server: BOGUS\r\n\
-             \r\n\
-             {\r\n\
-                 \"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",\r\n\
-                 \"expires_in\":3920,\r\n\
-                 \"token_type\":\"Bearer\"\r\n\
-             }"
-    });
-
-    const TEST_APP_SECRET: &'static str = r#"{"installed":{"client_id":"384278056379-tr5pbot1mil66749n639jo54i4840u77.apps.googleusercontent.com","project_id":"sanguine-rhythm-105020","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://accounts.google.com/o/oauth2/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"QeQUnhzsiO4t--ZGmj9muUAu","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"#;
-
-    #[test]
-    fn refresh_flow() {
-        let appsecret = parse_application_secret(TEST_APP_SECRET).unwrap();
-
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let client = hyper::Client::builder()
-            .executor(runtime.executor())
-            .build(MockGoogleRefresh::default());
-        let mut flow = RefreshFlow::new(client);
-        let device_flow = FlowType::Device(GOOGLE_DEVICE_CODE_URL.to_string());
-
-        match flow.refresh_token(device_flow, &appsecret, "bogus_refresh_token") {
-            RefreshResult::Success(ref t) => {
-                assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg");
-                assert!(!t.expired());
-            }
-            RefreshResult::Error(err) => {
-                assert!(false, "Refresh flow failed: RefreshResult::Error({})", err);
-            }
-            RefreshResult::RefreshError(msg, err) => {
-                assert!(
-                    false,
-                    "Refresh flow failed: RefreshResult::RefreshError({}, {:?})",
-                    msg, err
-                );
-            }
-            RefreshResult::Uninitialized => {
-                assert!(false, "Refresh flow failed: RefreshResult::Uninitialized");
-            }
-        }
     }
 }
