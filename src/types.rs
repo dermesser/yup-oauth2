@@ -248,7 +248,7 @@ impl Token {
         if self.access_token.len() == 0 {
             panic!("called expired() on unset token");
         }
-        self.expiry_date() <= Utc::now()
+        self.expiry_date() - chrono::Duration::minutes(1) <= Utc::now()
     }
 
     /// Returns a DateTime object representing our expiry date.
