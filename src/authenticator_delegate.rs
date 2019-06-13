@@ -110,15 +110,6 @@ pub trait AuthenticatorDelegate: Clone {
     /// The server denied the attempt to obtain a request code
     fn request_failure(&mut self, _: RequestError) {}
 
-    /// Called if the request code is expired. You will have to start over in this case.
-    /// This will be the last call the delegate receives.
-    /// Given `DateTime` is the expiration date
-    fn expired(&mut self, _: &DateTime<Utc>) {}
-
-    /// Called if the user denied access. You would have to start over.
-    /// This will be the last call the delegate receives.
-    fn denied(&mut self) {}
-
     /// Called if we could not acquire a refresh token for a reason possibly specified
     /// by the server.
     /// This call is made for the delegate's information only.
@@ -137,6 +128,15 @@ pub trait AuthenticatorDelegate: Clone {
 }
 
 pub trait FlowDelegate: Clone {
+    /// Called if the request code is expired. You will have to start over in this case.
+    /// This will be the last call the delegate receives.
+    /// Given `DateTime` is the expiration date
+    fn expired(&mut self, _: &DateTime<Utc>) {}
+
+    /// Called if the user denied access. You would have to start over.
+    /// This will be the last call the delegate receives.
+    fn denied(&mut self) {}
+
     /// Called as long as we are waiting for the user to authorize us.
     /// Can be used to print progress information, or decide to time-out.
     ///

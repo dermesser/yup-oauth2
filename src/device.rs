@@ -13,8 +13,10 @@ use serde_json as json;
 use tokio_timer;
 use url::form_urlencoded;
 
-use crate::authenticator_delegate::{FlowDelegate, PollError, PollInformation};
-use crate::types::{ApplicationSecret, Flow, FlowType, GetToken, JsonError, RequestError, Token};
+use crate::authenticator_delegate::{FlowDelegate, PollError, PollInformation, Retry};
+use crate::types::{
+    ApplicationSecret, Flow, FlowType, GetToken, JsonError, RequestError, StringError, Token,
+};
 
 pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/oauth2/device/code";
 
@@ -81,7 +83,7 @@ where
                 .map(|s| s.as_ref().to_string())
                 .unwrap_or(GOOGLE_DEVICE_CODE_URL.to_string()),
             fd: fd,
-            wait: Duration::from_secs(120),
+            wait: Duration::from_secs(1200),
         }
     }
 
@@ -96,10 +98,10 @@ where
         &mut self,
         scopes: Vec<String>,
     ) -> Box<dyn Future<Item = Token, Error = Box<dyn Error + Send>> + Send> {
-        let mut fd = self.fd.clone();
         let application_secret = self.application_secret.clone();
         let client = self.client.clone();
         let wait = self.wait;
+        let mut fd = self.fd.clone();
         let request_code = Self::request_code(
             application_secret.clone(),
             client.clone(),
@@ -110,6 +112,7 @@ where
             fd.present_user_code(&pollinf);
             Ok((pollinf, device_code))
         });
+        let fd = self.fd.clone();
         Box::new(request_code.and_then(move |(pollinf, device_code)| {
             future::loop_fn(0, move |i| {
                 // Make a copy of everything every time, because the loop function needs to be
@@ -119,15 +122,41 @@ where
                     client.clone(),
                     device_code.clone(),
                     pollinf.clone(),
+                    fd.clone(),
                 );
                 let maxn = wait.as_secs() / pollinf.interval.as_secs();
+                let mut fd = fd.clone();
+                let pollinf = pollinf.clone();
                 tokio_timer::sleep(pollinf.interval)
                     .then(|_| pt)
                     .then(move |r| match r {
-                        Ok(None) if i < maxn => Ok(future::Loop::Continue(i + 1)),
-                        Ok(Some(tok)) => Ok(future::Loop::Break(tok)),
-                        Err(_) if i < maxn => Ok(future::Loop::Continue(i + 1)),
-                        _ => Err(Box::new(PollError::TimedOut) as Box<dyn Error + Send>),
+                        Ok(None) if i < maxn => match fd.pending(&pollinf) {
+                            Retry::Abort | Retry::Skip => Box::new(
+                                Err(Box::new(StringError::new(
+                                    "Pending authentication aborted".to_string(),
+                                    None,
+                                )) as Box<dyn Error + Send>)
+                                .into_future(),
+                            ),
+                            Retry::After(d) => Box::new(
+                                tokio_timer::sleep(d)
+                                    .then(move |_| Ok(future::Loop::Continue(i + 1))),
+                            )
+                                as Box<
+                                    dyn Future<
+                                            Item = future::Loop<Token, u64>,
+                                            Error = Box<dyn Error + Send>,
+                                        > + Send,
+                                >,
+                        },
+                        Ok(Some(tok)) => Box::new(Ok(future::Loop::Break(tok)).into_future()),
+                        Err(_) if i < maxn => {
+                            Box::new(Ok(future::Loop::Continue(i + 1)).into_future())
+                        }
+                        _ => Box::new(
+                            Err(Box::new(PollError::TimedOut) as Box<dyn Error + Send>)
+                                .into_future(),
+                        ),
                     })
             })
         }))
@@ -256,8 +285,10 @@ where
         client: hyper::Client<C>,
         device_code: String,
         pi: PollInformation,
+        mut fd: FD,
     ) -> impl Future<Item = Option<Token>, Error = Box<dyn 'a + Error + Send>> {
         let expired = if pi.expires_at <= Utc::now() {
+            fd.expired(&pi.expires_at);
             Err(PollError::Expired(pi.expires_at)).into_future()
         } else {
             Ok(()).into_future()
@@ -291,7 +322,7 @@ where
                     .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
                     .unwrap() // TODO: error handling
             })
-            .and_then(|json_str: String| {
+            .and_then(move |json_str: String| {
                 #[derive(Deserialize)]
                 struct JsonError {
                     error: String,
@@ -302,6 +333,7 @@ where
                     Ok(res) => {
                         match res.error.as_ref() {
                             "access_denied" => {
+                                fd.denied();
                                 return Err(
                                     Box::new(PollError::AccessDenied) as Box<dyn Error + Send>
                                 );
