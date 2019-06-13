@@ -64,12 +64,16 @@ where
     /// * `secret` - usually obtained from a client secret file produced by the
     ///              [developer console][dev-con]
     /// * `delegate` - Used to further refine the flow of the authentication.
-    /// * `client` - used for all authentication https requests
+    /// * `client` - used for all authentication https requests.
     /// * `storage` - used to cache authorization tokens tokens permanently. However,
     ///               the implementation doesn't have any particular semantic requirement, which
     ///               is why `NullStorage` and `MemoryStorage` can be used as well.
     /// * `flow_type` - the kind of authentication to use to obtain a token for the
     ///                 required scopes. If unset, it will be derived from the secret.
+    ///
+    /// NOTE: It is recommended to use a client constructed like this in order to prevent functions
+    /// like `hyper::run()` from hanging: `let client = hyper::Client::builder().keep_alive(false);`.
+    /// Due to token requests being rare, this should not result in a too bad performance problem.
     /// [dev-con]: https://console.developers.google.com
     pub fn new(
         secret: &ApplicationSecret,
