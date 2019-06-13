@@ -11,8 +11,9 @@ fn main() {
     let creds = yup_oauth2::read_application_secret(path::Path::new("clientsecret.json"))
         .expect("clientsecret");
     let https = HttpsConnector::new(1).expect("tls");
-    let client = Client::builder().build::<_, hyper::Body>(https);
-
+    let client = Client::builder()
+        .keep_alive(false)
+        .build::<_, hyper::Body>(https);
     let scopes = &["https://www.googleapis.com/auth/youtube.readonly".to_string()];
 
     let ad = yup_oauth2::DefaultFlowDelegate;

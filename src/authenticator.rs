@@ -16,6 +16,10 @@ use std::sync::{Arc, Mutex};
 ///
 /// `ServiceAccountAccess` does not need (and does not work) with `Authenticator`, given that it
 /// does not require interaction and implements its own caching. Use it directly.
+///
+/// NOTE: It is recommended to use a client constructed like this in order to prevent functions
+/// like `hyper::run()` from hanging: `let client = hyper::Client::builder().keep_alive(false);`.
+/// Due to token requests being rare, this should not result in a too bad performance problem.
 pub struct Authenticator<
     T: GetToken,
     S: TokenStorage,
