@@ -11,7 +11,7 @@ pub trait Flow {
     fn type_id() -> FlowType;
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct JsonError {
     pub error: String,
     pub error_description: Option<String>,

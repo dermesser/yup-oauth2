@@ -16,7 +16,7 @@ use std::error;
 use std::sync::{Arc, Mutex};
 
 use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
-use crate::types::{ApplicationSecret, GetToken, StringError, Token};
+use crate::types::{ApplicationSecret, GetToken, JsonError, StringError, Token};
 
 use futures::stream::Stream;
 use futures::{future, prelude::*};
@@ -283,7 +283,15 @@ impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccess<C> {
             })
             .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
             .and_then(|s| {
-                serde_json::from_str(&s).map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)
+                if let Ok(jse) = serde_json::from_str::<JsonError>(&s) {
+                    Err(
+                        Box::new(StringError::new(jse.error, jse.error_description.as_ref()))
+                            as Box<dyn error::Error + Send>,
+                    )
+                } else {
+                    serde_json::from_str(&s)
+                        .map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)
+                }
             })
             .then(
                 |token: Result<TokenResponse, Box<dyn error::Error + Send>>| match token {
