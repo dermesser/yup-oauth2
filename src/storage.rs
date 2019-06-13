@@ -20,7 +20,7 @@ use crate::types::Token;
 /// For completeness, the underlying, sorted scopes are provided as well. They might be
 /// useful for presentation to the user.
 pub trait TokenStorage {
-    type Error: 'static + Error;
+    type Error: 'static + Error + Send;
 
     /// If `token` is None, it is invalid or revoked and should be removed from storage.
     /// Otherwise, it should be saved.

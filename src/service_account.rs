@@ -47,7 +47,7 @@ fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
     base64::encode_config(s.as_ref(), base64::URL_SAFE)
 }
 
-fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<dyn error::Error>> {
+fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<dyn error::Error + Send>> {
     let private = pem_pkcs8.to_string().replace("\\n", "\n").into_bytes();
     let mut private_reader: &[u8] = private.as_ref();
     let private_keys = pemfile::pkcs8_private_keys(&mut private_reader);
@@ -122,18 +122,25 @@ impl JWT {
         head
     }
 
-    fn sign(&self, private_key: &str) -> Result<String, Box<dyn error::Error>> {
+    fn sign(&self, private_key: &str) -> Result<String, Box<dyn error::Error + Send>> {
         let mut jwt_head = self.encode_claims();
         let key = decode_rsa_key(private_key)?;
-        let signing_key = sign::RSASigningKey::new(&key)
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't initialize signer"))?;
+        let signing_key = sign::RSASigningKey::new(&key).map_err(|_| {
+            Box::new(io::Error::new(
+                io::ErrorKind::Other,
+                "Couldn't initialize signer",
+            )) as Box<dyn error::Error + Send>
+        })?;
         let signer = signing_key
             .choose_scheme(&[rustls::SignatureScheme::RSA_PKCS1_SHA256])
             .ok_or(io::Error::new(
                 io::ErrorKind::Other,
                 "Couldn't choose signing scheme",
-            ))?;
-        let signature = signer.sign(jwt_head.as_bytes())?;
+            ))
+            .map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)?;
+        let signature = signer
+            .sign(jwt_head.as_bytes())
+            .map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)?;
         let signature_b64 = encode_base64(signature);
 
         jwt_head.push_str(".");
@@ -240,7 +247,7 @@ where
     fn request_token(
         &mut self,
         scopes: &Vec<&str>,
-    ) -> result::Result<Token, Box<dyn error::Error>> {
+    ) -> result::Result<Token, Box<dyn error::Error + Send>> {
         let mut claims = init_claims_from_key(&self.key, scopes);
         claims.sub = self.sub.clone();
         let signed = JWT::new(claims).sign(self.key.private_key.as_ref().unwrap())?;
@@ -314,14 +321,18 @@ impl<C: 'static> GetToken for ServiceAccountAccess<C>
 where
     C: hyper::client::connect::Connect,
 {
-    fn token<'b, I, T>(&mut self, scopes: I) -> result::Result<Token, Box<dyn error::Error>>
+    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<dyn error::Error + Send>>
     where
         T: AsRef<str> + Ord + 'b,
         I: IntoIterator<Item = &'b T>,
     {
         let (hash, scps) = hash_scopes(scopes);
 
-        if let Some(token) = self.cache.get(hash, &scps)? {
+        if let Some(token) = self
+            .cache
+            .get(hash, &scps)
+            .map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)?
+        {
             if !token.expired() {
                 return Ok(token);
             }
