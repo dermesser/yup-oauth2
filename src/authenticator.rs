@@ -114,28 +114,51 @@ impl<
                     // Implement refresh flow.
                     let refresh_token = t.refresh_token.clone();
                     let mut delegate = delegate.clone();
+                    let store = store.clone();
+                    let scopes = scopes.clone();
                     let refresh_fut = RefreshFlow::refresh_token(
                         client.clone(),
                         appsecret.clone(),
                         refresh_token,
                     )
-                    .and_then(move |rr| match rr {
-                        RefreshResult::Error(e) => {
-                            delegate.token_refresh_failed(
-                                format!("{}", e.description().to_string()),
-                                &Some("the request has likely timed out".to_string()),
-                            );
-                            Err(Box::new(e) as Box<dyn Error + Send>)
-                        }
-                        RefreshResult::RefreshError(ref s, ref ss) => {
-                            delegate.token_refresh_failed(
-                                format!("{} {}", s, ss.clone().map(|s| format!("({})", s)).unwrap_or("".to_string())),
-                                &Some("the refresh token is likely invalid and your authorization has been revoked".to_string()),
-                            );
-                            Err(Box::new(StringError::new(s.to_string(), ss.as_ref())) as Box<dyn Error + Send>)
-                        }
-                        RefreshResult::Success(t) => Ok(future::Loop::Break(t)),
-                    });
+                        .and_then(move |rr| -> Box<dyn Future<Item=future::Loop<Token, ()>, Error=Box<dyn Error+Send>> + Send> {
+                            match rr {
+                                RefreshResult::Error(e) => {
+                                    delegate.token_refresh_failed(
+                                        format!("{}", e.description().to_string()),
+                                        &Some("the request has likely timed out".to_string()),
+                                        );
+                                    Box::new(Err(Box::new(e) as Box<dyn Error + Send>).into_future())
+                                }
+                                RefreshResult::RefreshError(ref s, ref ss) => {
+                                    delegate.token_refresh_failed(
+                                        format!("{} {}", s, ss.clone().map(|s| format!("({})", s)).unwrap_or("".to_string())),
+                                        &Some("the refresh token is likely invalid and your authorization has been revoked".to_string()),
+                                        );
+                                    Box::new(Err(Box::new(StringError::new(s.to_string(), ss.as_ref())) as Box<dyn Error + Send>).into_future())
+                                }
+                                RefreshResult::Success(t) => {
+                                    if let Err(e) = store.lock().unwrap().set(scope_key, &scopes.iter().map(|s| s.as_str()).collect(), Some(t.clone())) {
+                                        match delegate.token_storage_failure(true, &e) {
+                                            Retry::Skip => Box::new(Ok(future::Loop::Break(t)).into_future()),
+                                            Retry::Abort => Box::new(Err(Box::new(e) as Box<dyn Error + Send>).into_future()),
+                                            Retry::After(d) => Box::new(
+                                                tokio_timer::sleep(d)
+                                                .then(|_| Ok(future::Loop::Continue(()))),
+                                                )
+                                                as Box<
+                                                dyn Future<
+                                                Item = future::Loop<Token, ()>,
+                                                Error = Box<dyn Error + Send>,
+                                                > + Send,
+                                                >,
+                                        }
+                                    } else {
+                                        Box::new(Ok(future::Loop::Break(t)).into_future())
+                                    }
+                                },
+                            }
+                        });
                     Box::new(refresh_fut)
                 }
                 Ok(None) => {
