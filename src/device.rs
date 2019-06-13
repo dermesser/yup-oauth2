@@ -55,6 +55,9 @@ impl<
     fn api_key(&mut self) -> Option<String> {
         None
     }
+    fn application_secret(&self) -> ApplicationSecret {
+        self.application_secret.clone()
+    }
 }
 
 impl<FD, C> DeviceFlow<FD, C>

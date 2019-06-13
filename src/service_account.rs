@@ -16,7 +16,7 @@ use std::error;
 use std::sync::{Arc, Mutex};
 
 use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
-use crate::types::{GetToken, StringError, Token};
+use crate::types::{ApplicationSecret, GetToken, StringError, Token};
 
 use futures::stream::Stream;
 use futures::{future, prelude::*};
@@ -356,6 +356,12 @@ where
                 Err(e) => Box::new(future::err(e)),
             }),
         )
+    }
+
+    /// Returns an empty ApplicationSecret as tokens for service accounts don't need to be
+    /// refreshed (they are simply reissued).
+    fn application_secret(&self) -> ApplicationSecret {
+        Default::default()
     }
 
     fn api_key(&mut self) -> Option<String> {

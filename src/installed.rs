@@ -61,10 +61,8 @@ where
     })
 }
 
-impl<
-        FD: FlowDelegate + 'static + Send + Clone,
-        C: hyper::client::connect::Connect + 'static,
-    > GetToken for InstalledFlow<FD, C>
+impl<FD: FlowDelegate + 'static + Send + Clone, C: hyper::client::connect::Connect + 'static>
+    GetToken for InstalledFlow<FD, C>
 {
     fn token<'b, I, T>(
         &mut self,
@@ -78,6 +76,9 @@ impl<
     }
     fn api_key(&mut self) -> Option<String> {
         None
+    }
+    fn application_secret(&self) -> ApplicationSecret {
+        self.appsecret.clone()
     }
 }
 
@@ -99,11 +100,8 @@ pub enum InstalledFlowReturnMethod {
     HTTPRedirect(u16),
 }
 
-impl<
-        'c,
-        FD: 'static + FlowDelegate + Clone + Send,
-        C: 'c + hyper::client::connect::Connect,
-    > InstalledFlow<FD, C>
+impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::connect::Connect>
+    InstalledFlow<FD, C>
 {
     /// Starts a new Installed App auth flow.
     /// If HTTPRedirect is chosen as method and the server can't be started, the flow falls

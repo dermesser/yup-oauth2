@@ -205,6 +205,10 @@ pub trait GetToken {
         I: Iterator<Item = &'b T>;
 
     fn api_key(&mut self) -> Option<String>;
+
+    /// Return an application secret with at least token_uri, client_secret, and client_id filled
+    /// in. This is used for refreshing tokens without interaction from the flow.
+    fn application_secret(&self) -> ApplicationSecret;
 }
 
 /// Represents a token as returned by OAuth2 servers.
