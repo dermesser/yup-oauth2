@@ -23,6 +23,13 @@ fn main() {
             println!("token is: {:?}", tok);
             Ok(())
         });
+    let fut2 = sa
+        .token(["https://www.googleapis.com/auth/pubsub"].iter())
+        .and_then(|tok| {
+            println!("cached token is {:?} and should be identical", tok);
+            Ok(())
+        });
+    let all = fut.join(fut2);
     let mut rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(fut).unwrap()
+    rt.block_on(all).unwrap();
 }

@@ -1,5 +1,5 @@
 use futures::prelude::*;
-use yup_oauth2::{self, GetToken};
+use yup_oauth2::{self, Authenticator, GetToken};
 
 use hyper::client::Client;
 use hyper_tls::HttpsConnector;
@@ -15,12 +15,19 @@ fn main() {
 
     let scopes = &["https://www.googleapis.com/auth/youtube.readonly".to_string()];
 
-    let ad = yup_oauth2::DefaultAuthenticatorDelegate;
-    let mut df = yup_oauth2::DeviceFlow::new::<String>(client, creds, ad, None);
+    let ad = yup_oauth2::DefaultFlowDelegate;
+    let mut df = yup_oauth2::DeviceFlow::new::<String>(client.clone(), creds, ad, None);
     df.set_wait_duration(Duration::from_secs(120));
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    let mut auth = Authenticator::new_disk(
+        client,
+        df,
+        yup_oauth2::DefaultAuthenticatorDelegate,
+        "tokenstorage.json",
+    )
+    .expect("authenticator");
 
-    let fut = df
+    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    let fut = auth
         .token(scopes.iter())
         .and_then(|tok| Ok(println!("{:?}", tok)));
 
