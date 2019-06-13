@@ -210,3 +210,7 @@ pub trait FlowDelegate: Clone {
 #[derive(Clone)]
 pub struct DefaultAuthenticatorDelegate;
 impl AuthenticatorDelegate for DefaultAuthenticatorDelegate {}
+
+#[derive(Clone)]
+pub struct DefaultFlowDelegate;
+impl FlowDelegate for DefaultFlowDelegate {}
