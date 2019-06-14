@@ -101,11 +101,11 @@ impl fmt::Display for StringError {
 }
 
 impl StringError {
-    pub fn new(error: String, desc: Option<&String>) -> StringError {
-        let mut error = error;
+    pub fn new<S: AsRef<str>>(error: S, desc: Option<S>) -> StringError {
+        let mut error = error.as_ref().to_string();
         if let Some(d) = desc {
             error.push_str(": ");
-            error.push_str(&*d);
+            error.push_str(d.as_ref());
         }
 
         StringError { error: error }

@@ -285,7 +285,7 @@ impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccess<C> {
             .and_then(|s| {
                 if let Ok(jse) = serde_json::from_str::<JsonError>(&s) {
                     Err(
-                        Box::new(StringError::new(jse.error, jse.error_description.as_ref()))
+                        Box::new(StringError::new(&jse.error, jse.error_description.as_ref()))
                             as Box<dyn error::Error + Send>,
                     )
                 } else {
@@ -303,7 +303,7 @@ impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccess<C> {
                         {
                             Err(Box::new(StringError::new(
                                 "Token response lacks fields".to_string(),
-                                Some(&format!("{:?}", token)),
+                                Some(format!("{:?}", token)),
                             ))
                                 as Box<dyn error::Error + Send>)
                         } else {

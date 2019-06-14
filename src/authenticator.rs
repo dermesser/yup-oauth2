@@ -135,7 +135,7 @@ impl<
                                         format!("{} {}", s, ss.clone().map(|s| format!("({})", s)).unwrap_or("".to_string())),
                                         &Some("the refresh token is likely invalid and your authorization has been revoked".to_string()),
                                         );
-                                    Box::new(Err(Box::new(StringError::new(s.to_string(), ss.as_ref())) as Box<dyn Error + Send>).into_future())
+                                    Box::new(Err(Box::new(StringError::new(s, ss.as_ref())) as Box<dyn Error + Send>).into_future())
                                 }
                                 RefreshResult::Success(t) => {
                                     if let Err(e) = store.lock().unwrap().set(scope_key, &scopes.iter().map(|s| s.as_str()).collect(), Some(t.clone())) {
