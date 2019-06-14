@@ -255,7 +255,7 @@ where
                                             Err(err) => err.to_string(),
                                         };
                                     return Err(Box::new(StringError::new(
-                                        storage_err + err_str,
+                                        &(storage_err + err_str),
                                         err_description.as_ref(),
                                     )));
                                 }

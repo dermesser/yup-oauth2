@@ -306,8 +306,8 @@ where
                     || token.expires_in.is_none()
                 {
                     Err(Box::new(StringError::new(
-                        "Token response lacks fields".to_string(),
-                        Some(&format!("{:?}", token)),
+                        "Token response lacks fields",
+                        Some(format!("{:?}", token).as_str()),
                     )))
                 } else {
                     Ok(token.to_oauth_token())
