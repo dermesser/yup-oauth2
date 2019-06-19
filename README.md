@@ -8,13 +8,17 @@ Status](https://travis-ci.org/dermesser/yup-oauth2.svg)](https://travis-ci.org/d
 (However, you're able to use it with raw HTTP requests as well; the flows are implemented as token
 sources yielding HTTP Bearer tokens).
 
+The provider we have been testing the code against is also Google. However, the code itself is
+generic, and any OAuth provider behaving like Google will work as well. If you find one that
+doesn't, please let us know and/or contribute a fix!
+
 ### Supported authorization types
 
 * Device flow (user enters code on authorization page)
 * Installed application flow (user visits URL, copies code to application, application uses
   code to obtain token). Used for services like GMail, Drive, ...
-* Service account flow: Non-interactive for server-to-server communication based on public key
-  cryptography. Used for services like Cloud Pubsub, Cloud Storage, ...
+* Service account flow: Non-interactive authorization of server-to-server communication based on
+  public key cryptography. Used for services like Cloud Pubsub, Cloud Storage, ...
 
 ### Usage
 
