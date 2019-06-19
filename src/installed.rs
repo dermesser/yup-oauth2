@@ -154,8 +154,8 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
             .and_then(move |server| {
                 Self::ask_authorization_code(server, auth_delegate, &appsecclone, scopes.iter())
             })
-            // Exchange the authorization code provided by Google for a refresh and an access
-            // token.
+            // Exchange the authorization code provided by Google/the provider for a refresh and an
+            // access token.
             .and_then(move |authcode| {
                 let request = Self::request_token(appsecclone2, authcode, rduri, port);
                 let result = client.request(request);
@@ -255,8 +255,8 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
             )
         } else {
             let mut server = server.unwrap();
-            // The redirect URI must be this very localhost URL, otherwise Google refuses
-            // authorization.
+            // The redirect URI must be this very localhost URL, otherwise authorization is refused
+            // by certain providers.
             let url = build_authentication_request_url(
                 &appsecret.auth_uri,
                 &appsecret.client_id,
@@ -497,7 +497,7 @@ impl hyper::service::Service for InstalledFlowService {
 
 impl InstalledFlowService {
     fn handle_url(&mut self, url: hyper::Uri) {
-        // Google redirects to the specified localhost URL, appending the authorization
+        // The provider redirects to the specified localhost URL, appending the authorization
         // code, like this: http://localhost:8080/xyz/?code=4/731fJ3BheyCouCniPufAd280GHNV5Ju35yYcGs
         // We take that code and send it to the ask_authorization_code() function that
         // waits for it.

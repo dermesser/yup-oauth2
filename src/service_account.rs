@@ -116,6 +116,11 @@ impl JWT {
         }
     }
 
+    /// Set JWT header. Default is `{"alg":"RS256","typ":"JWT"}`.
+    pub fn set_header(&mut self, head: String) {
+        self.header = head;
+    }
+
     /// Encodes the first two parts (header and claims) to base64 and assembles them into a form
     /// ready to be signed.
     fn encode_claims(&self) -> String {
