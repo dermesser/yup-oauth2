@@ -80,7 +80,7 @@ impl TokenStorage for NullStorage {
 }
 
 /// A storage that remembers values for one session only.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct MemoryStorage {
     pub tokens: HashMap<u64, Token>,
 }

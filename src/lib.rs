@@ -41,10 +41,6 @@
 #[macro_use]
 extern crate serde_derive;
 
-#[cfg(test)]
-#[macro_use]
-extern crate yup_hyper_mock as hyper_mock;
-
 mod authenticator;
 mod authenticator_delegate;
 mod device;

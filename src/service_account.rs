@@ -189,6 +189,7 @@ where
 
 /// A token source (`GetToken`) yielding OAuth tokens for services that use ServiceAccount authorization.
 /// This token source caches token and automatically renews expired ones.
+#[derive(Clone)]
 pub struct ServiceAccountAccess<C> {
     client: hyper::Client<C, hyper::Body>,
     key: ServiceAccountKey,
@@ -248,7 +249,7 @@ impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccess<C> {
         }
     }
 
-    ///
+    /// Send a request for a new Bearer token to the OAuth provider.
     fn request_token(
         client: hyper::client::Client<C>,
         sub: Option<String>,
@@ -387,10 +388,61 @@ mod tests {
     use super::*;
     use crate::helper::service_account_key_from_file;
     use crate::types::GetToken;
+
     use hyper;
     use hyper_tls::HttpsConnector;
+    use mockito::{self, mock};
+    use tokio;
 
-    // This is a valid but deactivated key.
+    #[test]
+    fn test_mocked_http() {
+        let server_url = &mockito::server_url();
+        let client_secret = r#"{
+  "type": "service_account",
+  "project_id": "yup-test-243420",
+  "private_key_id": "26de294916614a5ebdf7a065307ed3ea9941902b",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDemmylrvp1KcOn\n9yTAVVKPpnpYznvBvcAU8Qjwr2fSKylpn7FQI54wCk5VJVom0jHpAmhxDmNiP8yv\nHaqsef+87Oc0n1yZ71/IbeRcHZc2OBB33/LCFqf272kThyJo3qspEqhuAw0e8neg\nLQb4jpm9PsqR8IjOoAtXQSu3j0zkXemMYFy93PWHjVpPEUX16NGfsWH7oxspBHOk\n9JPGJL8VJdbiAoDSDgF0y9RjJY5I52UeHNhMsAkTYs6mIG4kKXt2+T9tAyHw8aho\nwmuytQAfydTflTfTG8abRtliF3nil2taAc5VB07dP1b4dVYy/9r6M8Z0z4XM7aP+\nNdn2TKm3AgMBAAECggEAWi54nqTlXcr2M5l535uRb5Xz0f+Q/pv3ceR2iT+ekXQf\n+mUSShOr9e1u76rKu5iDVNE/a7H3DGopa7ZamzZvp2PYhSacttZV2RbAIZtxU6th\n7JajPAM+t9klGh6wj4jKEcE30B3XVnbHhPJI9TCcUyFZoscuPXt0LLy/z8Uz0v4B\nd5JARwyxDMb53VXwukQ8nNY2jP7WtUig6zwE5lWBPFMbi8GwGkeGZOruAK5sPPwY\nGBAlfofKANI7xKx9UXhRwisB4+/XI1L0Q6xJySv9P+IAhDUI6z6kxR+WkyT/YpG3\nX9gSZJc7qEaxTIuDjtep9GTaoEqiGntjaFBRKoe+VQKBgQDzM1+Ii+REQqrGlUJo\nx7KiVNAIY/zggu866VyziU6h5wjpsoW+2Npv6Dv7nWvsvFodrwe50Y3IzKtquIal\nVd8aa50E72JNImtK/o5Nx6xK0VySjHX6cyKENxHRDnBmNfbALRM+vbD9zMD0lz2q\nmns/RwRGq3/98EqxP+nHgHSr9QKBgQDqUYsFAAfvfT4I75Glc9svRv8IsaemOm07\nW1LCwPnj1MWOhsTxpNF23YmCBupZGZPSBFQobgmHVjQ3AIo6I2ioV6A+G2Xq/JCF\nmzfbvZfqtbbd+nVgF9Jr1Ic5T4thQhAvDHGUN77BpjEqZCQLAnUWJx9x7e2xvuBl\n1A6XDwH/ewKBgQDv4hVyNyIR3nxaYjFd7tQZYHTOQenVffEAd9wzTtVbxuo4sRlR\nNM7JIRXBSvaATQzKSLHjLHqgvJi8LITLIlds1QbNLl4U3UVddJbiy3f7WGTqPFfG\nkLhUF4mgXpCpkMLxrcRU14Bz5vnQiDmQRM4ajS7/kfwue00BZpxuZxst3QKBgQCI\nRI3FhaQXyc0m4zPfdYYVc4NjqfVmfXoC1/REYHey4I1XetbT9Nb/+ow6ew0UbgSC\nUZQjwwJ1m1NYXU8FyovVwsfk9ogJ5YGiwYb1msfbbnv/keVq0c/Ed9+AG9th30qM\nIf93hAfClITpMz2mzXIMRQpLdmQSR4A2l+E4RjkSOwKBgQCB78AyIdIHSkDAnCxz\nupJjhxEhtQ88uoADxRoEga7H/2OFmmPsqfytU4+TWIdal4K+nBCBWRvAX1cU47vH\nJOlSOZI0gRKe0O4bRBQc8GXJn/ubhYSxI02IgkdGrIKpOb5GG10m85ZvqsXw3bKn\nRVHMD0ObF5iORjZUqD0yRitAdg==\n-----END PRIVATE KEY-----\n",
+  "client_email": "yup-test-sa-1@yup-test-243420.iam.gserviceaccount.com",
+  "client_id": "102851967901799660408",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/yup-test-sa-1%40yup-test-243420.iam.gserviceaccount.com"
+}"#;
+        let mut key: ServiceAccountKey = serde_json::from_str(client_secret).unwrap();
+        key.token_uri = Some(format!("{}/token", server_url));
+
+        let json_response = r#"{
+  "access_token": "ya29.c.ElouBywiys0LyNaZoLPJcp1Fdi2KjFMxzvYKLXkTdvM-rDfqKlvEq6PiMhGoGHx97t5FAvz3eb_ahdwlBjSStxHtDVQB4ZPRJQ_EOi-iS7PnayahU2S9Jp8S6rk",
+  "expires_in": 3600,
+  "token_type": "Bearer"
+}"#;
+        let _m = mock("POST", "/token")
+            .with_status(200)
+            .with_header("content-type", "text/json")
+            .with_body(json_response)
+            .create();
+        let https = HttpsConnector::new(1).unwrap();
+        let client = hyper::Client::builder()
+            .keep_alive(false)
+            .build::<_, hyper::Body>(https);
+        let mut acc = ServiceAccountAccess::new(key, client);
+        let fut = acc
+            .token(vec!["https://www.googleapis.com/auth/pubsub"].iter())
+            .then(|tok| {
+                assert!(tok
+                    .as_ref()
+                    .unwrap()
+                    .access_token
+                    .contains("ya29.c.ElouBywiys0Ly"));
+                assert_eq!(Some(3600), tok.unwrap().expires_in);
+                Ok(())
+            });
+        tokio::run(fut);
+        _m.assert();
+    }
+
+    // Valid but deactivated key.
     const TEST_PRIVATE_KEY_PATH: &'static str = "examples/Sanguine-69411a0c0eea.json";
 
     // Uncomment this test to verify that we can successfully obtain tokens.

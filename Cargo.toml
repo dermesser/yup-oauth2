@@ -32,6 +32,7 @@ tokio-timer = "0.2"
 getopts = "0.2"
 open = "1.1"
 yup-hyper-mock = "3.14"
+mockito = "0.17"
 
 [workspace]
 members = ["examples/test-installed/", "examples/test-svc-acct/", "examples/test-device/"]
