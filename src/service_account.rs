@@ -459,7 +459,6 @@ mod tests {
             let fut = acc
                 .token(vec!["https://www.googleapis.com/auth/pubsub"].iter())
                 .and_then(|tok| {
-                    println!("{:?}", tok);
                     assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
                     assert_eq!(Some(3600), tok.expires_in);
                     Ok(())

@@ -520,7 +520,167 @@ impl InstalledFlowService {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt;
+    use std::str::FromStr;
+
+    use hyper;
+    use hyper::client::connect::HttpConnector;
+    use hyper_tls::HttpsConnector;
+    use mockito::{self, mock};
+    use tokio;
+
     use super::*;
+    use crate::authenticator_delegate::FlowDelegate;
+    use crate::helper::*;
+    use crate::types::StringError;
+
+    #[test]
+    fn test_end2end() {
+        #[derive(Clone)]
+        struct FD(
+            String,
+            hyper::Client<HttpsConnector<HttpConnector>, hyper::Body>,
+        );
+        impl FlowDelegate for FD {
+            /// Depending on need_code, return the pre-set code or send the code to the server at
+            /// the redirect_uri given in the url.
+            fn present_user_url<S: AsRef<str> + fmt::Display>(
+                &mut self,
+                url: S,
+                need_code: bool,
+            ) -> Box<dyn Future<Item = Option<String>, Error = Box<dyn Error + Send>> + Send>
+            {
+                if need_code {
+                    Box::new(Ok(Some(self.0.clone())).into_future())
+                } else {
+                    // Parse presented url to obtain redirect_uri with location of local
+                    // code-accepting server.
+                    let uri = Uri::from_str(url.as_ref()).unwrap();
+                    let query = uri.query().unwrap();
+                    let parsed = form_urlencoded::parse(query.as_bytes()).into_owned();
+                    let mut rduri = None;
+                    for (k, v) in parsed {
+                        if k == "redirect_uri" {
+                            rduri = Some(v);
+                            break;
+                        }
+                    }
+                    if rduri.is_none() {
+                        return Box::new(
+                            Err(Box::new(StringError::new("no redirect uri!", None))
+                                as Box<dyn Error + Send>)
+                            .into_future(),
+                        );
+                    }
+                    let mut rduri = rduri.unwrap();
+                    rduri.push_str(&format!("?code={}", self.0));
+                    let rduri = Uri::from_str(rduri.as_ref()).unwrap();
+                    // Hit server.
+                    return Box::new(
+                        self.1
+                            .get(rduri)
+                            .map_err(|e| Box::new(e) as Box<dyn Error + Send>)
+                            .map(|_| None),
+                    );
+                }
+            }
+        }
+
+        let server_url = mockito::server_url();
+        let app_secret = r#"{"installed":{"client_id":"902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com","project_id":"yup-test-243420","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"iuMPN6Ne1PD7cos29Tk9rlqH","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"#;
+        let mut app_secret = parse_application_secret(app_secret).unwrap();
+        app_secret.token_uri = format!("{}/token", server_url);
+
+        let https = HttpsConnector::new(1).expect("tls");
+        let client = hyper::Client::builder()
+            .keep_alive(false)
+            .build::<_, hyper::Body>(https);
+
+        let fd = FD("authorizationcode".to_string(), client.clone());
+        let mut inf = InstalledFlow::new(
+            client.clone(),
+            fd,
+            app_secret.clone(),
+            InstalledFlowReturnMethod::Interactive,
+        );
+
+        let mut rt = tokio::runtime::Builder::new()
+            .core_threads(1)
+            .panic_handler(|e| std::panic::resume_unwind(e))
+            .build()
+            .unwrap();
+
+        // Successful path.
+        {
+            let _m = mock("POST", "/token")
+            .match_body(mockito::Matcher::Regex(".*code=authorizationcode.*client_id=9022167.*".to_string()))
+            .with_body(r#"{"access_token": "accesstoken", "refresh_token": "refreshtoken", "token_type": "Bearer", "expires_in": 12345678}"#)
+            .expect(1)
+            .create();
+
+            let fut = inf
+                .token(vec!["https://googleapis.com/some/scope"].iter())
+                .and_then(|tok| {
+                    assert_eq!("accesstoken", tok.access_token);
+                    assert_eq!("refreshtoken", tok.refresh_token);
+                    assert_eq!("Bearer", tok.token_type);
+                    Ok(())
+                });
+            rt.block_on(fut).expect("block on");
+            _m.assert();
+        }
+        // Successful path with HTTP redirect.
+        {
+            let mut inf = InstalledFlow::new(
+                client.clone(),
+                FD(
+                    "authorizationcodefromlocalserver".to_string(),
+                    client.clone(),
+                ),
+                app_secret,
+                InstalledFlowReturnMethod::HTTPRedirect(8081),
+            );
+            let _m = mock("POST", "/token")
+            .match_body(mockito::Matcher::Regex(".*code=authorizationcodefromlocalserver.*client_id=9022167.*".to_string()))
+            .with_body(r#"{"access_token": "accesstoken", "refresh_token": "refreshtoken", "token_type": "Bearer", "expires_in": 12345678}"#)
+            .expect(1)
+            .create();
+
+            let fut = inf
+                .token(vec!["https://googleapis.com/some/scope"].iter())
+                .and_then(|tok| {
+                    assert_eq!("accesstoken", tok.access_token);
+                    assert_eq!("refreshtoken", tok.refresh_token);
+                    assert_eq!("Bearer", tok.token_type);
+                    Ok(())
+                });
+            rt.block_on(fut).expect("block on");
+            _m.assert();
+        }
+        // Error from server.
+        {
+            let _m = mock("POST", "/token")
+                .match_body(mockito::Matcher::Regex(
+                    ".*code=authorizationcode.*client_id=9022167.*".to_string(),
+                ))
+                .with_status(400)
+                .with_body(r#"{"error": "invalid_code"}"#)
+                .expect(1)
+                .create();
+
+            let fut =
+                inf.token(vec!["https://googleapis.com/some/scope"].iter())
+                    .then(|tokr| {
+                        assert!(tokr.is_err());
+                        assert!(format!("{}", tokr.unwrap_err())
+                            .contains("Token API error: invalid_code"));
+                        Ok(()) as Result<(), ()>
+                    });
+            rt.block_on(fut).expect("block on");
+            _m.assert();
+        }
+        rt.shutdown_on_idle().wait().expect("shutdown");
+    }
 
     #[test]
     fn test_request_url_builder() {
