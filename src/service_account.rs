@@ -333,43 +333,56 @@ where
         T: AsRef<str> + Ord + 'b,
         I: Iterator<Item = &'b T>,
     {
-        let (hash, scps) = hash_scopes(scopes);
+        let (hash, scps0) = hash_scopes(scopes);
+        let cache = self.cache.clone();
+        let scps = scps0.clone();
 
-        match self
-            .cache
-            .lock()
-            .unwrap()
-            .get(hash, &scps.iter().map(|s| s.as_str()).collect())
-        {
-            Ok(Some(token)) => {
-                if !token.expired() {
-                    return Box::new(future::ok(token));
+        let cache_lookup = futures::lazy(move || {
+            match cache
+                .lock()
+                .unwrap()
+                .get(hash, &scps.iter().map(|s| s.as_str()).collect())
+            {
+                Ok(Some(token)) => {
+                    if !token.expired() {
+                        return Ok(token);
+                    }
+                    return Err(Box::new(StringError::new("expired token in cache", None))
+                        as Box<dyn error::Error + Send>);
+                }
+                Err(e) => return Err(Box::new(e) as Box<dyn error::Error + Send>),
+                Ok(None) => {
+                    return Err(Box::new(StringError::new("no token in cache", None))
+                        as Box<dyn error::Error + Send>)
                 }
             }
-            Err(e) => return Box::new(future::err(Box::new(e) as Box<dyn error::Error + Send>)),
-            _ => {}
-        }
+        });
 
         let cache = self.cache.clone();
-        Box::new(
-            Self::request_token(
-                self.client.clone(),
-                self.sub.clone(),
-                self.key.clone(),
-                scps.iter().map(|s| s.to_string()).collect(),
-            )
-            .then(move |r| match r {
-                Ok(token) => {
-                    let _ = cache.lock().unwrap().set(
-                        hash,
-                        &scps.iter().map(|s| s.as_str()).collect(),
-                        Some(token.clone()),
-                    );
-                    Box::new(future::ok(token))
-                }
-                Err(e) => Box::new(future::err(e)),
-            }),
+        let req_token = Self::request_token(
+            self.client.clone(),
+            self.sub.clone(),
+            self.key.clone(),
+            scps0.iter().map(|s| s.to_string()).collect(),
         )
+        .then(move |r| match r {
+            Ok(token) => {
+                let _ = cache.lock().unwrap().set(
+                    hash,
+                    &scps0.iter().map(|s| s.as_str()).collect(),
+                    Some(token.clone()),
+                );
+                Box::new(future::ok(token))
+            }
+            Err(e) => Box::new(future::err(e)),
+        });
+
+        Box::new(cache_lookup.then(|r| match r {
+            Ok(t) => Box::new(Ok(t).into_future())
+                as Box<dyn Future<Item = Token, Error = Box<dyn error::Error + Send>> + Send>,
+            Err(_) => Box::new(req_token)
+                as Box<dyn Future<Item = Token, Error = Box<dyn error::Error + Send>> + Send>,
+        }))
     }
 
     /// Returns an empty ApplicationSecret as tokens for service accounts don't need to be
