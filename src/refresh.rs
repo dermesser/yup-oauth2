@@ -111,3 +111,82 @@ impl RefreshFlow {
             })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::helper;
+
+    use hyper;
+    use hyper_tls::HttpsConnector;
+    use mockito;
+    use tokio;
+
+    #[test]
+    fn test_refresh_end2end() {
+        let server_url = mockito::server_url();
+
+        let app_secret = r#"{"installed":{"client_id":"902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com","project_id":"yup-test-243420","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"iuMPN6Ne1PD7cos29Tk9rlqH","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"#;
+        let mut app_secret = helper::parse_application_secret(app_secret).unwrap();
+        app_secret.token_uri = format!("{}/token", server_url);
+        let refresh_token = "my-refresh-token".to_string();
+
+        let https = HttpsConnector::new(1).unwrap();
+        let client = hyper::Client::builder()
+            .keep_alive(false)
+            .build::<_, hyper::Body>(https);
+
+        // Success
+        {
+            let _m = mockito::mock("POST", "/token")
+                .match_body(
+                    mockito::Matcher::Regex(".*client_id=902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com.*refresh_token=my-refresh-token.*".to_string()))
+                .with_status(200)
+                .with_body(r#"{"access_token": "new-access-token", "token_type": "Bearer", "expires_in": 1234567}"#)
+                .create();
+
+            let fut = RefreshFlow::refresh_token(
+                client.clone(),
+                app_secret.clone(),
+                refresh_token.clone(),
+            )
+            .then(|rr| {
+                let rr = rr.unwrap();
+                match rr {
+                    RefreshResult::Success(tok) => {
+                        assert_eq!("new-access-token", tok.access_token);
+                        assert_eq!("Bearer", tok.token_type);
+                    }
+                    _ => panic!(format!("unexpected RefreshResult {:?}", rr)),
+                }
+                Ok(())
+            });
+
+            tokio::run(fut);
+            _m.assert();
+        }
+        // Refresh error.
+        {
+            let _m = mockito::mock("POST", "/token")
+                .match_body(
+                    mockito::Matcher::Regex(".*client_id=902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com.*refresh_token=my-refresh-token.*".to_string()))
+                .with_status(400)
+                .with_body(r#"{"error": "invalid_token"}"#)
+                .create();
+
+            let fut = RefreshFlow::refresh_token(client, app_secret, refresh_token).then(|rr| {
+                let rr = rr.unwrap();
+                match rr {
+                    RefreshResult::RefreshError(e, None) => {
+                        assert_eq!(e, "invalid_token");
+                    }
+                    _ => panic!(format!("unexpected RefreshResult {:?}", rr)),
+                }
+                Ok(())
+            });
+
+            tokio::run(fut);
+            _m.assert();
+        }
+    }
+}
