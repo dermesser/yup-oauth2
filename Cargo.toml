@@ -33,6 +33,7 @@ getopts = "0.2"
 open = "1.1"
 yup-hyper-mock = "3.14"
 mockito = "0.17"
+env_logger = "0.6"
 
 [workspace]
 members = ["examples/test-installed/", "examples/test-svc-acct/", "examples/test-device/"]

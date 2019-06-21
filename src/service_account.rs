@@ -117,6 +117,7 @@ impl JWT {
     }
 
     /// Set JWT header. Default is `{"alg":"RS256","typ":"JWT"}`.
+    #[allow(dead_code)]
     pub fn set_header(&mut self, head: String) {
         self.header = head;
     }
@@ -409,6 +410,7 @@ mod tests {
 
     #[test]
     fn test_mocked_http() {
+        env_logger::try_init().unwrap();
         let server_url = &mockito::server_url();
         let client_secret = r#"{
   "type": "service_account",
@@ -430,29 +432,80 @@ mod tests {
   "expires_in": 3600,
   "token_type": "Bearer"
 }"#;
-        let _m = mock("POST", "/token")
-            .with_status(200)
-            .with_header("content-type", "text/json")
-            .with_body(json_response)
-            .create();
+        let bad_json_response = r#"{
+  "access_token": "ya29.c.ElouBywiys0LyNaZoLPJcp1Fdi2KjFMxzvYKLXkTdvM-rDfqKlvEq6PiMhGoGHx97t5FAvz3eb_ahdwlBjSStxHtDVQB4ZPRJQ_EOi-iS7PnayahU2S9Jp8S6rk",
+  "token_type": "Bearer"
+}"#;
+
         let https = HttpsConnector::new(1).unwrap();
         let client = hyper::Client::builder()
             .keep_alive(false)
             .build::<_, hyper::Body>(https);
-        let mut acc = ServiceAccountAccess::new(key, client);
-        let fut = acc
-            .token(vec!["https://www.googleapis.com/auth/pubsub"].iter())
-            .then(|tok| {
-                assert!(tok
-                    .as_ref()
-                    .unwrap()
-                    .access_token
-                    .contains("ya29.c.ElouBywiys0Ly"));
-                assert_eq!(Some(3600), tok.unwrap().expires_in);
-                Ok(())
-            });
-        tokio::run(fut);
-        _m.assert();
+        let mut rt = tokio::runtime::Builder::new()
+            .core_threads(1)
+            .panic_handler(|e| std::panic::resume_unwind(e))
+            .build()
+            .unwrap();
+
+        // Successful path.
+        {
+            let _m = mock("POST", "/token")
+                .with_status(200)
+                .with_header("content-type", "text/json")
+                .with_body(json_response)
+                .expect(1)
+                .create();
+            let mut acc = ServiceAccountAccess::new(key.clone(), client.clone());
+            let fut = acc
+                .token(vec!["https://www.googleapis.com/auth/pubsub"].iter())
+                .and_then(|tok| {
+                    println!("{:?}", tok);
+                    assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
+                    assert_eq!(Some(3600), tok.expires_in);
+                    Ok(())
+                });
+            rt.block_on(fut).expect("block_on");
+
+            assert!(acc
+                .cache
+                .lock()
+                .unwrap()
+                .get(
+                    3502164897243251857,
+                    &vec!["https://www.googleapis.com/auth/pubsub"]
+                )
+                .unwrap()
+                .is_some());
+            // Test that token is in cache (otherwise mock will tell us)
+            let fut = acc
+                .token(vec!["https://www.googleapis.com/auth/pubsub"].iter())
+                .and_then(|tok| {
+                    assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
+                    assert_eq!(Some(3600), tok.expires_in);
+                    Ok(())
+                });
+            rt.block_on(fut).expect("block_on 2");
+
+            _m.assert();
+        }
+        // Malformed response.
+        {
+            let _m = mock("POST", "/token")
+                .with_status(200)
+                .with_header("content-type", "text/json")
+                .with_body(bad_json_response)
+                .create();
+            let mut acc = ServiceAccountAccess::new(key.clone(), client.clone());
+            let fut = acc
+                .token(vec!["https://www.googleapis.com/auth/pubsub"].iter())
+                .then(|result| {
+                    assert!(result.is_err());
+                    Ok(()) as Result<(), ()>
+                });
+            rt.block_on(fut).expect("block_on");
+            _m.assert();
+        }
+        rt.shutdown_on_idle().wait().expect("shutdown");
     }
 
     // Valid but deactivated key.
