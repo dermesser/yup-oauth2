@@ -25,12 +25,15 @@ fn main() {
             println!("token is: {:?}", tok);
             Ok(())
         });
-    let fut2 = sa
-        .token(["https://www.googleapis.com/auth/pubsub"].iter())
-        .and_then(|tok| {
-            println!("cached token is {:?} and should be identical", tok);
-            Ok(())
-        });
-    let all = fut.join(fut2).then(|_| Ok(()));
+    let mut sa2 = sa.clone();
+    let all = fut
+        .then(move |_| {
+            sa2.token(["https://www.googleapis.com/auth/pubsub"].iter())
+                .and_then(|tok| {
+                    println!("cached token is {:?} and should be identical", tok);
+                    Ok(())
+                })
+        })
+        .then(|_| Ok(()));
     tokio::run(all)
 }
