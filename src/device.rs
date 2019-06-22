@@ -150,10 +150,16 @@ where
                                 >,
                         },
                         Ok(Some(tok)) => Box::new(Ok(future::Loop::Break(tok)).into_future()),
+                        Err(e @ PollError::AccessDenied)
+                        | Err(e @ PollError::TimedOut)
+                        | Err(e @ PollError::Expired(_)) => {
+                            Box::new(Err(Box::new(e) as Box<dyn Error + Send>).into_future())
+                        }
                         Err(_) if i < maxn => {
                             Box::new(Ok(future::Loop::Continue(i + 1)).into_future())
                         }
-                        _ => Box::new(
+                        // Too many attempts.
+                        Ok(None) | Err(_) => Box::new(
                             Err(Box::new(PollError::TimedOut) as Box<dyn Error + Send>)
                                 .into_future(),
                         ),
@@ -273,7 +279,8 @@ where
     ///
     /// Do not call after `PollError::Expired|PollError::AccessDenied` was among the
     /// `Err(PollError)` variants as the flow will not do anything anymore.
-    /// Thus in any unsuccessful case which is not `PollError::HttpError`, you will have to start /// over the entire flow, which requires a new instance of this type.
+    /// Thus in any unsuccessful case which is not `PollError::HttpError`, you will have to start
+    /// over the entire flow, which requires a new instance of this type.
     ///
     /// > ⚠️ **Warning**: We assume the caller doesn't call faster than `interval` and are not
     /// > protected against this kind of mis-use.
@@ -286,7 +293,7 @@ where
         device_code: String,
         pi: PollInformation,
         mut fd: FD,
-    ) -> impl Future<Item = Option<Token>, Error = Box<dyn 'a + Error + Send>> {
+    ) -> impl Future<Item = Option<Token>, Error = PollError> {
         let expired = if pi.expires_at <= Utc::now() {
             fd.expired(&pi.expires_at);
             Err(PollError::Expired(pi.expires_at)).into_future()
@@ -309,12 +316,7 @@ where
             .body(hyper::Body::from(req))
             .unwrap(); // TODO: Error checking
         expired
-            .map_err(|e| Box::new(e) as Box<dyn Error + Send>)
-            .and_then(move |_| {
-                client
-                    .request(request)
-                    .map_err(|e| Box::new(e) as Box<dyn Error + Send>)
-            })
+            .and_then(move |_| client.request(request).map_err(|e| PollError::HttpError(e)))
             .map(|res| {
                 res.into_body()
                     .concat2()
@@ -334,12 +336,15 @@ where
                         match res.error.as_ref() {
                             "access_denied" => {
                                 fd.denied();
-                                return Err(
-                                    Box::new(PollError::AccessDenied) as Box<dyn Error + Send>
-                                );
+                                return Err(PollError::AccessDenied);
                             }
                             "authorization_pending" => return Ok(None),
-                            _ => panic!("server message '{}' not understood", res.error),
+                            s => {
+                                return Err(PollError::Other(format!(
+                                    "server message '{}' not understood",
+                                    s
+                                )))
+                            }
                         };
                     }
                 }
@@ -350,5 +355,140 @@ where
 
                 Ok(Some(t.clone()))
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hyper;
+    use hyper_tls::HttpsConnector;
+    use mockito;
+    use tokio;
+
+    use super::*;
+    use crate::helper::parse_application_secret;
+
+    #[test]
+    fn test_device_end2end() {
+        #[derive(Clone)]
+        struct FD;
+        impl FlowDelegate for FD {
+            fn present_user_code(&mut self, pi: &PollInformation) {
+                assert_eq!("https://example.com/verify", pi.verification_url);
+            }
+        }
+
+        let server_url = mockito::server_url();
+        let app_secret = r#"{"installed":{"client_id":"902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com","project_id":"yup-test-243420","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"iuMPN6Ne1PD7cos29Tk9rlqH","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"#;
+        let mut app_secret = parse_application_secret(app_secret).unwrap();
+        app_secret.token_uri = format!("{}/token", server_url);
+        let device_code_url = format!("{}/code", server_url);
+
+        let https = HttpsConnector::new(1).expect("tls");
+        let client = hyper::Client::builder()
+            .keep_alive(false)
+            .build::<_, hyper::Body>(https);
+
+        let mut flow = DeviceFlow::new(client.clone(), app_secret, FD, Some(device_code_url));
+
+        let mut rt = tokio::runtime::Builder::new()
+            .core_threads(1)
+            .panic_handler(|e| std::panic::resume_unwind(e))
+            .build()
+            .unwrap();
+
+        // Successful path
+        {
+            let code_response = r#"{"device_code": "devicecode", "user_code": "usercode", "verification_url": "https://example.com/verify", "expires_in": 1234567, "interval": 1}"#;
+            let _m = mockito::mock("POST", "/code")
+                .match_body(mockito::Matcher::Regex(
+                    ".*client_id=902216714886.*".to_string(),
+                ))
+                .with_status(200)
+                .with_body(code_response)
+                .create();
+            let token_response = r#"{"access_token": "accesstoken", "refresh_token": "refreshtoken", "token_type": "Bearer", "expires_in": 1234567}"#;
+            let _m = mockito::mock("POST", "/token")
+                .match_body(mockito::Matcher::Regex(
+                    ".*client_secret=iuMPN6Ne1PD7cos29Tk9rlqH&code=devicecode.*".to_string(),
+                ))
+                .with_status(200)
+                .with_body(token_response)
+                .create();
+
+            let fut = flow
+                .token(vec!["https://www.googleapis.com/scope/1"].iter())
+                .then(|token| {
+                    let token = token.unwrap();
+                    assert_eq!("accesstoken", token.access_token);
+                    Ok(()) as Result<(), ()>
+                });
+            rt.block_on(fut).expect("block_on");
+
+            _m.assert();
+        }
+        // Code is not delivered.
+        {
+            let code_response =
+                r#"{"error": "invalid_client_id", "error_description": "description"}"#;
+            let _m = mockito::mock("POST", "/code")
+                .match_body(mockito::Matcher::Regex(
+                    ".*client_id=902216714886.*".to_string(),
+                ))
+                .with_status(400)
+                .with_body(code_response)
+                .create();
+            let token_response = r#"{"access_token": "accesstoken", "refresh_token": "refreshtoken", "token_type": "Bearer", "expires_in": 1234567}"#;
+            let _m = mockito::mock("POST", "/token")
+                .match_body(mockito::Matcher::Regex(
+                    ".*client_secret=iuMPN6Ne1PD7cos29Tk9rlqH&code=devicecode.*".to_string(),
+                ))
+                .with_status(200)
+                .with_body(token_response)
+                .expect(0) // Never called!
+                .create();
+
+            let fut = flow
+                .token(vec!["https://www.googleapis.com/scope/1"].iter())
+                .then(|token| {
+                    assert!(token.is_err());
+                    assert!(format!("{}", token.unwrap_err()).contains("invalid_client_id"));
+                    Ok(()) as Result<(), ()>
+                });
+            rt.block_on(fut).expect("block_on");
+
+            _m.assert();
+        }
+        // Token is not delivered.
+        {
+            let code_response = r#"{"device_code": "devicecode", "user_code": "usercode", "verification_url": "https://example.com/verify", "expires_in": 1234567, "interval": 1}"#;
+            let _m = mockito::mock("POST", "/code")
+                .match_body(mockito::Matcher::Regex(
+                    ".*client_id=902216714886.*".to_string(),
+                ))
+                .with_status(200)
+                .with_body(code_response)
+                .create();
+            let token_response = r#"{"error": "access_denied"}"#;
+            let _m = mockito::mock("POST", "/token")
+                .match_body(mockito::Matcher::Regex(
+                    ".*client_secret=iuMPN6Ne1PD7cos29Tk9rlqH&code=devicecode.*".to_string(),
+                ))
+                .with_status(400)
+                .with_body(token_response)
+                .expect(1)
+                .create();
+
+            let fut = flow
+                .token(vec!["https://www.googleapis.com/scope/1"].iter())
+                .then(|token| {
+                    assert!(token.is_err());
+                    assert!(format!("{}", token.unwrap_err()).contains("Access denied by user"));
+                    Ok(()) as Result<(), ()>
+                });
+            rt.block_on(fut).expect("block_on");
+
+            _m.assert();
+        }
     }
 }
