@@ -1,0 +1,12 @@
+[package]
+name = "test-installed"
+version = "0.1.0"
+authors = ["Lewin Bormann <lewin@lewin-bormann.info>"]
+edition = "2018"
+
+[dependencies]
+yup-oauth2 = { path = "../../" }
+hyper = "0.12"
+hyper-tls = "0.3"
+futures = "0.1"
+tokio = "0.1"

@@ -1,382 +1,215 @@
-use std::cmp::min;
-use std::collections::hash_map::DefaultHasher;
-use std::convert::From;
+use crate::authenticator_delegate::{AuthenticatorDelegate, Retry};
+use crate::refresh::RefreshFlow;
+use crate::storage::{hash_scopes, DiskTokenStorage, MemoryStorage, TokenStorage};
+use crate::types::{ApplicationSecret, GetToken, RefreshResult, RequestError, Token};
+
+use futures::{future, prelude::*};
+use tokio_timer;
+
 use std::error::Error;
-use std::hash::{Hash, Hasher};
-use std::iter::IntoIterator;
-use std::thread::sleep;
-use std::time::Duration;
+use std::io;
+use std::sync::{Arc, Mutex};
 
-use crate::authenticator_delegate::{AuthenticatorDelegate, PollError, PollInformation};
-use crate::device::{DeviceFlow, GOOGLE_DEVICE_CODE_URL};
-use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
-use crate::refresh::{RefreshFlow, RefreshResult};
-use crate::storage::TokenStorage;
-use crate::types::{ApplicationSecret, FlowType, RequestError, StringError, Token};
-
-use hyper;
-
-/// A generalized authenticator which will keep tokens valid and store them.
+/// Authenticator abstracts different `GetToken` implementations behind one type and handles
+/// caching received tokens. It's important to use it (instead of the flows directly) because
+/// otherwise the user needs to be asked for new authorization every time a token is generated.
 ///
-/// It is the go-to helper to deal with any kind of supported authentication flow,
-/// which will be kept valid and usable.
+/// `ServiceAccountAccess` does not need (and does not work) with `Authenticator`, given that it
+/// does not require interaction and implements its own caching. Use it directly.
 ///
-/// # Device Flow
-/// This involves polling the authentication server in the given intervals
-/// until there is a definitive result.
-///
-/// These results will be passed the `DeviceFlowHelperDelegate` implementation to deal with
-/// * presenting the user code
-/// * inform the user about the progress or errors
-/// * abort the operation
-///
-/// # Usage
-/// Please have a look at the library's landing page.
-pub struct Authenticator<D, S, C> {
-    flow_type: FlowType,
-    delegate: D,
-    storage: S,
-    client: hyper::Client<C, hyper::Body>,
-    secret: ApplicationSecret,
-}
-
-/// A provider for authorization tokens, yielding tokens valid for a given scope.
-/// The `api_key()` method is an alternative in case there are no scopes or
-/// if no user is involved.
-pub trait GetToken {
-    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<dyn Error + Send>>
-    where
-        T: AsRef<str> + Ord + 'b,
-        I: IntoIterator<Item = &'b T>;
-
-    fn api_key(&mut self) -> Option<String>;
-}
-
-impl<'a, D, S, C: 'static> Authenticator<D, S, C>
-where
-    D: AuthenticatorDelegate,
+/// NOTE: It is recommended to use a client constructed like this in order to prevent functions
+/// like `hyper::run()` from hanging: `let client = hyper::Client::builder().keep_alive(false);`.
+/// Due to token requests being rare, this should not result in a too bad performance problem.
+pub struct Authenticator<
+    T: GetToken,
     S: TokenStorage,
+    AD: AuthenticatorDelegate,
     C: hyper::client::connect::Connect,
+> {
+    client: hyper::Client<C>,
+    inner: Arc<Mutex<T>>,
+    store: Arc<Mutex<S>>,
+    delegate: AD,
+}
+
+impl<T: GetToken, AD: AuthenticatorDelegate, C: hyper::client::connect::Connect>
+    Authenticator<T, MemoryStorage, AD, C>
 {
-    /// Returns a new `Authenticator` instance
-    ///
-    /// # Arguments
-    /// * `secret` - usually obtained from a client secret file produced by the
-    ///              [developer console][dev-con]
-    /// * `delegate` - Used to further refine the flow of the authentication.
-    /// * `client` - used for all authentication https requests.
-    /// * `storage` - used to cache authorization tokens tokens permanently. However,
-    ///               the implementation doesn't have any particular semantic requirement, which
-    ///               is why `NullStorage` and `MemoryStorage` can be used as well.
-    /// * `flow_type` - the kind of authentication to use to obtain a token for the
-    ///                 required scopes. If unset, it will be derived from the secret.
-    ///
-    /// NOTE: It is recommended to use a client constructed like this in order to prevent functions
-    /// like `hyper::run()` from hanging: `let client = hyper::Client::builder().keep_alive(false);`.
-    /// Due to token requests being rare, this should not result in a too bad performance problem.
-    /// [dev-con]: https://console.developers.google.com
+    /// Create an Authenticator caching tokens for the duration of this authenticator.
     pub fn new(
-        secret: &ApplicationSecret,
-        delegate: D,
-        client: hyper::Client<C, hyper::Body>,
-        storage: S,
-        flow_type: Option<FlowType>,
-    ) -> Authenticator<D, S, C> {
+        client: hyper::Client<C>,
+        inner: T,
+        delegate: AD,
+    ) -> Authenticator<T, MemoryStorage, AD, C> {
         Authenticator {
-            flow_type: flow_type.unwrap_or(FlowType::Device(GOOGLE_DEVICE_CODE_URL.to_string())),
-            delegate: delegate,
-            storage: storage,
             client: client,
-            secret: secret.clone(),
-        }
-    }
-
-    fn do_installed_flow(&mut self, scopes: &Vec<&str>) -> Result<Token, Box<dyn Error + Send>> {
-        let installed_type;
-
-        match self.flow_type {
-            FlowType::InstalledInteractive => {
-                installed_type = Some(InstalledFlowReturnMethod::Interactive)
-            }
-            FlowType::InstalledRedirect(port) => {
-                installed_type = Some(InstalledFlowReturnMethod::HTTPRedirect(port))
-            }
-            _ => installed_type = None,
-        }
-
-        let mut flow = InstalledFlow::new(self.client.clone(), installed_type);
-        flow.obtain_token(&mut self.delegate, &self.secret, scopes.iter())
-    }
-
-    fn retrieve_device_token(
-        &mut self,
-        scopes: &Vec<&str>,
-        code_url: String,
-    ) -> Result<Token, Box<dyn Error + Send>> {
-        let mut flow = DeviceFlow::new(self.client.clone(), &self.secret, &code_url);
-
-        // PHASE 1: REQUEST CODE
-        let pi: PollInformation;
-        loop {
-            let res = flow.request_code(scopes.iter());
-
-            pi = match res {
-                Err(res_err) => {
-                    match res_err {
-                        RequestError::ClientError(err) => match self.delegate.client_error(&err) {
-                            Retry::Abort | Retry::Skip => {
-                                return Err(Box::new(StringError::from(&err as &dyn Error)));
-                            }
-                            Retry::After(d) => sleep(d),
-                        },
-                        RequestError::HttpError(err) => {
-                            match self.delegate.connection_error(&err) {
-                                Retry::Abort | Retry::Skip => {
-                                    return Err(Box::new(StringError::from(&err as &dyn Error)));
-                                }
-                                Retry::After(d) => sleep(d),
-                            }
-                        }
-                        RequestError::InvalidClient
-                        | RequestError::NegativeServerResponse(_, _)
-                        | RequestError::InvalidScope(_) => {
-                            let serr = StringError::from(res_err.to_string());
-                            self.delegate.request_failure(res_err);
-                            return Err(Box::new(serr));
-                        }
-                    };
-                    continue;
-                }
-                Ok(pi) => {
-                    self.delegate.present_user_code(&pi);
-                    pi
-                }
-            };
-            break;
-        }
-
-        // PHASE 1: POLL TOKEN
-        loop {
-            match flow.poll_token() {
-                Err(ref poll_err) => {
-                    let pts = poll_err.to_string();
-                    match poll_err {
-                        &&PollError::HttpError(ref err) => match self.delegate.client_error(err) {
-                            Retry::Abort | Retry::Skip => {
-                                return Err(Box::new(StringError::from(err as &dyn Error)));
-                            }
-                            Retry::After(d) => sleep(d),
-                        },
-                        &&PollError::Expired(ref t) => {
-                            self.delegate.expired(t);
-                            return Err(Box::new(StringError::from(pts)));
-                        }
-                        &&PollError::AccessDenied => {
-                            self.delegate.denied();
-                            return Err(Box::new(StringError::from(pts)));
-                        }
-                    }; // end match poll_err
-                }
-                Ok(None) => match self.delegate.pending(&pi) {
-                    Retry::Abort | Retry::Skip => {
-                        return Err(Box::new(StringError::new(
-                            "Pending authentication aborted".to_string(),
-                            None,
-                        )));
-                    }
-                    Retry::After(d) => sleep(min(d, pi.interval)),
-                },
-                Ok(Some(token)) => return Ok(token),
-            }
+            inner: Arc::new(Mutex::new(inner)),
+            store: Arc::new(Mutex::new(MemoryStorage::new())),
+            delegate: delegate,
         }
     }
 }
 
-impl<D, S, C: 'static> GetToken for Authenticator<D, S, C>
-where
-    D: AuthenticatorDelegate,
-    S: TokenStorage,
-    C: hyper::client::connect::Connect,
+impl<T: GetToken, AD: AuthenticatorDelegate, C: hyper::client::connect::Connect>
+    Authenticator<T, DiskTokenStorage, AD, C>
 {
-    /// Blocks until a token was retrieved from storage, from the server, or until the delegate
-    /// decided to abort the attempt, or the user decided not to authorize the application.
-    /// In any failure case, the delegate will be provided with additional information, and
-    /// the caller will be informed about storage related errors.
-    /// Otherwise it is guaranteed to be valid for the given scopes.
-    fn token<'b, I, T>(&mut self, scopes: I) -> Result<Token, Box<dyn Error + Send>>
+    /// Create an Authenticator using the store at `path`.
+    pub fn new_disk<P: AsRef<str>>(
+        client: hyper::Client<C>,
+        inner: T,
+        delegate: AD,
+        token_storage_path: P,
+    ) -> io::Result<Authenticator<T, DiskTokenStorage, AD, C>> {
+        Ok(Authenticator {
+            client: client,
+            inner: Arc::new(Mutex::new(inner)),
+            store: Arc::new(Mutex::new(DiskTokenStorage::new(token_storage_path)?)),
+            delegate: delegate,
+        })
+    }
+}
+
+impl<
+        GT: 'static + GetToken + Send,
+        S: 'static + TokenStorage + Send,
+        AD: 'static + AuthenticatorDelegate + Send,
+        C: 'static + hyper::client::connect::Connect + Clone + Send,
+    > GetToken for Authenticator<GT, S, AD, C>
+{
+    /// Returns the API Key of the inner flow.
+    fn api_key(&mut self) -> Option<String> {
+        self.inner.lock().unwrap().api_key()
+    }
+    /// Returns the application secret of the inner flow.
+    fn application_secret(&self) -> ApplicationSecret {
+        self.inner.lock().unwrap().application_secret()
+    }
+
+    fn token<'b, I, T>(
+        &mut self,
+        scopes: I,
+    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
     where
         T: AsRef<str> + Ord + 'b,
-        I: IntoIterator<Item = &'b T>,
+        I: Iterator<Item = &'b T>,
     {
-        let (scope_key, scopes) = {
-            let mut sv: Vec<&str> = scopes
-                .into_iter()
-                .map(|s| s.as_ref())
-                .collect::<Vec<&str>>();
-            sv.sort();
-            let mut sh = DefaultHasher::new();
-            &sv.hash(&mut sh);
-            let sv = sv;
-            (sh.finish(), sv)
-        };
-
-        // Get cached token. Yes, let's do an explicit return
-        loop {
-            return match self.storage.get(scope_key, &scopes) {
-                Ok(Some(mut t)) => {
-                    // t needs refresh ?
-                    if t.expired() {
-                        let mut rf = RefreshFlow::new(self.client.clone());
-                        loop {
-                            match *rf.refresh_token(
-                                self.flow_type.clone(),
-                                &self.secret,
-                                &t.refresh_token,
-                            ) {
-                                RefreshResult::Uninitialized => {
-                                    panic!("Token flow should never get here");
+        let (scope_key, scopes) = hash_scopes(scopes);
+        let store = self.store.clone();
+        let mut delegate = self.delegate.clone();
+        let client = self.client.clone();
+        let appsecret = self.inner.lock().unwrap().application_secret();
+        let gettoken = self.inner.clone();
+        let loopfn = move |()| -> Box<
+            dyn Future<Item = future::Loop<Token, ()>, Error = RequestError> + Send,
+        > {
+            // How well does this work with tokio?
+            match store.lock().unwrap().get(
+                scope_key.clone(),
+                &scopes.iter().map(|s| s.as_str()).collect(),
+            ) {
+                Ok(Some(t)) => {
+                    if !t.expired() {
+                        return Box::new(Ok(future::Loop::Break(t)).into_future());
+                    }
+                    // Implement refresh flow.
+                    let refresh_token = t.refresh_token.clone();
+                    let mut delegate = delegate.clone();
+                    let store = store.clone();
+                    let scopes = scopes.clone();
+                    let refresh_fut = RefreshFlow::refresh_token(
+                        client.clone(),
+                        appsecret.clone(),
+                        refresh_token,
+                    )
+                        .and_then(move |rr| -> Box<dyn Future<Item=future::Loop<Token, ()>, Error=RequestError> + Send> {
+                            match rr {
+                                RefreshResult::Error(ref e) => {
+                                    delegate.token_refresh_failed(
+                                        format!("{}", e.description().to_string()),
+                                        &Some("the request has likely timed out".to_string()),
+                                        );
+                                    Box::new(Err(RequestError::Refresh(rr)).into_future())
                                 }
-                                RefreshResult::Error(ref err) => {
-                                    match self.delegate.client_error(err) {
-                                        Retry::Abort | Retry::Skip => {
-                                            return Err(Box::new(StringError::new(
-                                                err.description().to_string(),
-                                                None,
-                                            )));
+                                RefreshResult::RefreshError(ref s, ref ss) => {
+                                    delegate.token_refresh_failed(
+                                        format!("{} {}", s, ss.clone().map(|s| format!("({})", s)).unwrap_or("".to_string())),
+                                        &Some("the refresh token is likely invalid and your authorization has been revoked".to_string()),
+                                        );
+                                    Box::new(Err(RequestError::Refresh(rr)).into_future())
+                                }
+                                RefreshResult::Success(t) => {
+                                    if let Err(e) = store.lock().unwrap().set(scope_key, &scopes.iter().map(|s| s.as_str()).collect(), Some(t.clone())) {
+                                        match delegate.token_storage_failure(true, &e) {
+                                            Retry::Skip => Box::new(Ok(future::Loop::Break(t)).into_future()),
+                                            Retry::Abort => Box::new(Err(RequestError::Cache(Box::new(e))).into_future()),
+                                            Retry::After(d) => Box::new(
+                                                tokio_timer::sleep(d)
+                                                .then(|_| Ok(future::Loop::Continue(()))),
+                                                )
+                                                as Box<
+                                                dyn Future<
+                                                Item = future::Loop<Token, ()>,
+                                                Error = RequestError> + Send>,
                                         }
-                                        Retry::After(d) => sleep(d),
+                                    } else {
+                                        Box::new(Ok(future::Loop::Break(t)).into_future())
                                     }
-                                }
-                                RefreshResult::RefreshError(ref err_str, ref err_description) => {
-                                    self.delegate.token_refresh_failed(err_str, err_description);
-                                    let storage_err =
-                                        match self.storage.set(scope_key, &scopes, None) {
-                                            Ok(_) => String::new(),
-                                            Err(err) => err.to_string(),
-                                        };
-                                    return Err(Box::new(StringError::new(
-                                        &(storage_err + err_str),
-                                        err_description.as_ref(),
-                                    )));
-                                }
-                                RefreshResult::Success(ref new_t) => {
-                                    t = new_t.clone();
-                                    loop {
-                                        if let Err(err) =
-                                            self.storage.set(scope_key, &scopes, Some(t.clone()))
-                                        {
-                                            match self.delegate.token_storage_failure(true, &err) {
-                                                Retry::Skip => break,
-                                                Retry::Abort => return Err(Box::new(err)),
-                                                Retry::After(d) => {
-                                                    sleep(d);
-                                                    continue;
-                                                }
-                                            }
-                                        }
-                                        break; // .set()
-                                    }
-                                    break; // refresh_token loop
-                                }
-                            } // RefreshResult handling
-                        } // refresh loop
-                    } // handle expiration
-                    Ok(t)
+                                },
+                            }
+                        });
+                    Box::new(refresh_fut)
                 }
                 Ok(None) => {
-                    // Nothing was in storage - get a new token
-                    // get new token. The respective sub-routine will do all the logic.
-                    match match self.flow_type.clone() {
-                        FlowType::Device(url) => self.retrieve_device_token(&scopes, url),
-                        FlowType::InstalledInteractive => self.do_installed_flow(&scopes),
-                        FlowType::InstalledRedirect(_) => self.do_installed_flow(&scopes),
-                    } {
-                        Ok(token) => {
-                            loop {
-                                if let Err(err) =
-                                    self.storage.set(scope_key, &scopes, Some(token.clone()))
-                                {
-                                    match self.delegate.token_storage_failure(true, &err) {
-                                        Retry::Skip => break,
-                                        Retry::Abort => return Err(Box::new(err)),
-                                        Retry::After(d) => {
-                                            sleep(d);
-                                            continue;
+                    let store = store.clone();
+                    let scopes = scopes.clone();
+                    let mut delegate = delegate.clone();
+                    Box::new(
+                        gettoken
+                            .lock()
+                            .unwrap()
+                            .token(scopes.iter())
+                            .and_then(move |t| {
+                                if let Err(e) = store.lock().unwrap().set(
+                                    scope_key,
+                                    &scopes.iter().map(|s| s.as_str()).collect(),
+                                    Some(t.clone()),
+                                ) {
+                                    match delegate.token_storage_failure(true, &e) {
+                                        Retry::Skip => {
+                                            Box::new(Ok(future::Loop::Break(t)).into_future())
                                         }
+                                        Retry::Abort => Box::new(
+                                            Err(RequestError::Cache(Box::new(e))).into_future(),
+                                        ),
+                                        Retry::After(d) => Box::new(
+                                            tokio_timer::sleep(d)
+                                                .then(|_| Ok(future::Loop::Continue(()))),
+                                        )
+                                            as Box<
+                                                dyn Future<
+                                                        Item = future::Loop<Token, ()>,
+                                                        Error = RequestError,
+                                                    > + Send,
+                                            >,
                                     }
+                                } else {
+                                    Box::new(Ok(future::Loop::Break(t)).into_future())
                                 }
-                                break;
-                            } // end attempt to save
-                            Ok(token)
-                        }
-                        Err(err) => Err(err),
-                    } // end match token retrieve result
+                            }),
+                    )
                 }
-                Err(err) => match self.delegate.token_storage_failure(false, &err) {
-                    Retry::Abort | Retry::Skip => Err(Box::new(err)),
+                Err(err) => match delegate.token_storage_failure(false, &err) {
+                    Retry::Abort | Retry::Skip => {
+                        return Box::new(Err(RequestError::Cache(Box::new(err))).into_future())
+                    }
                     Retry::After(d) => {
-                        sleep(d);
-                        continue;
+                        return Box::new(
+                            tokio_timer::sleep(d).then(|_| Ok(future::Loop::Continue(()))),
+                        )
                     }
                 },
-            }; // end match
-        } // end loop
-    }
-
-    fn api_key(&mut self) -> Option<String> {
-        if self.secret.client_id.len() == 0 {
-            return None;
-        }
-        Some(self.secret.client_id.clone())
-    }
-}
-
-/// A utility type to indicate how operations DeviceFlowHelper operations should be retried
-pub enum Retry {
-    /// Signal you don't want to retry
-    Abort,
-    /// Signals you want to retry after the given duration
-    After(Duration),
-    /// Instruct the caller to attempt to keep going, or choose an alternate path.
-    /// If this is not supported, it will have the same effect as `Abort`
-    Skip,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::super::device::tests::MockGoogleAuth;
-    use super::super::types::tests::SECRET;
-    use super::super::types::ConsoleApplicationSecret;
-    use super::*;
-    use crate::authenticator_delegate::DefaultAuthenticatorDelegate;
-    use crate::storage::MemoryStorage;
-    use hyper;
-    use std::default::Default;
-
-    #[test]
-    fn test_flow() {
-        use serde_json as json;
-
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let secret = json::from_str::<ConsoleApplicationSecret>(SECRET)
-            .unwrap()
-            .installed
-            .unwrap();
-        let client = hyper::Client::builder()
-            .executor(runtime.executor())
-            .build(MockGoogleAuth::default());
-        let res = Authenticator::new(
-            &secret,
-            DefaultAuthenticatorDelegate,
-            client,
-            <MemoryStorage as Default>::default(),
-            None,
-        )
-        .token(&["https://www.googleapis.com/auth/youtube.upload"]);
-
-        match res {
-            Ok(t) => assert_eq!(t.access_token, "1/fFAGRNJru1FTz70BzhT3Zg"),
-            Err(err) => panic!("Expected to retrieve token in one go: {}", err),
-        }
+            }
+        };
+        Box::new(future::loop_fn((), loopfn))
     }
 }

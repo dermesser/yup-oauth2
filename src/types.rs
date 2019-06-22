@@ -2,26 +2,54 @@ use chrono::{DateTime, TimeZone, Utc};
 use hyper;
 use std::error::Error;
 use std::fmt;
+use std::io;
 use std::str::FromStr;
+
+use futures::prelude::*;
 
 /// A marker trait for all Flows
 pub trait Flow {
     fn type_id() -> FlowType;
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct JsonError {
     pub error: String,
     pub error_description: Option<String>,
     pub error_uri: Option<String>,
 }
 
-/// Encapsulates all possible results of the `request_token(...)` operation
+/// All possible outcomes of the refresh flow
+#[derive(Debug)]
+pub enum RefreshResult {
+    /// Indicates connection failure
+    Error(hyper::Error),
+    /// The server did not answer with a new token, providing the server message
+    RefreshError(String, Option<String>),
+    /// The refresh operation finished successfully, providing a new `Token`
+    Success(Token),
+}
+
+/// Encapsulates all possible results of a `poll_token(...)` operation in the Device flow.
+#[derive(Debug)]
+pub enum PollError {
+    /// Connection failure - retry if you think it's worth it
+    HttpError(hyper::Error),
+    /// Indicates we are expired, including the expiration date
+    Expired(DateTime<Utc>),
+    /// Indicates that the user declined access. String is server response
+    AccessDenied,
+    /// Indicates that too many attempts failed.
+    TimedOut,
+    /// Other type of error.
+    Other(String),
+}
+
+/// Encapsulates all possible results of the `token(...)` operation
+#[derive(Debug)]
 pub enum RequestError {
     /// Indicates connection failure
     ClientError(hyper::Error),
-    /// Indicates HTTP status failure
-    HttpError(hyper::http::Error),
     /// The OAuth client was not found
     InvalidClient,
     /// Some requested scopes were invalid. String contains the scopes as part of
@@ -30,17 +58,25 @@ pub enum RequestError {
     /// A 'catch-all' variant containing the server error and description
     /// First string is the error code, the second may be a more detailed description
     NegativeServerResponse(String, Option<String>),
+    /// A malformed server response.
+    BadServerResponse(String),
+    /// Error while decoding a JSON response.
+    JSONError(serde_json::error::Error),
+    /// Error within user input.
+    UserError(String),
+    /// A lower level IO error.
+    LowLevelError(io::Error),
+    /// A poll error occurred in the DeviceFlow.
+    Poll(PollError),
+    /// An error occurred while refreshing tokens.
+    Refresh(RefreshResult),
+    /// Error in token cache layer
+    Cache(Box<dyn Error + Send>),
 }
 
 impl From<hyper::Error> for RequestError {
     fn from(error: hyper::Error) -> RequestError {
         RequestError::ClientError(error)
-    }
-}
-
-impl From<hyper::http::Error> for RequestError {
-    fn from(error: hyper::http::Error) -> RequestError {
-        RequestError::HttpError(error)
     }
 }
 
@@ -62,7 +98,6 @@ impl fmt::Display for RequestError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             RequestError::ClientError(ref err) => err.fmt(f),
-            RequestError::HttpError(ref err) => err.fmt(f),
             RequestError::InvalidClient => "Invalid Client".fmt(f),
             RequestError::InvalidScope(ref scope) => writeln!(f, "Invalid Scope: '{}'", scope),
             RequestError::NegativeServerResponse(ref error, ref desc) => {
@@ -72,6 +107,28 @@ impl fmt::Display for RequestError {
                 }
                 "\n".fmt(f)
             }
+            RequestError::BadServerResponse(ref s) => s.fmt(f),
+            RequestError::JSONError(ref e) => format!(
+                "JSON Error; this might be a bug with unexpected server responses! {}",
+                e
+            )
+            .fmt(f),
+            RequestError::UserError(ref s) => s.fmt(f),
+            RequestError::LowLevelError(ref e) => e.fmt(f),
+            RequestError::Poll(ref pe) => pe.fmt(f),
+            RequestError::Refresh(ref rr) => format!("{:?}", rr).fmt(f),
+            RequestError::Cache(ref e) => e.fmt(f),
+        }
+    }
+}
+
+impl Error for RequestError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match *self {
+            RequestError::ClientError(ref err) => Some(err),
+            RequestError::LowLevelError(ref err) => Some(err),
+            RequestError::JSONError(ref err) => Some(err),
+            _ => None,
         }
     }
 }
@@ -177,6 +234,25 @@ impl FromStr for Scheme {
             Err(_) => Err("Couldn't parse token type"),
         }
     }
+}
+
+/// A provider for authorization tokens, yielding tokens valid for a given scope.
+/// The `api_key()` method is an alternative in case there are no scopes or
+/// if no user is involved.
+pub trait GetToken {
+    fn token<'b, I, T>(
+        &mut self,
+        scopes: I,
+    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
+    where
+        T: AsRef<str> + Ord + 'b,
+        I: Iterator<Item = &'b T>;
+
+    fn api_key(&mut self) -> Option<String>;
+
+    /// Return an application secret with at least token_uri, client_secret, and client_id filled
+    /// in. This is used for refreshing tokens without interaction from the flow.
+    fn application_secret(&self) -> ApplicationSecret;
 }
 
 /// Represents a token as returned by OAuth2 servers.

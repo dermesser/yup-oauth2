@@ -4,11 +4,24 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 
-use crate::authenticator::Retry;
-use crate::types::RequestError;
+use crate::types::{PollError, RequestError};
 
 use chrono::{DateTime, Local, Utc};
 use std::time::Duration;
+
+use futures::{future, prelude::*};
+use tokio::io as tio;
+
+/// A utility type to indicate how operations DeviceFlowHelper operations should be retried
+pub enum Retry {
+    /// Signal you don't want to retry
+    Abort,
+    /// Signals you want to retry after the given duration
+    After(Duration),
+    /// Instruct the caller to attempt to keep going, or choose an alternate path.
+    /// If this is not supported, it will have the same effect as `Abort`
+    Skip,
+}
 
 /// Contains state of pending authentication requests
 #[derive(Clone, Debug, PartialEq)]
@@ -32,23 +45,23 @@ impl fmt::Display for PollInformation {
     }
 }
 
-/// Encapsulates all possible results of a `poll_token(...)` operation
-#[derive(Debug)]
-pub enum PollError {
-    /// Connection failure - retry if you think it's worth it
-    HttpError(hyper::Error),
-    /// indicates we are expired, including the expiration date
-    Expired(DateTime<Utc>),
-    /// Indicates that the user declined access. String is server response
-    AccessDenied,
-}
-
 impl fmt::Display for PollError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             PollError::HttpError(ref err) => err.fmt(f),
             PollError::Expired(ref date) => writeln!(f, "Authentication expired at {}", date),
             PollError::AccessDenied => "Access denied by user".fmt(f),
+            PollError::TimedOut => "Timed out waiting for token".fmt(f),
+            PollError::Other(ref s) => format!("Unknown server error: {}", s).fmt(f),
+        }
+    }
+}
+
+impl Error for PollError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match *self {
+            PollError::HttpError(ref e) => Some(e),
+            _ => None,
         }
     }
 }
@@ -57,18 +70,11 @@ impl fmt::Display for PollError {
 ///
 /// The only method that needs to be implemented manually is `present_user_code(...)`,
 /// as no assumptions are made on how this presentation should happen.
-pub trait AuthenticatorDelegate {
+pub trait AuthenticatorDelegate: Clone {
     /// Called whenever there is an client, usually if there are network problems.
     ///
     /// Return retry information.
     fn client_error(&mut self, _: &hyper::Error) -> Retry {
-        Retry::Abort
-    }
-
-    /// Called whenever there is an HttpError, usually if there are network problems.
-    ///
-    /// Return retry information.
-    fn connection_error(&mut self, _: &hyper::http::Error) -> Retry {
         Retry::Abort
     }
 
@@ -85,15 +91,6 @@ pub trait AuthenticatorDelegate {
     /// The server denied the attempt to obtain a request code
     fn request_failure(&mut self, _: RequestError) {}
 
-    /// Called if the request code is expired. You will have to start over in this case.
-    /// This will be the last call the delegate receives.
-    /// Given `DateTime` is the expiration date
-    fn expired(&mut self, _: &DateTime<Utc>) {}
-
-    /// Called if the user denied access. You would have to start over.
-    /// This will be the last call the delegate receives.
-    fn denied(&mut self) {}
-
     /// Called if we could not acquire a refresh token for a reason possibly specified
     /// by the server.
     /// This call is made for the delegate's information only.
@@ -109,6 +106,19 @@ pub trait AuthenticatorDelegate {
             let _ = error_description;
         }
     }
+}
+
+/// FlowDelegate methods are called when an OAuth flow needs to ask the application what to do in
+/// certain cases.
+pub trait FlowDelegate: Clone {
+    /// Called if the request code is expired. You will have to start over in this case.
+    /// This will be the last call the delegate receives.
+    /// Given `DateTime` is the expiration date
+    fn expired(&mut self, _: &DateTime<Utc>) {}
+
+    /// Called if the user denied access. You would have to start over.
+    /// This will be the last call the delegate receives.
+    fn denied(&mut self) {}
 
     /// Called as long as we are waiting for the user to authorize us.
     /// Can be used to print progress information, or decide to time-out.
@@ -125,7 +135,6 @@ pub trait AuthenticatorDelegate {
     fn redirect_uri(&self) -> Option<String> {
         None
     }
-
     /// The server has returned a `user_code` which must be shown to the user,
     /// along with the `verification_url`.
     /// # Notes
@@ -151,7 +160,7 @@ pub trait AuthenticatorDelegate {
         &mut self,
         url: S,
         need_code: bool,
-    ) -> Option<String> {
+    ) -> Box<dyn Future<Item = Option<String>, Error = Box<dyn Error + Send>> + Send> {
         if need_code {
             println!(
                 "Please direct your browser to {}, follow the instructions and enter the \
@@ -159,24 +168,33 @@ pub trait AuthenticatorDelegate {
                 url
             );
 
-            let mut code = String::new();
-            io::stdin().read_line(&mut code).ok().map(|_| {
-                // Remove newline
-                code.pop();
-                code
-            })
+            Box::new(
+                tio::lines(io::BufReader::new(tio::stdin()))
+                    .into_future()
+                    .map_err(|(e, _)| {
+                        println!("{:?}", e);
+                        Box::new(e) as Box<dyn Error + Send>
+                    })
+                    .and_then(|(l, _)| Ok(l)),
+            )
         } else {
             println!(
                 "Please direct your browser to {} and follow the instructions displayed \
                  there.",
                 url
             );
-            None
+            Box::new(future::ok(None))
         }
     }
 }
 
 /// Uses all default implementations by AuthenticatorDelegate, and makes the trait's
 /// implementation usable in the first place.
+#[derive(Clone)]
 pub struct DefaultAuthenticatorDelegate;
 impl AuthenticatorDelegate for DefaultAuthenticatorDelegate {}
+
+/// Uses all default implementations in the FlowDelegate trait.
+#[derive(Clone)]
+pub struct DefaultFlowDelegate;
+impl FlowDelegate for DefaultFlowDelegate {}

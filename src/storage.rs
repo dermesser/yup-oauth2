@@ -35,7 +35,7 @@ pub trait TokenStorage {
 }
 
 /// Calculate a hash value describing the scopes, and return a sorted Vec of the scopes.
-pub fn hash_scopes<'a, I, T>(scopes: I) -> (u64, Vec<&'a str>)
+pub fn hash_scopes<'a, I, T>(scopes: I) -> (u64, Vec<String>)
 where
     T: AsRef<str> + Ord + 'a,
     I: IntoIterator<Item = &'a T>,
@@ -47,7 +47,7 @@ where
     sv.sort();
     let mut sh = DefaultHasher::new();
     &sv.hash(&mut sh);
-    let sv = sv;
+    let sv = sv.iter().map(|s| s.to_string()).collect();
     (sh.finish(), sv)
 }
 
@@ -80,9 +80,15 @@ impl TokenStorage for NullStorage {
 }
 
 /// A storage that remembers values for one session only.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct MemoryStorage {
     pub tokens: HashMap<u64, Token>,
+}
+
+impl MemoryStorage {
+    pub fn new() -> MemoryStorage {
+        Default::default()
+    }
 }
 
 impl TokenStorage for MemoryStorage {

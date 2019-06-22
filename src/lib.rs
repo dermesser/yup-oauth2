@@ -34,40 +34,73 @@
 //! The returned `Token` is stored permanently in the given token storage in order to
 //! authorize future API requests to the same scopes.
 //!
+//! The following example, which is derived from the (actual and runnable) example in
+//! `examples/test-installed/`, shows the basics of using this crate:
+//!
 //! ```test_harness,no_run
-//! #[macro_use]
-//! extern crate serde_derive;
+//! use futures::prelude::*;
+//! use yup_oauth2::GetToken;
+//! use yup_oauth2::{Authenticator, InstalledFlow};
 //!
-//! use yup_oauth2::{Authenticator, DefaultAuthenticatorDelegate, PollInformation, ConsoleApplicationSecret, MemoryStorage, GetToken};
-//! use serde_json as json;
-//! use std::default::Default;
-//! use hyper::Client;
+//! use hyper::client::Client;
 //! use hyper_tls::HttpsConnector;
-//! # const SECRET: &'static str = "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"oob\"],\"client_x509_cert_url\":\"\",\"client_id\":\"14070749909-vgip2f1okm7bkvajhi9jugan6126io9v.apps.googleusercontent.com\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\"}}";
 //!
-//! # #[test] fn device() {
-//! let secret = json::from_str::<ConsoleApplicationSecret>(SECRET).unwrap().installed.unwrap();
-//! let res = Authenticator::new(&secret, DefaultAuthenticatorDelegate,
-//!                         Client::builder().build(HttpsConnector::new(4).unwrap()),
-//!                         <MemoryStorage as Default>::default(), None)
-//!                         .token(&["https://www.googleapis.com/auth/youtube.upload"]);
-//! match res {
-//!     Ok(t) => {
-//!     // now you can use t.access_token to authenticate API calls within your
-//!     // given scopes. It will not be valid forever, but Authenticator will automatically
-//!     // refresh the token for you.
-//!     },
-//!     Err(err) => println!("Failed to acquire token: {}", err),
+//! use std::path::Path;
+//!
+//! fn main() {
+//!     // Boilerplate: Set up hyper HTTP client and TLS.
+//!     let https = HttpsConnector::new(1).expect("tls");
+//!     let client = Client::builder()
+//!         .keep_alive(false)
+//!         .build::<_, hyper::Body>(https);
+//!
+//!     // Read application secret from a file. Sometimes it's easier to compile it directly into
+//!     // the binary. The clientsecret file contains JSON like `{"installed":{"client_id": ... }}`
+//!     let secret = yup_oauth2::read_application_secret(Path::new("clientsecret.json"))
+//!         .expect("clientsecret.json");
+//!
+//!     // There are two types of delegates; FlowDelegate and AuthenticatorDelegate. See the
+//!     // respective documentation; all you need to know here is that they determine how the user
+//!     // is asked to visit the OAuth flow URL or how to read back the provided code.
+//!     let ad = yup_oauth2::DefaultFlowDelegate;
+//!
+//!     // InstalledFlow handles OAuth flows of that type. They are usually the ones where a user
+//!     // grants access to their personal account (think Google Drive, Github API, etc.).
+//!     let inf = InstalledFlow::new(
+//!         client.clone(),
+//!         ad,
+//!         secret,
+//!         yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect(8081),
+//!     );
+//!     // You could already use InstalledFlow by itself, but usually you want to cache tokens and
+//!     // refresh them, rather than ask the user every time to log in again. Authenticator wraps
+//!     // other flows and handles these.
+//!     // This type of authenticator caches tokens in a JSON file on disk.
+//!     let mut auth = Authenticator::new_disk(
+//!         client,
+//!         inf,
+//!         yup_oauth2::DefaultAuthenticatorDelegate,
+//!         "tokencache.json",
+//!     )
+//!     .unwrap();
+//!     let s = "https://www.googleapis.com/auth/drive.file".to_string();
+//!     let scopes = vec![s];
+//!
+//!     // token(<scopes>) is the one important function of this crate; it does everything to
+//!     // obtain a token that can be sent e.g. as Bearer token.
+//!     let tok = auth.token(scopes.iter());
+//!     // Finally we print the token.
+//!     let fut = tok.map_err(|e| println!("error: {:?}", e)).and_then(|t| {
+//!         println!("The token is {:?}", t);
+//!         Ok(())
+//!     });
+//!
+//!     tokio::run(fut)
 //! }
-//! # }
 //! ```
 //!
 #[macro_use]
 extern crate serde_derive;
-
-#[cfg(test)]
-#[macro_use]
-extern crate yup_hyper_mock as hyper_mock;
 
 mod authenticator;
 mod authenticator_delegate;
@@ -79,16 +112,17 @@ mod service_account;
 mod storage;
 mod types;
 
-pub use crate::authenticator::{Authenticator, GetToken, Retry};
+pub use crate::authenticator::Authenticator;
 pub use crate::authenticator_delegate::{
-    AuthenticatorDelegate, DefaultAuthenticatorDelegate, PollError, PollInformation,
+    AuthenticatorDelegate, DefaultAuthenticatorDelegate, DefaultFlowDelegate, FlowDelegate,
+    PollInformation,
 };
 pub use crate::device::{DeviceFlow, GOOGLE_DEVICE_CODE_URL};
 pub use crate::helper::*;
 pub use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
-pub use crate::refresh::{RefreshFlow, RefreshResult};
 pub use crate::service_account::*;
 pub use crate::storage::{DiskTokenStorage, MemoryStorage, NullStorage, TokenStorage};
 pub use crate::types::{
-    ApplicationSecret, ConsoleApplicationSecret, FlowType, Scheme, Token, TokenType,
+    ApplicationSecret, ConsoleApplicationSecret, FlowType, GetToken, PollError, RefreshResult,
+    RequestError, Scheme, Token, TokenType,
 };
