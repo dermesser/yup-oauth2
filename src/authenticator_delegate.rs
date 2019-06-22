@@ -57,7 +57,7 @@ pub enum PollError {
     /// Indicates that too many attempts failed.
     TimedOut,
     /// Other type of error.
-    Other(String)
+    Other(String),
 }
 
 impl fmt::Display for PollError {
@@ -67,7 +67,7 @@ impl fmt::Display for PollError {
             PollError::Expired(ref date) => writeln!(f, "Authentication expired at {}", date),
             PollError::AccessDenied => "Access denied by user".fmt(f),
             PollError::TimedOut => "Timed out waiting for token".fmt(f),
-            PollError::Other(ref s) => format!("Unknown server error: {}", s).fmt(f)
+            PollError::Other(ref s) => format!("Unknown server error: {}", s).fmt(f),
         }
     }
 }
