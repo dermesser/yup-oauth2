@@ -136,12 +136,8 @@ impl JWT {
     fn sign(&self, private_key: &str) -> Result<String, io::Error> {
         let mut jwt_head = self.encode_claims();
         let key = decode_rsa_key(private_key)?;
-        let signing_key = sign::RSASigningKey::new(&key).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                "Couldn't initialize signer",
-            )
-        })?;
+        let signing_key = sign::RSASigningKey::new(&key)
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't initialize signer"))?;
         let signer = signing_key
             .choose_scheme(&[rustls::SignatureScheme::RSA_PKCS1_SHA256])
             .ok_or(io::Error::new(
