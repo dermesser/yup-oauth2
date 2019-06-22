@@ -136,6 +136,12 @@ mod tests {
             .keep_alive(false)
             .build::<_, hyper::Body>(https);
 
+        let mut rt = tokio::runtime::Builder::new()
+            .core_threads(1)
+            .panic_handler(|e| std::panic::resume_unwind(e))
+            .build()
+            .unwrap();
+
         // Success
         {
             let _m = mockito::mock("POST", "/token")
@@ -144,7 +150,6 @@ mod tests {
                 .with_status(200)
                 .with_body(r#"{"access_token": "new-access-token", "token_type": "Bearer", "expires_in": 1234567}"#)
                 .create();
-
             let fut = RefreshFlow::refresh_token(
                 client.clone(),
                 app_secret.clone(),
@@ -159,10 +164,10 @@ mod tests {
                     }
                     _ => panic!(format!("unexpected RefreshResult {:?}", rr)),
                 }
-                Ok(())
+                Ok(()) as Result<(), ()>
             });
 
-            tokio::run(fut);
+            rt.block_on(fut).expect("block_on");
             _m.assert();
         }
         // Refresh error.
