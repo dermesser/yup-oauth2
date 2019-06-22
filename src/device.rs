@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::iter::{FromIterator, IntoIterator};
 use std::time::Duration;
 
@@ -13,9 +12,9 @@ use serde_json as json;
 use tokio_timer;
 use url::form_urlencoded;
 
-use crate::authenticator_delegate::{FlowDelegate, PollError, PollInformation, Retry};
+use crate::authenticator_delegate::{FlowDelegate, PollInformation, Retry};
 use crate::types::{
-    ApplicationSecret, Flow, FlowType, GetToken, JsonError, RequestError, StringError, Token,
+    ApplicationSecret, Flow, FlowType, GetToken, JsonError, PollError, RequestError, Token,
 };
 
 pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/oauth2/device/code";
@@ -47,7 +46,7 @@ impl<
     fn token<'b, I, T>(
         &mut self,
         scopes: I,
-    ) -> Box<dyn Future<Item = Token, Error = Box<dyn Error + Send>> + Send>
+    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
     where
         T: AsRef<str> + Ord + 'b,
         I: Iterator<Item = &'b T>,
@@ -97,7 +96,7 @@ where
     pub fn retrieve_device_token<'a>(
         &mut self,
         scopes: Vec<String>,
-    ) -> Box<dyn Future<Item = Token, Error = Box<dyn Error + Send>> + Send> {
+    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send> {
         let application_secret = self.application_secret.clone();
         let client = self.client.clone();
         let wait = self.wait;
@@ -131,13 +130,9 @@ where
                     .then(|_| pt)
                     .then(move |r| match r {
                         Ok(None) if i < maxn => match fd.pending(&pollinf) {
-                            Retry::Abort | Retry::Skip => Box::new(
-                                Err(Box::new(StringError::new(
-                                    "Pending authentication aborted".to_string(),
-                                    None,
-                                )) as Box<dyn Error + Send>)
-                                .into_future(),
-                            ),
+                            Retry::Abort | Retry::Skip => {
+                                Box::new(Err(RequestError::Poll(PollError::TimedOut)).into_future())
+                            }
                             Retry::After(d) => Box::new(
                                 tokio_timer::sleep(d)
                                     .then(move |_| Ok(future::Loop::Continue(i + 1))),
@@ -145,7 +140,7 @@ where
                                 as Box<
                                     dyn Future<
                                             Item = future::Loop<Token, u64>,
-                                            Error = Box<dyn Error + Send>,
+                                            Error = RequestError,
                                         > + Send,
                                 >,
                         },
@@ -153,16 +148,15 @@ where
                         Err(e @ PollError::AccessDenied)
                         | Err(e @ PollError::TimedOut)
                         | Err(e @ PollError::Expired(_)) => {
-                            Box::new(Err(Box::new(e) as Box<dyn Error + Send>).into_future())
+                            Box::new(Err(RequestError::Poll(e)).into_future())
                         }
                         Err(_) if i < maxn => {
                             Box::new(Ok(future::Loop::Continue(i + 1)).into_future())
                         }
                         // Too many attempts.
-                        Ok(None) | Err(_) => Box::new(
-                            Err(Box::new(PollError::TimedOut) as Box<dyn Error + Send>)
-                                .into_future(),
-                        ),
+                        Ok(None) | Err(_) => {
+                            Box::new(Err(RequestError::Poll(PollError::TimedOut)).into_future())
+                        }
                     })
             })
         }))
@@ -188,8 +182,7 @@ where
         client: hyper::Client<C>,
         device_code_url: String,
         scopes: Vec<String>,
-    ) -> impl Future<Item = (PollInformation, String), Error = Box<dyn 'static + Error + Send>>
-    {
+    ) -> impl Future<Item = (PollInformation, String), Error = RequestError> {
         // note: cloned() shouldn't be needed, see issue
         // https://github.com/servo/rust-url/issues/81
         let req = form_urlencoded::Serializer::new(String::new())
@@ -222,9 +215,7 @@ where
                 |r: Result<hyper::Response<hyper::Body>, hyper::error::Error>| {
                     match r {
                         Err(err) => {
-                            return Err(
-                                Box::new(RequestError::ClientError(err)) as Box<dyn Error + Send>
-                            );
+                            return Err(RequestError::ClientError(err));
                         }
                         Ok(res) => {
                             #[derive(Deserialize)]
@@ -246,11 +237,7 @@ where
                             // check for error
                             match json::from_str::<JsonError>(&json_str) {
                                 Err(_) => {} // ignore, move on
-                                Ok(res) => {
-                                    return Err(
-                                        Box::new(RequestError::from(res)) as Box<dyn Error + Send>
-                                    )
-                                }
+                                Ok(res) => return Err(RequestError::from(res)),
                             }
 
                             let decoded: JsonData = json::from_str(&json_str).unwrap();

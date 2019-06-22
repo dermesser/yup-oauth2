@@ -1,7 +1,7 @@
 use crate::authenticator_delegate::{AuthenticatorDelegate, Retry};
-use crate::refresh::{RefreshFlow, RefreshResult};
+use crate::refresh::RefreshFlow;
 use crate::storage::{hash_scopes, DiskTokenStorage, MemoryStorage, TokenStorage};
-use crate::types::{ApplicationSecret, GetToken, StringError, Token};
+use crate::types::{ApplicationSecret, GetToken, RefreshResult, RequestError, Token};
 
 use futures::{future, prelude::*};
 use tokio_timer;
@@ -88,7 +88,7 @@ impl<
     fn token<'b, I, T>(
         &mut self,
         scopes: I,
-    ) -> Box<dyn Future<Item = Token, Error = Box<dyn Error + Send>> + Send>
+    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
     where
         T: AsRef<str> + Ord + 'b,
         I: Iterator<Item = &'b T>,
@@ -100,7 +100,7 @@ impl<
         let appsecret = self.inner.lock().unwrap().application_secret();
         let gettoken = self.inner.clone();
         let loopfn = move |()| -> Box<
-            dyn Future<Item = future::Loop<Token, ()>, Error = Box<dyn Error + Send>> + Send,
+            dyn Future<Item = future::Loop<Token, ()>, Error = RequestError> + Send,
         > {
             // How well does this work with tokio?
             match store.lock().unwrap().get(
@@ -121,27 +121,27 @@ impl<
                         appsecret.clone(),
                         refresh_token,
                     )
-                        .and_then(move |rr| -> Box<dyn Future<Item=future::Loop<Token, ()>, Error=Box<dyn Error+Send>> + Send> {
+                        .and_then(move |rr| -> Box<dyn Future<Item=future::Loop<Token, ()>, Error=RequestError> + Send> {
                             match rr {
-                                RefreshResult::Error(e) => {
+                                RefreshResult::Error(ref e) => {
                                     delegate.token_refresh_failed(
                                         format!("{}", e.description().to_string()),
                                         &Some("the request has likely timed out".to_string()),
                                         );
-                                    Box::new(Err(Box::new(e) as Box<dyn Error + Send>).into_future())
+                                    Box::new(Err(RequestError::Refresh(rr)).into_future())
                                 }
                                 RefreshResult::RefreshError(ref s, ref ss) => {
                                     delegate.token_refresh_failed(
                                         format!("{} {}", s, ss.clone().map(|s| format!("({})", s)).unwrap_or("".to_string())),
                                         &Some("the refresh token is likely invalid and your authorization has been revoked".to_string()),
                                         );
-                                    Box::new(Err(Box::new(StringError::new(s, ss.as_ref())) as Box<dyn Error + Send>).into_future())
+                                    Box::new(Err(RequestError::Refresh(rr)).into_future())
                                 }
                                 RefreshResult::Success(t) => {
                                     if let Err(e) = store.lock().unwrap().set(scope_key, &scopes.iter().map(|s| s.as_str()).collect(), Some(t.clone())) {
                                         match delegate.token_storage_failure(true, &e) {
                                             Retry::Skip => Box::new(Ok(future::Loop::Break(t)).into_future()),
-                                            Retry::Abort => Box::new(Err(Box::new(e) as Box<dyn Error + Send>).into_future()),
+                                            Retry::Abort => Box::new(Err(RequestError::Cache(Box::new(e))).into_future()),
                                             Retry::After(d) => Box::new(
                                                 tokio_timer::sleep(d)
                                                 .then(|_| Ok(future::Loop::Continue(()))),
@@ -149,9 +149,7 @@ impl<
                                                 as Box<
                                                 dyn Future<
                                                 Item = future::Loop<Token, ()>,
-                                                Error = Box<dyn Error + Send>,
-                                                > + Send,
-                                                >,
+                                                Error = RequestError> + Send>,
                                         }
                                     } else {
                                         Box::new(Ok(future::Loop::Break(t)).into_future())
@@ -181,7 +179,7 @@ impl<
                                             Box::new(Ok(future::Loop::Break(t)).into_future())
                                         }
                                         Retry::Abort => Box::new(
-                                            Err(Box::new(e) as Box<dyn Error + Send>).into_future(),
+                                            Err(RequestError::Cache(Box::new(e))).into_future(),
                                         ),
                                         Retry::After(d) => Box::new(
                                             tokio_timer::sleep(d)
@@ -190,7 +188,7 @@ impl<
                                             as Box<
                                                 dyn Future<
                                                         Item = future::Loop<Token, ()>,
-                                                        Error = Box<dyn Error + Send>,
+                                                        Error = RequestError,
                                                     > + Send,
                                             >,
                                     }
@@ -202,7 +200,7 @@ impl<
                 }
                 Err(err) => match delegate.token_storage_failure(false, &err) {
                     Retry::Abort | Retry::Skip => {
-                        return Box::new(future::err(Box::new(err) as Box<dyn Error + Send>))
+                        return Box::new(Err(RequestError::Cache(Box::new(err))).into_future())
                     }
                     Retry::After(d) => {
                         return Box::new(

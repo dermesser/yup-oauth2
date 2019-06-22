@@ -3,8 +3,6 @@
 // Refer to the project root for licensing information.
 //
 use std::convert::AsRef;
-use std::error::Error;
-use std::io;
 use std::sync::{Arc, Mutex};
 
 use futures::prelude::*;
@@ -12,12 +10,11 @@ use futures::stream::Stream;
 use futures::sync::oneshot;
 use hyper;
 use hyper::{header, StatusCode, Uri};
-use serde_json::error;
 use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
 use crate::authenticator_delegate::FlowDelegate;
-use crate::types::{ApplicationSecret, GetToken, Token};
+use crate::types::{ApplicationSecret, GetToken, RequestError, Token};
 
 const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
 
@@ -67,7 +64,7 @@ impl<FD: FlowDelegate + 'static + Send + Clone, C: hyper::client::connect::Conne
     fn token<'b, I, T>(
         &mut self,
         scopes: I,
-    ) -> Box<dyn Future<Item = Token, Error = Box<dyn Error + Send>> + Send>
+    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
     where
         T: AsRef<str> + Ord + 'b,
         I: Iterator<Item = &'b T>,
@@ -134,12 +131,12 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
     pub fn obtain_token<'a>(
         &mut self,
         scopes: Vec<String>, // Note: I haven't found a better way to give a list of strings here, due to ownership issues with futures.
-    ) -> impl 'a + Future<Item = Token, Error = Box<dyn 'a + Error + Send>> + Send {
+    ) -> impl 'a + Future<Item = Token, Error = RequestError> + Send {
         let rduri = self.fd.redirect_uri();
         // Start server on localhost to accept auth code.
         let server = if let InstalledFlowReturnMethod::HTTPRedirect(port) = self.method {
             match InstalledFlowServer::new(port) {
-                Result::Err(e) => Err(Box::new(e) as Box<dyn Error + Send>),
+                Result::Err(e) => Err(RequestError::ClientError(e)),
                 Result::Ok(server) => Ok(Some(server)),
             }
         } else {
@@ -166,27 +163,34 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
                 let result = client.request(request);
                 // Handle result here, it makes ownership tracking easier.
                 result
-                    .map_err(|e| Box::new(e) as Box<dyn Error + Send>)
                     .and_then(move |r| {
-                        let result = r
-                            .into_body()
+                        r.into_body()
                             .concat2()
-                            .wait()
-                            .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap()); // TODO: error handling
-
-                        let resp = match result {
-                            Err(e) => return Err(Box::new(e) as Box<dyn Error + Send>),
+                            .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap()) // TODO: error handling
+                    })
+                    .then(|body_or| {
+                        let resp = match body_or {
+                            Err(e) => return Err(RequestError::ClientError(e)),
                             Ok(s) => s,
                         };
 
-                        let token_resp: Result<JSONTokenResponse, error::Error> =
+                        let token_resp: Result<JSONTokenResponse, serde_json::Error> =
                             serde_json::from_str(&resp);
 
                         match token_resp {
                             Err(e) => {
-                                return Err(Box::new(e) as Box<dyn Error + Send>);
+                                return Err(RequestError::JSONError(e));
                             }
-                            Ok(tok) => Ok(tok) as Result<JSONTokenResponse, Box<dyn Error + Send>>,
+                            Ok(tok) => {
+                                if tok.error.is_some() {
+                                    Err(RequestError::NegativeServerResponse(
+                                        tok.error.unwrap(),
+                                        tok.error_description,
+                                    ))
+                                } else {
+                                    Ok(tok)
+                                }
+                            }
                         }
                     })
             })
@@ -203,18 +207,12 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
                     };
 
                     token.set_expiry_absolute();
-                    Result::Ok(token)
+                    Ok(token)
                 } else {
-                    let err = Box::new(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!(
-                            "Token API error: {} {}",
-                            tokens.error.unwrap_or("<unknown err>".to_string()),
-                            tokens.error_description.unwrap_or("".to_string())
-                        )
-                        .as_str(),
-                    )) as Box<dyn Error + Send>;
-                    Result::Err(err)
+                    Err(RequestError::NegativeServerResponse(
+                        tokens.error.unwrap(),
+                        tokens.error_description,
+                    ))
                 }
             })
     }
@@ -224,7 +222,7 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
         mut auth_delegate: FD,
         appsecret: &ApplicationSecret,
         scopes: S,
-    ) -> Box<dyn Future<Item = String, Error = Box<dyn Error + Send>> + Send>
+    ) -> Box<dyn Future<Item = String, Error = RequestError> + Send>
     where
         T: AsRef<str> + 'a,
         S: Iterator<Item = &'a T>,
@@ -251,10 +249,7 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
                                 }
                                 Ok(code)
                             }
-                            _ => Err(Box::new(io::Error::new(
-                                io::ErrorKind::UnexpectedEof,
-                                "couldn't read code",
-                            )) as Box<dyn Error + Send>),
+                            _ => Err(RequestError::UserError("couldn't read code".to_string())),
                         }
                     }),
             )
@@ -274,7 +269,12 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
                 auth_delegate
                     .present_user_url(&url, false /* need_code */)
                     .then(move |_| server.block_till_auth())
-                    .map_err(|e| Box::new(e) as Box<dyn Error + Send>),
+                    .map_err(|e| {
+                        RequestError::UserError(format!(
+                            "could not obtain token via redirect: {}",
+                            e
+                        ))
+                    }),
             )
         }
     }
@@ -525,6 +525,7 @@ impl InstalledFlowService {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
     use std::fmt;
     use std::str::FromStr;
 
@@ -673,14 +674,13 @@ mod tests {
                 .expect(1)
                 .create();
 
-            let fut =
-                inf.token(vec!["https://googleapis.com/some/scope"].iter())
-                    .then(|tokr| {
-                        assert!(tokr.is_err());
-                        assert!(format!("{}", tokr.unwrap_err())
-                            .contains("Token API error: invalid_code"));
-                        Ok(()) as Result<(), ()>
-                    });
+            let fut = inf
+                .token(vec!["https://googleapis.com/some/scope"].iter())
+                .then(|tokr| {
+                    assert!(tokr.is_err());
+                    assert!(format!("{}", tokr.unwrap_err()).contains("invalid_code"));
+                    Ok(()) as Result<(), ()>
+                });
             rt.block_on(fut).expect("block on");
             _m.assert();
         }

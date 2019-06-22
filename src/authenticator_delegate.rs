@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 
-use crate::types::RequestError;
+use crate::types::{PollError, RequestError};
 
 use chrono::{DateTime, Local, Utc};
 use std::time::Duration;
@@ -45,21 +45,6 @@ impl fmt::Display for PollInformation {
     }
 }
 
-/// Encapsulates all possible results of a `poll_token(...)` operation
-#[derive(Debug)]
-pub enum PollError {
-    /// Connection failure - retry if you think it's worth it
-    HttpError(hyper::Error),
-    /// Indicates we are expired, including the expiration date
-    Expired(DateTime<Utc>),
-    /// Indicates that the user declined access. String is server response
-    AccessDenied,
-    /// Indicates that too many attempts failed.
-    TimedOut,
-    /// Other type of error.
-    Other(String),
-}
-
 impl fmt::Display for PollError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
@@ -90,13 +75,6 @@ pub trait AuthenticatorDelegate: Clone {
     ///
     /// Return retry information.
     fn client_error(&mut self, _: &hyper::Error) -> Retry {
-        Retry::Abort
-    }
-
-    /// Called whenever there is an HttpError, usually if there are network problems.
-    ///
-    /// Return retry information.
-    fn connection_error(&mut self, _: &hyper::http::Error) -> Retry {
         Retry::Abort
     }
 

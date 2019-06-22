@@ -1,6 +1,4 @@
-use crate::types::{ApplicationSecret, JsonError};
-
-use std::error::Error;
+use crate::types::{ApplicationSecret, JsonError, RefreshResult, RequestError};
 
 use super::Token;
 use chrono::Utc;
@@ -17,17 +15,6 @@ use url::form_urlencoded;
 /// This flow is useful when your `Token` is expired and allows to obtain a new
 /// and valid access token.
 pub struct RefreshFlow;
-
-/// All possible outcomes of the refresh flow
-#[derive(Debug)]
-pub enum RefreshResult {
-    /// Indicates connection failure
-    Error(hyper::Error),
-    /// The server did not answer with a new token, providing the server message
-    RefreshError(String, Option<String>),
-    /// The refresh operation finished successfully, providing a new `Token`
-    Success(Token),
-}
 
 impl RefreshFlow {
     /// Attempt to refresh the given token, and obtain a new, valid one.
@@ -48,7 +35,7 @@ impl RefreshFlow {
         client: hyper::Client<C>,
         client_secret: ApplicationSecret,
         refresh_token: String,
-    ) -> impl 'a + Future<Item = RefreshResult, Error = Box<dyn 'static + Error + Send>> {
+    ) -> impl 'a + Future<Item = RefreshResult, Error = RequestError> {
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
                 ("client_id", client_secret.client_id.clone()),
@@ -109,6 +96,7 @@ impl RefreshFlow {
                     expires_in_timestamp: Some(Utc::now().timestamp() + t.expires_in),
                 }))
             })
+            .map_err(RequestError::Refresh)
     }
 }
 

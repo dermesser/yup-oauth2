@@ -115,14 +115,14 @@ mod types;
 pub use crate::authenticator::Authenticator;
 pub use crate::authenticator_delegate::{
     AuthenticatorDelegate, DefaultAuthenticatorDelegate, DefaultFlowDelegate, FlowDelegate,
-    PollError, PollInformation,
+    PollInformation,
 };
 pub use crate::device::{DeviceFlow, GOOGLE_DEVICE_CODE_URL};
 pub use crate::helper::*;
 pub use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
-pub use crate::refresh::{RefreshFlow, RefreshResult};
 pub use crate::service_account::*;
 pub use crate::storage::{DiskTokenStorage, MemoryStorage, NullStorage, TokenStorage};
 pub use crate::types::{
-    ApplicationSecret, ConsoleApplicationSecret, FlowType, GetToken, Scheme, Token, TokenType,
+    ApplicationSecret, ConsoleApplicationSecret, FlowType, GetToken, PollError, RefreshResult,
+    RequestError, Scheme, Token, TokenType,
 };

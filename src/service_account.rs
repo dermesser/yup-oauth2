@@ -12,11 +12,10 @@
 //!
 
 use std::default::Default;
-use std::error;
 use std::sync::{Arc, Mutex};
 
 use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
-use crate::types::{ApplicationSecret, GetToken, JsonError, StringError, Token};
+use crate::types::{ApplicationSecret, GetToken, JsonError, RequestError, StringError, Token};
 
 use futures::stream::Stream;
 use futures::{future, prelude::*};
@@ -45,7 +44,7 @@ fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
 }
 
 /// Decode a PKCS8 formatted RSA key.
-fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<dyn error::Error + Send>> {
+fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, io::Error> {
     let private = pem_pkcs8.to_string().replace("\\n", "\n").into_bytes();
     let mut private_reader: &[u8] = private.as_ref();
     let private_keys = pemfile::pkcs8_private_keys(&mut private_reader);
@@ -54,16 +53,16 @@ fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, Box<dyn error::Error + 
         if pk.len() > 0 {
             Ok(pk[0].clone())
         } else {
-            Err(Box::new(io::Error::new(
+            Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "Not enough private keys in PEM",
-            )))
+            ))
         }
     } else {
-        Err(Box::new(io::Error::new(
+        Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "Error reading key from PEM",
-        )))
+        ))
     }
 }
 
@@ -134,24 +133,20 @@ impl JWT {
     }
 
     /// Sign a JWT base string with `private_key`, which is a PKCS8 string.
-    fn sign(&self, private_key: &str) -> Result<String, Box<dyn error::Error + Send>> {
+    fn sign(&self, private_key: &str) -> Result<String, io::Error> {
         let mut jwt_head = self.encode_claims();
         let key = decode_rsa_key(private_key)?;
-        let signing_key = sign::RSASigningKey::new(&key).map_err(|_| {
-            Box::new(io::Error::new(
-                io::ErrorKind::Other,
-                "Couldn't initialize signer",
-            )) as Box<dyn error::Error + Send>
-        })?;
+        let signing_key = sign::RSASigningKey::new(&key)
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't initialize signer"))?;
         let signer = signing_key
             .choose_scheme(&[rustls::SignatureScheme::RSA_PKCS1_SHA256])
-            .ok_or(Box::new(io::Error::new(
+            .ok_or(io::Error::new(
                 io::ErrorKind::Other,
                 "Couldn't choose signing scheme",
-            )) as Box<dyn error::Error + Send>)?;
+            ))?;
         let signature = signer
             .sign(jwt_head.as_bytes())
-            .map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)?;
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("{}", e)))?;
         let signature_b64 = encode_base64(signature);
 
         jwt_head.push_str(".");
@@ -256,13 +251,14 @@ impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccess<C> {
         sub: Option<String>,
         key: ServiceAccountKey,
         scopes: Vec<String>,
-    ) -> impl Future<Item = Token, Error = Box<dyn 'static + error::Error + Send>> {
+    ) -> impl Future<Item = Token, Error = RequestError> {
         let mut claims = init_claims_from_key(&key, &scopes);
         claims.sub = sub.clone();
         let signed = JWT::new(claims)
             .sign(key.private_key.as_ref().unwrap())
             .into_future();
         signed
+            .map_err(RequestError::LowLevelError)
             .map(|signed| {
                 form_urlencoded::Serializer::new(String::new())
                     .extend_pairs(vec![
@@ -277,48 +273,40 @@ impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccess<C> {
                     .body(hyper::Body::from(rqbody))
                     .unwrap()
             })
-            .and_then(move |request| {
-                client
-                    .request(request)
-                    .map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)
-            })
+            .and_then(move |request| client.request(request).map_err(RequestError::ClientError))
             .and_then(|response| {
                 response
                     .into_body()
                     .concat2()
-                    .map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)
+                    .map_err(RequestError::ClientError)
             })
             .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
             .and_then(|s| {
                 if let Ok(jse) = serde_json::from_str::<JsonError>(&s) {
-                    Err(
-                        Box::new(StringError::new(&jse.error, jse.error_description.as_ref()))
-                            as Box<dyn error::Error + Send>,
-                    )
+                    Err(RequestError::NegativeServerResponse(
+                        jse.error,
+                        jse.error_description,
+                    ))
                 } else {
-                    serde_json::from_str(&s)
-                        .map_err(|e| Box::new(e) as Box<dyn error::Error + Send>)
+                    serde_json::from_str(&s).map_err(RequestError::JSONError)
                 }
             })
-            .then(
-                |token: Result<TokenResponse, Box<dyn error::Error + Send>>| match token {
-                    Err(e) => return Err(e),
-                    Ok(token) => {
-                        if token.access_token.is_none()
-                            || token.token_type.is_none()
-                            || token.expires_in.is_none()
-                        {
-                            Err(Box::new(StringError::new(
-                                "Token response lacks fields".to_string(),
-                                Some(format!("{:?}", token)),
-                            ))
-                                as Box<dyn error::Error + Send>)
-                        } else {
-                            Ok(token.to_oauth_token())
-                        }
+            .then(|token: Result<TokenResponse, RequestError>| match token {
+                Err(e) => return Err(e),
+                Ok(token) => {
+                    if token.access_token.is_none()
+                        || token.token_type.is_none()
+                        || token.expires_in.is_none()
+                    {
+                        Err(RequestError::BadServerResponse(format!(
+                            "Token response lacks fields: {:?}",
+                            token
+                        )))
+                    } else {
+                        Ok(token.to_oauth_token())
                     }
-                },
-            )
+                }
+            })
     }
 }
 
@@ -329,7 +317,7 @@ where
     fn token<'b, I, T>(
         &mut self,
         scopes: I,
-    ) -> Box<dyn Future<Item = Token, Error = Box<dyn error::Error + Send>> + Send>
+    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
     where
         T: AsRef<str> + Ord + 'b,
         I: Iterator<Item = &'b T>,
@@ -348,14 +336,10 @@ where
                     if !token.expired() {
                         return Ok(token);
                     }
-                    return Err(Box::new(StringError::new("expired token in cache", None))
-                        as Box<dyn error::Error + Send>);
+                    return Err(StringError::new("expired token in cache", None));
                 }
-                Err(e) => return Err(Box::new(e) as Box<dyn error::Error + Send>),
-                Ok(None) => {
-                    return Err(Box::new(StringError::new("no token in cache", None))
-                        as Box<dyn error::Error + Send>)
-                }
+                Err(e) => return Err(StringError::new(format!("cache lookup error: {}", e), None)),
+                Ok(None) => return Err(StringError::new("no token in cache", None)),
             }
         });
 
@@ -380,9 +364,10 @@ where
 
         Box::new(cache_lookup.then(|r| match r {
             Ok(t) => Box::new(Ok(t).into_future())
-                as Box<dyn Future<Item = Token, Error = Box<dyn error::Error + Send>> + Send>,
-            Err(_) => Box::new(req_token)
-                as Box<dyn Future<Item = Token, Error = Box<dyn error::Error + Send>> + Send>,
+                as Box<dyn Future<Item = Token, Error = RequestError> + Send>,
+            Err(_) => {
+                Box::new(req_token) as Box<dyn Future<Item = Token, Error = RequestError> + Send>
+            }
         }))
     }
 
