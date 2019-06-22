@@ -34,8 +34,69 @@
 //! The returned `Token` is stored permanently in the given token storage in order to
 //! authorize future API requests to the same scopes.
 //!
+//! The following example, which is derived from the (actual and runnable) example in
+//! `examples/test-installed/`, shows the basics of using this crate:
+//!
 //! ```test_harness,no_run
-//! // TODO: Rewrite example here once new authenticator works.
+//! use futures::prelude::*;
+//! use yup_oauth2::GetToken;
+//! use yup_oauth2::{Authenticator, InstalledFlow};
+//!
+//! use hyper::client::Client;
+//! use hyper_tls::HttpsConnector;
+//!
+//! use std::path::Path;
+//!
+//! fn main() {
+//!     // Boilerplate: Set up hyper HTTP client and TLS.
+//!     let https = HttpsConnector::new(1).expect("tls");
+//!     let client = Client::builder()
+//!         .keep_alive(false)
+//!         .build::<_, hyper::Body>(https);
+//!
+//!     // Read application secret from a file. Sometimes it's easier to compile it directly into
+//!     // the binary. The clientsecret file contains JSON like `{"installed":{"client_id": ... }}`
+//!     let secret = yup_oauth2::read_application_secret(Path::new("clientsecret.json"))
+//!         .expect("clientsecret.json");
+//!
+//!     // There are two types of delegates; FlowDelegate and AuthenticatorDelegate. See the
+//!     // respective documentation; all you need to know here is that they determine how the user
+//!     // is asked to visit the OAuth flow URL or how to read back the provided code.
+//!     let ad = yup_oauth2::DefaultFlowDelegate;
+//!
+//!     // InstalledFlow handles OAuth flows of that type. They are usually the ones where a user
+//!     // grants access to their personal account (think Google Drive, Github API, etc.).
+//!     let inf = InstalledFlow::new(
+//!         client.clone(),
+//!         ad,
+//!         secret,
+//!         yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect(8081),
+//!     );
+//!     // You could already use InstalledFlow by itself, but usually you want to cache tokens and
+//!     // refresh them, rather than ask the user every time to log in again. Authenticator wraps
+//!     // other flows and handles these.
+//!     // This type of authenticator caches tokens in a JSON file on disk.
+//!     let mut auth = Authenticator::new_disk(
+//!         client,
+//!         inf,
+//!         yup_oauth2::DefaultAuthenticatorDelegate,
+//!         "tokencache.json",
+//!     )
+//!     .unwrap();
+//!     let s = "https://www.googleapis.com/auth/drive.file".to_string();
+//!     let scopes = vec![s];
+//!
+//!     // token(<scopes>) is the one important function of this crate; it does everything to
+//!     // obtain a token that can be sent e.g. as Bearer token.
+//!     let tok = auth.token(scopes.iter());
+//!     // Finally we print the token.
+//!     let fut = tok.map_err(|e| println!("error: {:?}", e)).and_then(|t| {
+//!         println!("The token is {:?}", t);
+//!         Ok(())
+//!     });
+//!
+//!     tokio::run(fut)
+//! }
 //! ```
 //!
 #[macro_use]

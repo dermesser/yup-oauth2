@@ -82,6 +82,11 @@ impl<FD: FlowDelegate + 'static + Send + Clone, C: hyper::client::connect::Conne
     }
 }
 
+/// InstalledFlow provides tokens for services that follow the "Installed" OAuth flow. (See
+/// https://www.oauth.com/oauth2-servers/authorization/,
+/// https://developers.google.com/identity/protocols/OAuth2InstalledApp). You should use it wrapped
+/// inside an `Authenticator` to benefit from refreshing tokens and caching previously obtained
+/// authorization.
 pub struct InstalledFlow<FD: FlowDelegate, C: hyper::client::connect::Connect + 'static> {
     method: InstalledFlowReturnMethod,
     client: hyper::client::Client<C, hyper::Body>,
