@@ -184,7 +184,8 @@ where
 }
 
 /// A token source (`GetToken`) yielding OAuth tokens for services that use ServiceAccount authorization.
-/// This token source caches token and automatically renews expired ones.
+/// This token source caches token and automatically renews expired ones, meaning you do not need
+/// (and you also should not) use this with `Authenticator`. Just use it directly.
 #[derive(Clone)]
 pub struct ServiceAccountAccess<C> {
     client: hyper::Client<C, hyper::Body>,

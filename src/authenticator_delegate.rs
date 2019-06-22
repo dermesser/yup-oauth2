@@ -108,6 +108,8 @@ pub trait AuthenticatorDelegate: Clone {
     }
 }
 
+/// FlowDelegate methods are called when an OAuth flow needs to ask the application what to do in
+/// certain cases.
 pub trait FlowDelegate: Clone {
     /// Called if the request code is expired. You will have to start over in this case.
     /// This will be the last call the delegate receives.
@@ -192,6 +194,7 @@ pub trait FlowDelegate: Clone {
 pub struct DefaultAuthenticatorDelegate;
 impl AuthenticatorDelegate for DefaultAuthenticatorDelegate {}
 
+/// Uses all default implementations in the FlowDelegate trait.
 #[derive(Clone)]
 pub struct DefaultFlowDelegate;
 impl FlowDelegate for DefaultFlowDelegate {}
