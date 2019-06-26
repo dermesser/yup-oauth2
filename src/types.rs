@@ -292,16 +292,18 @@ impl Token {
         if self.access_token.len() == 0 {
             panic!("called expired() on unset token");
         }
-        self.expiry_date() - chrono::Duration::minutes(1) <= Utc::now()
+        if let Some(expiry_date) = self.expiry_date() {
+            expiry_date - chrono::Duration::minutes(1) <= Utc::now()
+        } else {
+            false
+        }
     }
 
     /// Returns a DateTime object representing our expiry date.
-    pub fn expiry_date(&self) -> DateTime<Utc> {
-        Utc.timestamp(
-            self.expires_in_timestamp
-                .expect("Tokens without an absolute expiry are invalid"),
-            0,
-        )
+    pub fn expiry_date(&self) -> Option<DateTime<Utc>> {
+        let expires_in_timestamp = self.expires_in_timestamp?;
+
+        Utc.timestamp(expires_in_timestamp, 0).into()
     }
 
     /// Adjust our stored expiry format to be absolute, using the current time.
@@ -311,8 +313,11 @@ impl Token {
             return self;
         }
 
-        self.expires_in_timestamp = Some(Utc::now().timestamp() + self.expires_in.unwrap());
-        self.expires_in = None;
+        if let Some(expires_in) = self.expires_in {
+            self.expires_in_timestamp = Some(Utc::now().timestamp() + expires_in);
+            self.expires_in = None;
+        }
+
         self
     }
 }

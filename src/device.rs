@@ -218,12 +218,17 @@ where
                             return Err(RequestError::ClientError(err));
                         }
                         Ok(res) => {
+                            // This return type is defined in https://tools.ietf.org/html/draft-ietf-oauth-device-flow-15#section-3.2
+                            // The alias is present as Google use a non-standard name for verification_uri.
+                            // According to the standard interval is optional, however, all tested implementations provide it.
+                            // verification_uri_complete is optional in the standard but not provided in tested implementations.
                             #[derive(Deserialize)]
                             struct JsonData {
                                 device_code: String,
                                 user_code: String,
-                                verification_url: String,
-                                expires_in: i64,
+                                #[serde(alias = "verification_url")]
+                                verification_uri: String,
+                                expires_in: Option<i64>,
                                 interval: i64,
                             }
 
@@ -242,11 +247,12 @@ where
 
                             let decoded: JsonData = json::from_str(&json_str).unwrap();
 
+                            let expires_in = decoded.expires_in.unwrap_or(60 * 60);
+
                             let pi = PollInformation {
                                 user_code: decoded.user_code,
-                                verification_url: decoded.verification_url,
-                                expires_at: Utc::now()
-                                    + chrono::Duration::seconds(decoded.expires_in),
+                                verification_url: decoded.verification_uri,
+                                expires_at: Utc::now() + chrono::Duration::seconds(expires_in),
                                 interval: Duration::from_secs(i64::abs(decoded.interval) as u64),
                             };
                             Ok((pi, decoded.device_code))
