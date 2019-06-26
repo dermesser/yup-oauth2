@@ -1,9 +1,10 @@
 use std::iter::{FromIterator, IntoIterator};
 use std::time::Duration;
 
+use ::log::{log, error};
 use chrono::{self, Utc};
-use futures::stream::Stream;
 use futures::{future, prelude::*};
+use futures::stream::Stream;
 use http;
 use hyper;
 use hyper::header;
@@ -150,11 +151,13 @@ where
                         | Err(e @ PollError::Expired(_)) => {
                             Box::new(Err(RequestError::Poll(e)).into_future())
                         }
-                        Err(_) if i < maxn => {
+                        Err(ref e) if i < maxn => {
+                            error!("Unknown error from poll token api: {}", e);
                             Box::new(Ok(future::Loop::Continue(i + 1)).into_future())
                         }
                         // Too many attempts.
                         Ok(None) | Err(_) => {
+                            error!("Too many poll attempts");
                             Box::new(Err(RequestError::Poll(PollError::TimedOut)).into_future())
                         }
                     })
