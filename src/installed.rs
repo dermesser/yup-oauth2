@@ -240,7 +240,7 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
                     .then(|r| {
                         match r {
                             Ok(Some(mut code)) => {
-                                // Partial backwards compatibilty in case an implementation adds a new line
+                                // Partial backwards compatibility in case an implementation adds a new line
                                 // due to previous behaviour.
                                 let ends_with_newline =
                                     code.chars().last().map(|c| c == '\n').unwrap_or(false);
