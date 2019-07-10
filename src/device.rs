@@ -1,9 +1,10 @@
 use std::iter::{FromIterator, IntoIterator};
 use std::time::Duration;
 
+use ::log::{log, error};
 use chrono::{self, Utc};
-use futures::stream::Stream;
 use futures::{future, prelude::*};
+use futures::stream::Stream;
 use http;
 use hyper;
 use hyper::header;
@@ -150,11 +151,13 @@ where
                         | Err(e @ PollError::Expired(_)) => {
                             Box::new(Err(RequestError::Poll(e)).into_future())
                         }
-                        Err(_) if i < maxn => {
+                        Err(ref e) if i < maxn => {
+                            error!("Unknown error from poll token api: {}", e);
                             Box::new(Ok(future::Loop::Continue(i + 1)).into_future())
                         }
                         // Too many attempts.
                         Ok(None) | Err(_) => {
+                            error!("Too many poll attempts");
                             Box::new(Err(RequestError::Poll(PollError::TimedOut)).into_future())
                         }
                     })
@@ -218,12 +221,17 @@ where
                             return Err(RequestError::ClientError(err));
                         }
                         Ok(res) => {
+                            // This return type is defined in https://tools.ietf.org/html/draft-ietf-oauth-device-flow-15#section-3.2
+                            // The alias is present as Google use a non-standard name for verification_uri.
+                            // According to the standard interval is optional, however, all tested implementations provide it.
+                            // verification_uri_complete is optional in the standard but not provided in tested implementations.
                             #[derive(Deserialize)]
                             struct JsonData {
                                 device_code: String,
                                 user_code: String,
-                                verification_url: String,
-                                expires_in: i64,
+                                #[serde(alias = "verification_url")]
+                                verification_uri: String,
+                                expires_in: Option<i64>,
                                 interval: i64,
                             }
 
@@ -242,11 +250,12 @@ where
 
                             let decoded: JsonData = json::from_str(&json_str).unwrap();
 
+                            let expires_in = decoded.expires_in.unwrap_or(60 * 60);
+
                             let pi = PollInformation {
                                 user_code: decoded.user_code,
-                                verification_url: decoded.verification_url,
-                                expires_at: Utc::now()
-                                    + chrono::Duration::seconds(decoded.expires_in),
+                                verification_url: decoded.verification_uri,
+                                expires_at: Utc::now() + chrono::Duration::seconds(expires_in),
                                 interval: Duration::from_secs(i64::abs(decoded.interval) as u64),
                             };
                             Ok((pi, decoded.device_code))
