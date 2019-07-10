@@ -1,10 +1,10 @@
 use std::iter::{FromIterator, IntoIterator};
 use std::time::Duration;
 
-use ::log::{log, error};
+use ::log::{error, log};
 use chrono::{self, Utc};
-use futures::{future, prelude::*};
 use futures::stream::Stream;
+use futures::{future, prelude::*};
 use http;
 use hyper;
 use hyper::header;
