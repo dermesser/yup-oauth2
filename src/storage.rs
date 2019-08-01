@@ -89,22 +89,21 @@ pub struct MemoryStorage {
 impl TokenStorage for MemoryStorage {
     type Error = NullError;
 
-    fn set(&mut self,
-           scope_hash: u64,
-           scopes: &Vec<&str>,
-           token: Option<Token>)
-           -> Result<(), NullError> {
+    fn set(
+        &mut self,
+        scope_hash: u64,
+        scopes: &Vec<&str>,
+        token: Option<Token>,
+    ) -> Result<(), NullError> {
         match token {
             Some(t) => {
-                self.tokens.push(
-                    JSONToken {
-                        hash: scope_hash,
-                        scopes: Some(scopes.iter().map(|x| x.to_string()).collect()),
-                        token: t.clone(),
-                    }
-                );
+                self.tokens.push(JSONToken {
+                    hash: scope_hash,
+                    scopes: Some(scopes.iter().map(|x| x.to_string()).collect()),
+                    token: t.clone(),
+                });
                 ()
-            },
+            }
             None => {
                 let matched = self.tokens.iter().find_position(|x| x.hash == scope_hash);
                 if let Some((idx, _)) = matched {
@@ -120,7 +119,10 @@ impl TokenStorage for MemoryStorage {
 
         for t in &self.tokens {
             if let Some(token_scopes) = &t.scopes {
-                let matched = token_scopes.iter().filter(|x| scopes.contains(&&&x[..])).count();
+                let matched = token_scopes
+                    .iter()
+                    .filter(|x| scopes.contains(&&&x[..]))
+                    .count();
                 if matched >= scopes.len() {
                     return Result::Ok(Some(t.token.clone()));
                 }
@@ -221,11 +223,12 @@ impl DiskTokenStorage {
 
 impl TokenStorage for DiskTokenStorage {
     type Error = io::Error;
-    fn set(&mut self,
-           scope_hash: u64,
-           scopes: &Vec<&str>,
-           token: Option<Token>)
-           -> Result<(), Self::Error> {
+    fn set(
+        &mut self,
+        scope_hash: u64,
+        scopes: &Vec<&str>,
+        token: Option<Token>,
+    ) -> Result<(), Self::Error> {
         match token {
             None => {
                 let matched = self.tokens.iter().find_position(|x| x.hash == scope_hash);
@@ -235,13 +238,11 @@ impl TokenStorage for DiskTokenStorage {
                 ()
             }
             Some(t) => {
-                self.tokens.push(
-                    JSONToken {
-                        hash: scope_hash,
-                        scopes: Some(scopes.iter().map(|x| x.to_string()).collect()),
-                        token: t.clone(),
-                    }
-                );
+                self.tokens.push(JSONToken {
+                    hash: scope_hash,
+                    scopes: Some(scopes.iter().map(|x| x.to_string()).collect()),
+                    token: t.clone(),
+                });
                 ()
             }
         }
@@ -252,7 +253,10 @@ impl TokenStorage for DiskTokenStorage {
 
         for t in &self.tokens {
             if let Some(token_scopes) = &t.scopes {
-                let matched = token_scopes.iter().filter(|x| scopes.contains(&&&x[..])).count();
+                let matched = token_scopes
+                    .iter()
+                    .filter(|x| scopes.contains(&&&x[..]))
+                    .count();
                 // we may have some of the tokens as denormalized (many namespaces repeated)
                 if matched >= scopes.len() {
                     return Result::Ok(Some(t.token.clone()));
