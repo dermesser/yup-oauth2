@@ -4,7 +4,7 @@ use futures::prelude::*;
 use yup_oauth2::GetToken;
 
 use hyper::client::Client;
-use hyper_tls::HttpsConnector;
+use hyper_rustls::HttpsConnector;
 use tokio;
 
 use std::path;
@@ -12,7 +12,7 @@ use std::path;
 fn main() {
     let creds =
         yup_oauth2::service_account_key_from_file(path::Path::new("serviceaccount.json")).unwrap();
-    let https = HttpsConnector::new(1).expect("tls");
+    let https = HttpsConnector::new(1);
     let client = Client::builder()
         .keep_alive(false)
         .build::<_, hyper::Body>(https);

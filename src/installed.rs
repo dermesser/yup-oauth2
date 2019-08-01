@@ -531,7 +531,7 @@ mod tests {
 
     use hyper;
     use hyper::client::connect::HttpConnector;
-    use hyper_tls::HttpsConnector;
+    use hyper_rustls::HttpsConnector;
     use mockito::{self, mock};
     use tokio;
 
@@ -597,7 +597,7 @@ mod tests {
         let mut app_secret = parse_application_secret(app_secret).unwrap();
         app_secret.token_uri = format!("{}/token", server_url);
 
-        let https = HttpsConnector::new(1).expect("tls");
+        let https = HttpsConnector::new(1);
         let client = hyper::Client::builder()
             .keep_alive(false)
             .build::<_, hyper::Body>(https);

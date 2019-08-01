@@ -3,12 +3,12 @@ use yup_oauth2::GetToken;
 use yup_oauth2::{Authenticator, InstalledFlow};
 
 use hyper::client::Client;
-use hyper_tls::HttpsConnector;
+use hyper_rustls::HttpsConnector;
 
 use std::path::Path;
 
 fn main() {
-    let https = HttpsConnector::new(1).expect("tls");
+    let https = HttpsConnector::new(1);
     let client = Client::builder()
         .keep_alive(false)
         .build::<_, hyper::Body>(https);

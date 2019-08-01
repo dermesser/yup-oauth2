@@ -390,7 +390,7 @@ mod tests {
     use crate::types::GetToken;
 
     use hyper;
-    use hyper_tls::HttpsConnector;
+    use hyper_rustls::HttpsConnector;
     use mockito::{self, mock};
     use tokio;
 
@@ -423,7 +423,7 @@ mod tests {
   "token_type": "Bearer"
 }"#;
 
-        let https = HttpsConnector::new(1).unwrap();
+        let https = HttpsConnector::new(1);
         let client = hyper::Client::builder()
             .keep_alive(false)
             .build::<_, hyper::Body>(https);
@@ -501,7 +501,7 @@ mod tests {
     #[allow(dead_code)]
     fn test_service_account_e2e() {
         let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
-        let https = HttpsConnector::new(4).unwrap();
+        let https = HttpsConnector::new(4);
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let client = hyper::Client::builder()
             .executor(runtime.executor())

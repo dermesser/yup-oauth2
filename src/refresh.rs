@@ -106,7 +106,7 @@ mod tests {
     use crate::helper;
 
     use hyper;
-    use hyper_tls::HttpsConnector;
+    use hyper_rustls::HttpsConnector;
     use mockito;
     use tokio;
 
@@ -119,7 +119,7 @@ mod tests {
         app_secret.token_uri = format!("{}/token", server_url);
         let refresh_token = "my-refresh-token".to_string();
 
-        let https = HttpsConnector::new(1).unwrap();
+        let https = HttpsConnector::new(1);
         let client = hyper::Client::builder()
             .keep_alive(false)
             .build::<_, hyper::Body>(https);

@@ -357,7 +357,7 @@ where
 #[cfg(test)]
 mod tests {
     use hyper;
-    use hyper_tls::HttpsConnector;
+    use hyper_rustls::HttpsConnector;
     use mockito;
     use tokio;
 
@@ -380,7 +380,7 @@ mod tests {
         app_secret.token_uri = format!("{}/token", server_url);
         let device_code_url = format!("{}/code", server_url);
 
-        let https = HttpsConnector::new(1).expect("tls");
+        let https = HttpsConnector::new(1);
         let client = hyper::Client::builder()
             .keep_alive(false)
             .build::<_, hyper::Body>(https);
