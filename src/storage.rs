@@ -94,6 +94,11 @@ impl TokenStorage for MemoryStorage {
         scopes: &Vec<&str>,
         token: Option<Token>,
     ) -> Result<(), NullError> {
+        let matched = self.tokens.iter().find_position(|x| x.hash == scope_hash);
+        if let Some((idx, _)) = matched {
+            self.tokens.remove(idx);
+        }
+
         match token {
             Some(t) => {
                 self.tokens.push(JSONToken {
@@ -103,12 +108,7 @@ impl TokenStorage for MemoryStorage {
                 });
                 ()
             }
-            None => {
-                let matched = self.tokens.iter().find_position(|x| x.hash == scope_hash);
-                if let Some((idx, _)) = matched {
-                    self.tokens.remove(idx);
-                }
-            }
+            None => {}
         };
         Ok(())
     }
@@ -228,14 +228,13 @@ impl TokenStorage for DiskTokenStorage {
         scopes: &Vec<&str>,
         token: Option<Token>,
     ) -> Result<(), Self::Error> {
+        let matched = self.tokens.iter().find_position(|x| x.hash == scope_hash);
+        if let Some((idx, _)) = matched {
+            self.tokens.remove(idx);
+        }
+
         match token {
-            None => {
-                let matched = self.tokens.iter().find_position(|x| x.hash == scope_hash);
-                if let Some((idx, _)) = matched {
-                    self.tokens.remove(idx);
-                }
-                ()
-            }
+            None => (),
             Some(t) => {
                 self.tokens.push(JSONToken {
                     hash: scope_hash,
