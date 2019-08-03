@@ -157,7 +157,7 @@ pub struct DiskTokenStorage {
 impl DiskTokenStorage {
     pub fn new(location: &String) -> Result<DiskTokenStorage, io::Error> {
         let mut dts = DiskTokenStorage {
-            location: location.as_ref().to_owned(),
+            location: location.clone(),
             tokens: Vec::new(),
         };
 
