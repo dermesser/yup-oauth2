@@ -315,13 +315,13 @@ impl<C: 'static> GetToken for ServiceAccountAccess<C>
 where
     C: hyper::client::connect::Connect,
 {
-    fn token<'b, I, T>(
+    fn token<I, T>(
         &mut self,
         scopes: I,
     ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
     where
-        T: AsRef<str> + Ord + 'b,
-        I: Iterator<Item = &'b T>,
+        T: Into<String>,
+        I: IntoIterator<Item = T>,
     {
         let (hash, scps0) = hash_scopes(scopes);
         let cache = self.cache.clone();
@@ -443,7 +443,7 @@ mod tests {
                 .create();
             let mut acc = ServiceAccountAccess::new(key.clone(), client.clone());
             let fut = acc
-                .token(vec!["https://www.googleapis.com/auth/pubsub"].iter())
+                .token(vec!["https://www.googleapis.com/auth/pubsub"])
                 .and_then(|tok| {
                     assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
                     assert_eq!(Some(3600), tok.expires_in);
@@ -463,7 +463,7 @@ mod tests {
                 .is_some());
             // Test that token is in cache (otherwise mock will tell us)
             let fut = acc
-                .token(vec!["https://www.googleapis.com/auth/pubsub"].iter())
+                .token(vec!["https://www.googleapis.com/auth/pubsub"])
                 .and_then(|tok| {
                     assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
                     assert_eq!(Some(3600), tok.expires_in);
@@ -482,7 +482,7 @@ mod tests {
                 .create();
             let mut acc = ServiceAccountAccess::new(key.clone(), client.clone());
             let fut = acc
-                .token(vec!["https://www.googleapis.com/auth/pubsub"].iter())
+                .token(vec!["https://www.googleapis.com/auth/pubsub"])
                 .then(|result| {
                     assert!(result.is_err());
                     Ok(()) as Result<(), ()>
@@ -509,7 +509,7 @@ mod tests {
         let mut acc = ServiceAccountAccess::new(key, client);
         println!(
             "{:?}",
-            acc.token(vec!["https://www.googleapis.com/auth/pubsub"].iter())
+            acc.token(vec!["https://www.googleapis.com/auth/pubsub"])
                 .wait()
         );
     }

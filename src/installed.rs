@@ -61,15 +61,15 @@ where
 impl<FD: FlowDelegate + 'static + Send + Clone, C: hyper::client::connect::Connect + 'static>
     GetToken for InstalledFlow<FD, C>
 {
-    fn token<'b, I, T>(
+    fn token<I, T>(
         &mut self,
         scopes: I,
     ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
     where
-        T: AsRef<str> + Ord + 'b,
-        I: Iterator<Item = &'b T>,
+        T: Into<String>,
+        I: IntoIterator<Item = T>,
     {
-        Box::new(self.obtain_token(scopes.into_iter().map(|s| s.as_ref().to_string()).collect()))
+        Box::new(self.obtain_token(scopes.into_iter().map(Into::into).collect()))
     }
     fn api_key(&mut self) -> Option<String> {
         None
@@ -625,7 +625,7 @@ mod tests {
             .create();
 
             let fut = inf
-                .token(vec!["https://googleapis.com/some/scope"].iter())
+                .token(vec!["https://googleapis.com/some/scope"])
                 .and_then(|tok| {
                     assert_eq!("accesstoken", tok.access_token);
                     assert_eq!("refreshtoken", tok.refresh_token);
@@ -653,7 +653,7 @@ mod tests {
             .create();
 
             let fut = inf
-                .token(vec!["https://googleapis.com/some/scope"].iter())
+                .token(vec!["https://googleapis.com/some/scope"])
                 .and_then(|tok| {
                     assert_eq!("accesstoken", tok.access_token);
                     assert_eq!("refreshtoken", tok.refresh_token);
@@ -675,7 +675,7 @@ mod tests {
                 .create();
 
             let fut = inf
-                .token(vec!["https://googleapis.com/some/scope"].iter())
+                .token(vec!["https://googleapis.com/some/scope"])
                 .then(|tokr| {
                     assert!(tokr.is_err());
                     assert!(format!("{}", tokr.unwrap_err()).contains("invalid_code"));

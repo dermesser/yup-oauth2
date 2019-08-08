@@ -85,13 +85,13 @@ impl<
         self.inner.lock().unwrap().application_secret()
     }
 
-    fn token<'b, I, T>(
+    fn token<I, T>(
         &mut self,
         scopes: I,
     ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
     where
-        T: AsRef<str> + Ord + 'b,
-        I: Iterator<Item = &'b T>,
+        T: Into<String>,
+        I: IntoIterator<Item = T>,
     {
         let (scope_key, scopes) = hash_scopes(scopes);
         let store = self.store.clone();
