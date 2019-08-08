@@ -167,7 +167,7 @@ impl<
                         gettoken
                             .lock()
                             .unwrap()
-                            .token(scopes.iter())
+                            .token(scopes.clone())
                             .and_then(move |t| {
                                 if let Err(e) = store.lock().unwrap().set(
                                     scope_key,
