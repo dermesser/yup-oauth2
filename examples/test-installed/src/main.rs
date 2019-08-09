@@ -19,7 +19,7 @@ fn main() {
         client.clone(),
         ad,
         secret,
-        yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect(8081),
+        yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect,
     );
     let mut auth = Authenticator::new_disk(
         client,

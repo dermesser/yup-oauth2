@@ -70,7 +70,7 @@
 //!         client.clone(),
 //!         ad,
 //!         secret,
-//!         yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect(8081),
+//!         yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect,
 //!     );
 //!     // You could already use InstalledFlow by itself, but usually you want to cache tokens and
 //!     // refresh them, rather than ask the user every time to log in again. Authenticator wraps
