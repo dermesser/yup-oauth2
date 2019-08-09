@@ -88,7 +88,7 @@
 //!
 //!     // token(<scopes>) is the one important function of this crate; it does everything to
 //!     // obtain a token that can be sent e.g. as Bearer token.
-//!     let tok = auth.token(scopes.iter());
+//!     let tok = auth.token(scopes);
 //!     // Finally we print the token.
 //!     let fut = tok.map_err(|e| println!("error: {:?}", e)).and_then(|t| {
 //!         println!("The token is {:?}", t);

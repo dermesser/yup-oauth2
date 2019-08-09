@@ -44,15 +44,15 @@ impl<
         C: hyper::client::connect::Connect + Sync + 'static,
     > GetToken for DeviceFlow<FD, C>
 {
-    fn token<'b, I, T>(
+    fn token<I, T>(
         &mut self,
         scopes: I,
     ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
     where
-        T: AsRef<str> + Ord + 'b,
-        I: Iterator<Item = &'b T>,
+        T: Into<String>,
+        I: IntoIterator<Item = T>,
     {
-        self.retrieve_device_token(Vec::from_iter(scopes.map(|s| s.as_ref().to_string())))
+        self.retrieve_device_token(Vec::from_iter(scopes.into_iter().map(Into::into)))
     }
     fn api_key(&mut self) -> Option<String> {
         None
@@ -413,7 +413,7 @@ mod tests {
                 .create();
 
             let fut = flow
-                .token(vec!["https://www.googleapis.com/scope/1"].iter())
+                .token(vec!["https://www.googleapis.com/scope/1"])
                 .then(|token| {
                     let token = token.unwrap();
                     assert_eq!("accesstoken", token.access_token);
@@ -445,7 +445,7 @@ mod tests {
                 .create();
 
             let fut = flow
-                .token(vec!["https://www.googleapis.com/scope/1"].iter())
+                .token(vec!["https://www.googleapis.com/scope/1"])
                 .then(|token| {
                     assert!(token.is_err());
                     assert!(format!("{}", token.unwrap_err()).contains("invalid_client_id"));
@@ -476,7 +476,7 @@ mod tests {
                 .create();
 
             let fut = flow
-                .token(vec!["https://www.googleapis.com/scope/1"].iter())
+                .token(vec!["https://www.googleapis.com/scope/1"])
                 .then(|token| {
                     assert!(token.is_err());
                     assert!(format!("{}", token.unwrap_err()).contains("Access denied by user"));

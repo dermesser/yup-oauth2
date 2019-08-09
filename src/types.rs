@@ -240,13 +240,13 @@ impl FromStr for Scheme {
 /// The `api_key()` method is an alternative in case there are no scopes or
 /// if no user is involved.
 pub trait GetToken {
-    fn token<'b, I, T>(
+    fn token<I, T>(
         &mut self,
         scopes: I,
     ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
     where
-        T: AsRef<str> + Ord + 'b,
-        I: Iterator<Item = &'b T>;
+        T: Into<String>,
+        I: IntoIterator<Item = T>;
 
     fn api_key(&mut self) -> Option<String>;
 

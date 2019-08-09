@@ -35,19 +35,15 @@ pub trait TokenStorage {
 }
 
 /// Calculate a hash value describing the scopes, and return a sorted Vec of the scopes.
-pub fn hash_scopes<'a, I, T>(scopes: I) -> (u64, Vec<String>)
+pub fn hash_scopes<I, T>(scopes: I) -> (u64, Vec<String>)
 where
-    T: AsRef<str> + Ord + 'a,
-    I: IntoIterator<Item = &'a T>,
+    T: Into<String>,
+    I: IntoIterator<Item = T>,
 {
-    let mut sv: Vec<&str> = scopes
-        .into_iter()
-        .map(|s| s.as_ref())
-        .collect::<Vec<&str>>();
+    let mut sv: Vec<String> = scopes.into_iter().map(Into::into).collect();
     sv.sort();
     let mut sh = DefaultHasher::new();
-    &sv.hash(&mut sh);
-    let sv = sv.iter().map(|s| s.to_string()).collect();
+    sv.hash(&mut sh);
     (sh.finish(), sv)
 }
 
