@@ -13,7 +13,7 @@ use serde_json as json;
 use tokio_timer;
 use url::form_urlencoded;
 
-use crate::authenticator_delegate::{FlowDelegate, PollInformation, Retry};
+use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate, PollInformation, Retry};
 use crate::types::{
     ApplicationSecret, Flow, FlowType, GetToken, JsonError, PollError, RequestError, Token,
 };
@@ -23,8 +23,76 @@ pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/
 /// Implements the [Oauth2 Device Flow](https://developers.google.com/youtube/v3/guides/authentication#devices)
 /// It operates in two steps:
 /// * obtain a code to show to the user
-/// * (repeatedly) poll for the user to authenticate your application
-pub struct DeviceFlow<FD, C> {
+// * (repeatedly) poll for the user to authenticate your application
+#[derive(Clone)]
+pub struct DeviceFlow<FD> {
+    application_secret: ApplicationSecret,
+    device_code_url: String,
+    flow_delegate: FD,
+    wait: Duration,
+}
+
+impl DeviceFlow<DefaultFlowDelegate> {
+    /// Create a new DeviceFlow. The default FlowDelegate will be used and the
+    /// default wait time is 120 seconds.
+    pub fn new(secret: ApplicationSecret) -> DeviceFlow<DefaultFlowDelegate> {
+        DeviceFlow {
+            application_secret: secret,
+            device_code_url: GOOGLE_DEVICE_CODE_URL.to_string(),
+            flow_delegate: DefaultFlowDelegate,
+            wait: Duration::from_secs(120),
+        }
+    }
+}
+
+impl<FD> DeviceFlow<FD> {
+    /// Use the provided device code url.
+    pub fn device_code_url(self, url: String) -> Self {
+        DeviceFlow {
+            device_code_url: url,
+            ..self
+        }
+    }
+
+    /// Use the provided FlowDelegate.
+    pub fn delegate<NewFD>(self, delegate: NewFD) -> DeviceFlow<NewFD> {
+        DeviceFlow {
+            application_secret: self.application_secret,
+            device_code_url: self.device_code_url,
+            flow_delegate: delegate,
+            wait: self.wait,
+        }
+    }
+
+    /// Use the provided wait duration.
+    pub fn wait_duration(self, duration: Duration) -> Self {
+        DeviceFlow {
+            wait: duration,
+            ..self
+        }
+    }
+}
+
+impl<FD, C> crate::authenticator::TokenGetterBuilder<C> for DeviceFlow<FD>
+where
+    FD: FlowDelegate + Send + 'static,
+    C: hyper::client::connect::Connect + 'static,
+{
+    type TokenGetter = DeviceFlowImpl<FD, C>;
+
+    fn build_token_getter(self, client: hyper::Client<C>) -> Self::TokenGetter {
+        DeviceFlowImpl {
+            client,
+            application_secret: self.application_secret,
+            device_code_url: self.device_code_url,
+            fd: self.flow_delegate,
+            wait: Duration::from_secs(1200),
+        }
+    }
+}
+
+/// The DeviceFlow implementation.
+pub struct DeviceFlowImpl<FD, C> {
     client: hyper::Client<C, hyper::Body>,
     application_secret: ApplicationSecret,
     /// Usually GOOGLE_DEVICE_CODE_URL
@@ -33,7 +101,7 @@ pub struct DeviceFlow<FD, C> {
     wait: Duration,
 }
 
-impl<FD, C> Flow for DeviceFlow<FD, C> {
+impl<FD, C> Flow for DeviceFlowImpl<FD, C> {
     fn type_id() -> FlowType {
         FlowType::Device(String::new())
     }
@@ -42,7 +110,7 @@ impl<FD, C> Flow for DeviceFlow<FD, C> {
 impl<
         FD: FlowDelegate + Clone + Send + 'static,
         C: hyper::client::connect::Connect + Sync + 'static,
-    > GetToken for DeviceFlow<FD, C>
+    > GetToken for DeviceFlowImpl<FD, C>
 {
     fn token<I, T>(
         &mut self,
@@ -62,39 +130,16 @@ impl<
     }
 }
 
-impl<FD, C> DeviceFlow<FD, C>
+impl<FD, C> DeviceFlowImpl<FD, C>
 where
     C: hyper::client::connect::Connect + Sync + 'static,
     C::Transport: 'static,
     C::Future: 'static,
     FD: FlowDelegate + Clone + Send + 'static,
 {
-    pub fn new<S: 'static + AsRef<str>>(
-        client: hyper::Client<C, hyper::Body>,
-        secret: ApplicationSecret,
-        fd: FD,
-        device_code_url: Option<S>,
-    ) -> DeviceFlow<FD, C> {
-        DeviceFlow {
-            client: client,
-            application_secret: secret,
-            device_code_url: device_code_url
-                .as_ref()
-                .map(|s| s.as_ref().to_string())
-                .unwrap_or(GOOGLE_DEVICE_CODE_URL.to_string()),
-            fd: fd,
-            wait: Duration::from_secs(1200),
-        }
-    }
-
-    /// Set the time to wait for the user to authorize us. The default is 120 seconds.
-    pub fn set_wait_duration(&mut self, wait: Duration) {
-        self.wait = wait;
-    }
-
     /// Essentially what `GetToken::token` does: Retrieve a token for the given scopes without
     /// caching.
-    pub fn retrieve_device_token<'a>(
+    fn retrieve_device_token<'a>(
         &mut self,
         scopes: Vec<String>,
     ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send> {
@@ -362,6 +407,7 @@ mod tests {
     use tokio;
 
     use super::*;
+    use crate::authenticator::TokenGetterBuilder;
     use crate::helper::parse_application_secret;
 
     #[test]
@@ -385,7 +431,10 @@ mod tests {
             .keep_alive(false)
             .build::<_, hyper::Body>(https);
 
-        let mut flow = DeviceFlow::new(client.clone(), app_secret, FD, Some(device_code_url));
+        let mut flow = DeviceFlow::new(app_secret)
+            .delegate(FD)
+            .device_code_url(device_code_url)
+            .build_token_getter(client);
 
         let mut rt = tokio::runtime::Builder::new()
             .core_threads(1)

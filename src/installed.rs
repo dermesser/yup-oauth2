@@ -13,7 +13,7 @@ use hyper::{header, StatusCode, Uri};
 use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
-use crate::authenticator_delegate::FlowDelegate;
+use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate};
 use crate::types::{ApplicationSecret, GetToken, RequestError, Token};
 
 const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
@@ -59,7 +59,7 @@ where
 }
 
 impl<FD: FlowDelegate + 'static + Send + Clone, C: hyper::client::connect::Connect + 'static>
-    GetToken for InstalledFlow<FD, C>
+    GetToken for InstalledFlowImpl<FD, C>
 {
     fn token<I, T>(
         &mut self,
@@ -79,12 +79,8 @@ impl<FD: FlowDelegate + 'static + Send + Clone, C: hyper::client::connect::Conne
     }
 }
 
-/// InstalledFlow provides tokens for services that follow the "Installed" OAuth flow. (See
-/// https://www.oauth.com/oauth2-servers/authorization/,
-/// https://developers.google.com/identity/protocols/OAuth2InstalledApp). You should use it wrapped
-/// inside an `Authenticator` to benefit from refreshing tokens and caching previously obtained
-/// authorization.
-pub struct InstalledFlow<FD: FlowDelegate, C: hyper::client::connect::Connect + 'static> {
+/// The InstalledFlow implementation.
+pub struct InstalledFlowImpl<FD: FlowDelegate, C: hyper::client::connect::Connect + 'static> {
     method: InstalledFlowReturnMethod,
     client: hyper::client::Client<C, hyper::Body>,
     fd: FD,
@@ -101,30 +97,32 @@ pub enum InstalledFlowReturnMethod {
     HTTPRedirectEphemeral,
     /// Involves spinning up a local HTTP server and Google redirecting the browser to
     /// the server with a URL containing the code (preferred, but not as reliable). The
-    /// parameter is the port to listen on. Users should typically prefer
-    /// HTTPRedirectEphemeral unless they need to specify the port to listen on.
+    /// parameter is the port to listen on.
     HTTPRedirect(u16),
 }
 
-impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::connect::Connect>
-    InstalledFlow<FD, C>
-{
-    /// Starts a new Installed App auth flow.
-    /// If HTTPRedirect is chosen as method and the server can't be started, the flow falls
-    /// back to Interactive.
+/// InstalledFlowImpl provides tokens for services that follow the "Installed" OAuth flow. (See
+/// https://www.oauth.com/oauth2-servers/authorization/,
+/// https://developers.google.com/identity/protocols/OAuth2InstalledApp).
+pub struct InstalledFlow<FD: FlowDelegate> {
+    method: InstalledFlowReturnMethod,
+    flow_delegate: FD,
+    appsecret: ApplicationSecret,
+}
+
+impl InstalledFlow<DefaultFlowDelegate> {
+    /// Create a new InstalledFlow with the provided secret and method.
     pub fn new(
-        client: hyper::client::Client<C, hyper::Body>,
-        fd: FD,
         secret: ApplicationSecret,
         method: InstalledFlowReturnMethod,
-    ) -> InstalledFlow<FD, C> {
+    ) -> InstalledFlow<DefaultFlowDelegate> {
         InstalledFlow {
-            method: method,
-            fd: fd,
+            method,
+            flow_delegate: DefaultFlowDelegate,
             appsecret: secret,
-            client: client,
         }
     }
+}
 
     /// Handles the token request flow; it consists of the following steps:
     /// . Obtain a authorization code with user cooperation or internal redirect.
@@ -132,7 +130,7 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
     /// . Return that token
     ///
     /// It's recommended not to use the DefaultFlowDelegate, but a specialized one.
-    pub fn obtain_token<'a>(
+    fn obtain_token<'a>(
         &mut self,
         scopes: Vec<String>, // Note: I haven't found a better way to give a list of strings here, due to ownership issues with futures.
     ) -> impl 'a + Future<Item = Token, Error = RequestError> + Send {
@@ -545,6 +543,7 @@ mod tests {
     use tokio;
 
     use super::*;
+    use crate::authenticator::TokenGetterBuilder;
     use crate::authenticator_delegate::FlowDelegate;
     use crate::helper::*;
     use crate::types::StringError;
@@ -612,12 +611,10 @@ mod tests {
             .build::<_, hyper::Body>(https);
 
         let fd = FD("authorizationcode".to_string(), client.clone());
-        let mut inf = InstalledFlow::new(
-            client.clone(),
-            fd,
-            app_secret.clone(),
-            InstalledFlowReturnMethod::Interactive,
-        );
+        let mut inf =
+            InstalledFlow::new(app_secret.clone(), InstalledFlowReturnMethod::Interactive)
+                .delegate(fd)
+                .build_token_getter(client.clone());
 
         let mut rt = tokio::runtime::Builder::new()
             .core_threads(1)
@@ -646,15 +643,13 @@ mod tests {
         }
         // Successful path with HTTP redirect.
         {
-            let mut inf = InstalledFlow::new(
-                client.clone(),
-                FD(
-                    "authorizationcodefromlocalserver".to_string(),
-                    client.clone(),
-                ),
-                app_secret,
-                InstalledFlowReturnMethod::HTTPRedirectEphemeral,
-            );
+            let mut inf =
+                InstalledFlow::new(app_secret, InstalledFlowReturnMethod::HTTPRedirect(8081))
+                    .delegate(FD(
+                        "authorizationcodefromlocalserver".to_string(),
+                        client.clone(),
+                    ))
+                    .build_token_getter(client.clone());
             let _m = mock("POST", "/token")
             .match_body(mockito::Matcher::Regex(".*code=authorizationcodefromlocalserver.*client_id=9022167.*".to_string()))
             .with_body(r#"{"access_token": "accesstoken", "refresh_token": "refreshtoken", "token_type": "Bearer", "expires_in": 12345678}"#)
