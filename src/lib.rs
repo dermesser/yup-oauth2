@@ -93,7 +93,7 @@ mod service_account;
 mod storage;
 mod types;
 
-pub use crate::authenticator::Authenticator;
+pub use crate::authenticator::{AuthFlow, Authenticator};
 pub use crate::authenticator_delegate::{
     AuthenticatorDelegate, DefaultAuthenticatorDelegate, DefaultFlowDelegate, FlowDelegate,
     PollInformation,

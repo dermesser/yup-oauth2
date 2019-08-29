@@ -64,7 +64,7 @@ where
 }
 
 /// An internal trait implemented by flows to be used by an authenticator.
-pub trait TokenGetterBuilder<C> {
+pub trait AuthFlow<C> {
     type TokenGetter: GetToken;
 
     fn build_token_getter(self, client: hyper::Client<C>) -> Self::TokenGetter;
@@ -74,7 +74,7 @@ pub trait TokenGetterBuilder<C> {
 /// will refresh tokens as they expire as well as optionally persist tokens to
 /// disk.
 pub struct Authenticator<
-    T: TokenGetterBuilder<C::Connector>,
+    T: AuthFlow<C::Connector>,
     S: TokenStorage,
     AD: AuthenticatorDelegate,
     C: HyperClientBuilder,
@@ -87,7 +87,7 @@ pub struct Authenticator<
 
 impl<T> Authenticator<T, MemoryStorage, DefaultAuthenticatorDelegate, DefaultHyperClient>
 where
-    T: TokenGetterBuilder<<DefaultHyperClient as HyperClientBuilder>::Connector>,
+    T: AuthFlow<<DefaultHyperClient as HyperClientBuilder>::Connector>,
 {
     /// Create a new authenticator with the provided flow. By default a new
     /// hyper::Client will be created the default authenticator delegate will be
@@ -115,7 +115,7 @@ where
 
 impl<T, S, AD, C> Authenticator<T, S, AD, C>
 where
-    T: TokenGetterBuilder<C::Connector>,
+    T: AuthFlow<C::Connector>,
     S: TokenStorage,
     AD: AuthenticatorDelegate,
     C: HyperClientBuilder,
@@ -127,7 +127,7 @@ where
     ) -> Authenticator<T, S, AD, hyper::Client<NewC>>
     where
         NewC: hyper::client::connect::Connect,
-        T: TokenGetterBuilder<NewC>,
+        T: AuthFlow<NewC>,
     {
         Authenticator {
             client: hyper_client,

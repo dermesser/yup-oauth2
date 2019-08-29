@@ -124,6 +124,40 @@ impl InstalledFlow<DefaultFlowDelegate> {
     }
 }
 
+impl<FD> InstalledFlow<FD>
+where
+    FD: FlowDelegate,
+{
+    /// Use the provided FlowDelegate.
+    pub fn delegate<NewFD: FlowDelegate>(self, delegate: NewFD) -> InstalledFlow<NewFD> {
+        InstalledFlow {
+            method: self.method,
+            flow_delegate: delegate,
+            appsecret: self.appsecret,
+        }
+    }
+}
+
+impl<FD, C> crate::authenticator::AuthFlow<C> for InstalledFlow<FD>
+where
+    FD: FlowDelegate + Send + 'static,
+    C: hyper::client::connect::Connect + 'static,
+{
+    type TokenGetter = InstalledFlowImpl<FD, C>;
+
+    fn build_token_getter(self, client: hyper::Client<C>) -> Self::TokenGetter {
+        InstalledFlowImpl {
+            method: self.method,
+            fd: self.flow_delegate,
+            appsecret: self.appsecret,
+            client,
+        }
+    }
+}
+
+impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::connect::Connect>
+    InstalledFlowImpl<FD, C>
+{
     /// Handles the token request flow; it consists of the following steps:
     /// . Obtain a authorization code with user cooperation or internal redirect.
     /// . Obtain a token and refresh token using that code.
@@ -543,7 +577,7 @@ mod tests {
     use tokio;
 
     use super::*;
-    use crate::authenticator::TokenGetterBuilder;
+    use crate::authenticator::AuthFlow;
     use crate::authenticator_delegate::FlowDelegate;
     use crate::helper::*;
     use crate::types::StringError;

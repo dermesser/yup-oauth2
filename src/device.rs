@@ -73,7 +73,7 @@ impl<FD> DeviceFlow<FD> {
     }
 }
 
-impl<FD, C> crate::authenticator::TokenGetterBuilder<C> for DeviceFlow<FD>
+impl<FD, C> crate::authenticator::AuthFlow<C> for DeviceFlow<FD>
 where
     FD: FlowDelegate + Send + 'static,
     C: hyper::client::connect::Connect + 'static,
@@ -407,7 +407,7 @@ mod tests {
     use tokio;
 
     use super::*;
-    use crate::authenticator::TokenGetterBuilder;
+    use crate::authenticator::AuthFlow;
     use crate::helper::parse_application_secret;
 
     #[test]
