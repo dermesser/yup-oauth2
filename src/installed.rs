@@ -98,7 +98,12 @@ pub enum InstalledFlowReturnMethod {
     Interactive,
     /// Involves spinning up a local HTTP server and Google redirecting the browser to
     /// the server with a URL containing the code (preferred, but not as reliable).
-    HTTPRedirect,
+    HTTPRedirectEphemeral,
+    /// Involves spinning up a local HTTP server and Google redirecting the browser to
+    /// the server with a URL containing the code (preferred, but not as reliable). The
+    /// parameter is the port to listen on. Users should typically prefer
+    /// HTTPRedirectEphemeral unless they need to specify the port to listen on.
+    HTTPRedirect(u16),
 }
 
 impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::connect::Connect>
@@ -133,8 +138,13 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
     ) -> impl 'a + Future<Item = Token, Error = RequestError> + Send {
         let rduri = self.fd.redirect_uri();
         // Start server on localhost to accept auth code.
-        let server = if let InstalledFlowReturnMethod::HTTPRedirect = self.method {
-            match InstalledFlowServer::new() {
+        let server_bind_port = match self.method {
+            InstalledFlowReturnMethod::HTTPRedirect(port) => Some(port),
+            InstalledFlowReturnMethod::HTTPRedirectEphemeral => Some(0),
+            _ => None,
+        };
+        let server = if let Some(port) = server_bind_port {
+            match InstalledFlowServer::new(port) {
                 Result::Err(e) => Err(RequestError::ClientError(e)),
                 Result::Ok(server) => Ok(Some(server)),
             }
@@ -327,7 +337,7 @@ struct InstalledFlowServer {
 }
 
 impl InstalledFlowServer {
-    fn new() -> Result<InstalledFlowServer, hyper::error::Error> {
+    fn new(port: u16) -> Result<InstalledFlowServer, hyper::error::Error> {
         let (auth_code_tx, auth_code_rx) = oneshot::channel::<String>();
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
@@ -337,7 +347,7 @@ impl InstalledFlowServer {
             .build();
         let service_maker = InstalledFlowServiceMaker::new(auth_code_tx);
 
-        let addr: std::net::SocketAddr = ([127, 0, 0, 1], 0).into();
+        let addr: std::net::SocketAddr = ([127, 0, 0, 1], port).into();
         let builder = hyper::server::Server::try_bind(&addr)?;
         let server = builder.http1_only(true).serve(service_maker);
         let port = server.local_addr().port();
@@ -643,7 +653,7 @@ mod tests {
                     client.clone(),
                 ),
                 app_secret,
-                InstalledFlowReturnMethod::HTTPRedirect,
+                InstalledFlowReturnMethod::HTTPRedirectEphemeral,
             );
             let _m = mock("POST", "/token")
             .match_body(mockito::Matcher::Regex(".*code=authorizationcodefromlocalserver.*client_id=9022167.*".to_string()))
@@ -705,8 +715,8 @@ mod tests {
 
     #[test]
     fn test_server_random_local_port() {
-        let addr1 = InstalledFlowServer::new().unwrap();
-        let addr2 = InstalledFlowServer::new().unwrap();
+        let addr1 = InstalledFlowServer::new(0).unwrap();
+        let addr2 = InstalledFlowServer::new(0).unwrap();
         assert_ne!(addr1.port, addr2.port);
     }
 
@@ -729,7 +739,7 @@ mod tests {
             hyper::Client::builder()
                 .executor(runtime.executor())
                 .build_http();
-        let mut server = InstalledFlowServer::new().unwrap();
+        let mut server = InstalledFlowServer::new(0).unwrap();
 
         let response = client
             .get(
