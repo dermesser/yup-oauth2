@@ -15,23 +15,18 @@ fn main() {
     let ad = yup_oauth2::DefaultFlowDelegate;
     let secret = yup_oauth2::read_application_secret(Path::new("clientsecret.json"))
         .expect("clientsecret.json");
-    let inf = InstalledFlow::new(
-        client.clone(),
-        ad,
+
+    let mut auth = Authenticator::new(InstalledFlow::new(
         secret,
-        yup_oauth2::InstalledFlowReturnMethod::HTTPRedirectEphemeral,
-    );
-    let mut auth = Authenticator::new_disk(
-        client,
-        inf,
-        yup_oauth2::DefaultAuthenticatorDelegate,
-        "tokencache.json",
-    )
+        yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect(8081),
+    ))
+    .persist_tokens_to_disk("tokencache.json")
+    .build()
     .unwrap();
     let s = "https://www.googleapis.com/auth/drive.file".to_string();
     let scopes = vec![s];
 
-    let tok = auth.token(scopes.iter());
+    let tok = auth.token(scopes);
     let fut = tok.map_err(|e| println!("error: {:?}", e)).and_then(|t| {
         println!("The token is {:?}", t);
         Ok(())

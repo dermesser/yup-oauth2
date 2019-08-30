@@ -14,6 +14,7 @@
 use std::default::Default;
 use std::sync::{Arc, Mutex};
 
+use crate::authenticator::{DefaultHyperClient, HyperClientBuilder};
 use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
 use crate::types::{ApplicationSecret, GetToken, JsonError, RequestError, StringError, Token};
 
@@ -188,10 +189,73 @@ where
 /// (and you also should not) use this with `Authenticator`. Just use it directly.
 #[derive(Clone)]
 pub struct ServiceAccountAccess<C> {
+    client: C,
+    key: ServiceAccountKey,
+    sub: Option<String>,
+}
+
+impl ServiceAccountAccess<DefaultHyperClient> {
+    /// Create a new ServiceAccountAccess with the provided key.
+    pub fn new(key: ServiceAccountKey) -> Self {
+        ServiceAccountAccess {
+            client: DefaultHyperClient,
+            key,
+            sub: None,
+        }
+    }
+}
+
+impl<C> ServiceAccountAccess<C>
+where
+    C: HyperClientBuilder,
+    C::Connector: 'static,
+{
+    /// Use the provided hyper client.
+    pub fn hyper_client<NewC: HyperClientBuilder>(
+        self,
+        hyper_client: NewC,
+    ) -> ServiceAccountAccess<NewC> {
+        ServiceAccountAccess {
+            client: hyper_client,
+            key: self.key,
+            sub: self.sub,
+        }
+    }
+
+    /// Use the provided sub.
+    pub fn sub(self, sub: String) -> Self {
+        ServiceAccountAccess {
+            sub: Some(sub),
+            ..self
+        }
+    }
+
+    /// Build the configured ServiceAccountAccess.
+    pub fn build(self) -> impl GetToken {
+        ServiceAccountAccessImpl::new(self.client.build_hyper_client(), self.key, self.sub)
+    }
+}
+
+#[derive(Clone)]
+struct ServiceAccountAccessImpl<C> {
     client: hyper::Client<C, hyper::Body>,
     key: ServiceAccountKey,
     cache: Arc<Mutex<MemoryStorage>>,
     sub: Option<String>,
+}
+
+impl<C> ServiceAccountAccessImpl<C>
+where
+    C: hyper::client::connect::Connect,
+{
+    fn new(client: hyper::Client<C>, key: ServiceAccountKey, sub: Option<String>) -> Self {
+        ServiceAccountAccessImpl {
+            client,
+            key,
+            cache: Arc::new(Mutex::new(MemoryStorage::default())),
+            sub,
+        }
+    }
 }
 
 /// This is the schema of the server's response.
@@ -216,36 +280,7 @@ impl TokenResponse {
     }
 }
 
-impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccess<C> {
-    /// Returns a new `ServiceAccountAccess` token source.
-    #[allow(dead_code)]
-    pub fn new(
-        key: ServiceAccountKey,
-        client: hyper::Client<C, hyper::Body>,
-    ) -> ServiceAccountAccess<C> {
-        ServiceAccountAccess {
-            client: client,
-            key: key,
-            cache: Arc::new(Mutex::new(MemoryStorage::default())),
-            sub: None,
-        }
-    }
-
-    /// Set `sub` claim in new `ServiceAccountKey` (see
-    /// https://developers.google.com/identity/protocols/OAuth2ServiceAccount#authorizingrequests).
-    pub fn with_sub(
-        key: ServiceAccountKey,
-        client: hyper::Client<C, hyper::Body>,
-        sub: String,
-    ) -> ServiceAccountAccess<C> {
-        ServiceAccountAccess {
-            client: client,
-            key: key,
-            cache: Arc::new(Mutex::new(MemoryStorage::default())),
-            sub: Some(sub),
-        }
-    }
-
+impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccessImpl<C> {
     /// Send a request for a new Bearer token to the OAuth provider.
     fn request_token(
         client: hyper::client::Client<C>,
@@ -311,7 +346,7 @@ impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccess<C> {
     }
 }
 
-impl<C: 'static> GetToken for ServiceAccountAccess<C>
+impl<C: 'static> GetToken for ServiceAccountAccessImpl<C>
 where
     C: hyper::client::connect::Connect,
 {
@@ -441,7 +476,7 @@ mod tests {
                 .with_body(json_response)
                 .expect(1)
                 .create();
-            let mut acc = ServiceAccountAccess::new(key.clone(), client.clone());
+            let mut acc = ServiceAccountAccessImpl::new(client.clone(), key.clone(), None);
             let fut = acc
                 .token(vec!["https://www.googleapis.com/auth/pubsub"])
                 .and_then(|tok| {
@@ -480,7 +515,9 @@ mod tests {
                 .with_header("content-type", "text/json")
                 .with_body(bad_json_response)
                 .create();
-            let mut acc = ServiceAccountAccess::new(key.clone(), client.clone());
+            let mut acc = ServiceAccountAccess::new(key.clone())
+                .hyper_client(client.clone())
+                .build();
             let fut = acc
                 .token(vec!["https://www.googleapis.com/auth/pubsub"])
                 .then(|result| {
@@ -506,7 +543,7 @@ mod tests {
         let client = hyper::Client::builder()
             .executor(runtime.executor())
             .build(https);
-        let mut acc = ServiceAccountAccess::new(key, client);
+        let mut acc = ServiceAccountAccess::new(key).hyper_client(client).build();
         println!(
             "{:?}",
             acc.token(vec!["https://www.googleapis.com/auth/pubsub"])

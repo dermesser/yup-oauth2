@@ -1,4 +1,4 @@
-use crate::authenticator_delegate::{AuthenticatorDelegate, Retry};
+use crate::authenticator_delegate::{AuthenticatorDelegate, DefaultAuthenticatorDelegate, Retry};
 use crate::refresh::RefreshFlow;
 use crate::storage::{hash_scopes, DiskTokenStorage, MemoryStorage, TokenStorage};
 use crate::types::{ApplicationSecret, GetToken, RefreshResult, RequestError, Token};
@@ -8,6 +8,7 @@ use tokio_timer;
 
 use std::error::Error;
 use std::io;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 /// Authenticator abstracts different `GetToken` implementations behind one type and handles
@@ -20,7 +21,7 @@ use std::sync::{Arc, Mutex};
 /// NOTE: It is recommended to use a client constructed like this in order to prevent functions
 /// like `hyper::run()` from hanging: `let client = hyper::Client::builder().keep_alive(false);`.
 /// Due to token requests being rare, this should not result in a too bad performance problem.
-pub struct Authenticator<
+struct AuthenticatorImpl<
     T: GetToken,
     S: TokenStorage,
     AD: AuthenticatorDelegate,
@@ -32,39 +33,156 @@ pub struct Authenticator<
     delegate: AD,
 }
 
-impl<T: GetToken, AD: AuthenticatorDelegate, C: hyper::client::connect::Connect>
-    Authenticator<T, MemoryStorage, AD, C>
+/// A trait implemented for any hyper::Client as well as teh DefaultHyperClient.
+pub trait HyperClientBuilder {
+    type Connector: hyper::client::connect::Connect;
+
+    fn build_hyper_client(self) -> hyper::Client<Self::Connector>;
+}
+
+/// The builder value used when the default hyper client should be used.
+pub struct DefaultHyperClient;
+impl HyperClientBuilder for DefaultHyperClient {
+    type Connector = hyper_rustls::HttpsConnector<hyper::client::connect::HttpConnector>;
+
+    fn build_hyper_client(self) -> hyper::Client<Self::Connector> {
+        hyper::Client::builder()
+            .keep_alive(false)
+            .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new(1))
+    }
+}
+
+impl<C> HyperClientBuilder for hyper::Client<C>
+where
+    C: hyper::client::connect::Connect,
 {
-    /// Create an Authenticator caching tokens for the duration of this authenticator.
+    type Connector = C;
+
+    fn build_hyper_client(self) -> hyper::Client<C> {
+        self
+    }
+}
+
+/// An internal trait implemented by flows to be used by an authenticator.
+pub trait AuthFlow<C> {
+    type TokenGetter: GetToken;
+
+    fn build_token_getter(self, client: hyper::Client<C>) -> Self::TokenGetter;
+}
+
+/// An authenticator can be used with `InstalledFlow`'s or `DeviceFlow`'s and
+/// will refresh tokens as they expire as well as optionally persist tokens to
+/// disk.
+pub struct Authenticator<
+    T: AuthFlow<C::Connector>,
+    S: TokenStorage,
+    AD: AuthenticatorDelegate,
+    C: HyperClientBuilder,
+> {
+    client: C,
+    token_getter: T,
+    store: io::Result<S>,
+    delegate: AD,
+}
+
+impl<T> Authenticator<T, MemoryStorage, DefaultAuthenticatorDelegate, DefaultHyperClient>
+where
+    T: AuthFlow<<DefaultHyperClient as HyperClientBuilder>::Connector>,
+{
+    /// Create a new authenticator with the provided flow. By default a new
+    /// hyper::Client will be created the default authenticator delegate will be
+    /// used, and tokens will not be persisted to disk.
+    /// Accepted flow types are DeviceFlow and InstalledFlow.
+    ///
+    /// Examples
+    /// ```
+    /// use std::path::Path;
+    /// use yup_oauth2::{ApplicationSecret, Authenticator, DeviceFlow};
+    /// let creds = ApplicationSecret::default();
+    /// let auth = Authenticator::new(DeviceFlow::new(creds)).build().unwrap();
+    /// ```
     pub fn new(
-        client: hyper::Client<C>,
-        inner: T,
-        delegate: AD,
-    ) -> Authenticator<T, MemoryStorage, AD, C> {
+        flow: T,
+    ) -> Authenticator<T, MemoryStorage, DefaultAuthenticatorDelegate, DefaultHyperClient> {
         Authenticator {
-            client: client,
-            inner: Arc::new(Mutex::new(inner)),
-            store: Arc::new(Mutex::new(MemoryStorage::new())),
-            delegate: delegate,
+            client: DefaultHyperClient,
+            token_getter: flow,
+            store: Ok(MemoryStorage::new()),
+            delegate: DefaultAuthenticatorDelegate,
         }
     }
 }
 
-impl<T: GetToken, AD: AuthenticatorDelegate, C: hyper::client::connect::Connect>
-    Authenticator<T, DiskTokenStorage, AD, C>
+impl<T, S, AD, C> Authenticator<T, S, AD, C>
+where
+    T: AuthFlow<C::Connector>,
+    S: TokenStorage,
+    AD: AuthenticatorDelegate,
+    C: HyperClientBuilder,
 {
-    /// Create an Authenticator using the store at `path`.
-    pub fn new_disk<P: AsRef<str>>(
-        client: hyper::Client<C>,
-        inner: T,
-        delegate: AD,
-        token_storage_path: P,
-    ) -> io::Result<Authenticator<T, DiskTokenStorage, AD, C>> {
-        Ok(Authenticator {
-            client: client,
-            inner: Arc::new(Mutex::new(inner)),
-            store: Arc::new(Mutex::new(DiskTokenStorage::new(token_storage_path)?)),
+    /// Use the provided hyper client.
+    pub fn hyper_client<NewC>(
+        self,
+        hyper_client: hyper::Client<NewC>,
+    ) -> Authenticator<T, S, AD, hyper::Client<NewC>>
+    where
+        NewC: hyper::client::connect::Connect,
+        T: AuthFlow<NewC>,
+    {
+        Authenticator {
+            client: hyper_client,
+            token_getter: self.token_getter,
+            store: self.store,
+            delegate: self.delegate,
+        }
+    }
+
+    /// Persist tokens to disk in the provided filename.
+    pub fn persist_tokens_to_disk<P: AsRef<Path>>(
+        self,
+        path: P,
+    ) -> Authenticator<T, DiskTokenStorage, AD, C> {
+        let disk_storage = DiskTokenStorage::new(path.as_ref().to_str().unwrap());
+        Authenticator {
+            client: self.client,
+            token_getter: self.token_getter,
+            store: disk_storage,
+            delegate: self.delegate,
+        }
+    }
+
+    /// Use the provided authenticator delegate.
+    pub fn delegate<NewAD: AuthenticatorDelegate>(
+        self,
+        delegate: NewAD,
+    ) -> Authenticator<T, S, NewAD, C> {
+        Authenticator {
+            client: self.client,
+            token_getter: self.token_getter,
+            store: self.store,
             delegate: delegate,
+        }
+    }
+
+    /// Create the authenticator.
+    pub fn build(self) -> io::Result<impl GetToken>
+    where
+        T::TokenGetter: 'static + GetToken + Send,
+        S: 'static + Send,
+        AD: 'static + Send,
+        C::Connector: 'static + Clone + Send,
+    {
+        let client = self.client.build_hyper_client();
+        let store = Arc::new(Mutex::new(self.store?));
+        let inner = Arc::new(Mutex::new(
+            self.token_getter.build_token_getter(client.clone()),
+        ));
+
+        Ok(AuthenticatorImpl {
+            client,
+            inner,
+            store,
+            delegate: self.delegate,
         })
     }
 }
@@ -74,7 +192,7 @@ impl<
         S: 'static + TokenStorage + Send,
         AD: 'static + AuthenticatorDelegate + Send,
         C: 'static + hyper::client::connect::Connect + Clone + Send,
-    > GetToken for Authenticator<GT, S, AD, C>
+    > GetToken for AuthenticatorImpl<GT, S, AD, C>
 {
     /// Returns the API Key of the inner flow.
     fn api_key(&mut self) -> Option<String> {

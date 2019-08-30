@@ -48,41 +48,22 @@
 //! use std::path::Path;
 //!
 //! fn main() {
-//!     // Boilerplate: Set up hyper HTTP client and TLS.
-//!     let https = HttpsConnector::new(1);
-//!     let client = Client::builder()
-//!         .keep_alive(false)
-//!         .build::<_, hyper::Body>(https);
-//!
 //!     // Read application secret from a file. Sometimes it's easier to compile it directly into
 //!     // the binary. The clientsecret file contains JSON like `{"installed":{"client_id": ... }}`
 //!     let secret = yup_oauth2::read_application_secret(Path::new("clientsecret.json"))
 //!         .expect("clientsecret.json");
 //!
-//!     // There are two types of delegates; FlowDelegate and AuthenticatorDelegate. See the
-//!     // respective documentation; all you need to know here is that they determine how the user
-//!     // is asked to visit the OAuth flow URL or how to read back the provided code.
-//!     let ad = yup_oauth2::DefaultFlowDelegate;
-//!
-//!     // InstalledFlow handles OAuth flows of that type. They are usually the ones where a user
-//!     // grants access to their personal account (think Google Drive, Github API, etc.).
-//!     let inf = InstalledFlow::new(
-//!         client.clone(),
-//!         ad,
-//!         secret,
-//!         yup_oauth2::InstalledFlowReturnMethod::HTTPRedirectEphemeral,
-//!     );
-//!     // You could already use InstalledFlow by itself, but usually you want to cache tokens and
-//!     // refresh them, rather than ask the user every time to log in again. Authenticator wraps
-//!     // other flows and handles these.
-//!     // This type of authenticator caches tokens in a JSON file on disk.
-//!     let mut auth = Authenticator::new_disk(
-//!         client,
-//!         inf,
-//!         yup_oauth2::DefaultAuthenticatorDelegate,
-//!         "tokencache.json",
+//!     // Create an authenticator that uses an InstalledFlow to authenticate. The
+//!      // authentication tokens are persisted to a file named tokencache.json. The
+//!      // authenticator takes care of caching tokens to disk and refreshing tokens once
+//!      // they've expired.
+//!     let mut auth = Authenticator::new(
+//!         InstalledFlow::new(secret, yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect(0))
 //!     )
+//!     .persist_tokens_to_disk("tokencache.json")
+//!     .build()
 //!     .unwrap();
+//!
 //!     let s = "https://www.googleapis.com/auth/drive.file".to_string();
 //!     let scopes = vec![s];
 //!
@@ -112,7 +93,7 @@ mod service_account;
 mod storage;
 mod types;
 
-pub use crate::authenticator::Authenticator;
+pub use crate::authenticator::{AuthFlow, Authenticator};
 pub use crate::authenticator_delegate::{
     AuthenticatorDelegate, DefaultAuthenticatorDelegate, DefaultFlowDelegate, FlowDelegate,
     PollInformation,

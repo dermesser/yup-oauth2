@@ -178,15 +178,13 @@ fn publish_stuff(methods: &PubsubMethods, message: &str) {
 fn main() {
     let client_secret =
         oauth::service_account_key_from_file(&"pubsub-auth.json".to_string()).unwrap();
-    let client =
-        hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
-    let mut access = oauth::ServiceAccountAccess::new(client_secret, client);
+    let mut access = oauth::ServiceAccountAccess::new(client_secret).build();
 
     use yup_oauth2::GetToken;
     println!(
         "{:?}",
         access
-            .token(&vec!["https://www.googleapis.com/auth/pubsub"])
+            .token(vec!["https://www.googleapis.com/auth/pubsub"])
             .unwrap()
     );
 
