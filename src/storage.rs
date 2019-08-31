@@ -20,7 +20,7 @@ use itertools::Itertools;
 /// For completeness, the underlying, sorted scopes are provided as well. They might be
 /// useful for presentation to the user.
 pub trait TokenStorage {
-    type Error: 'static + Error + Send;
+    type Error: 'static + Error + Send + Sync;
 
     /// If `token` is None, it is invalid or revoked and should be removed from storage.
     /// Otherwise, it should be saved.

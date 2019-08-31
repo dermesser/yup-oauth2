@@ -71,7 +71,7 @@ pub enum RequestError {
     /// An error occurred while refreshing tokens.
     Refresh(RefreshResult),
     /// Error in token cache layer
-    Cache(Box<dyn Error + Send>),
+    Cache(Box<dyn Error + Send + Sync>),
 }
 
 impl From<hyper::Error> for RequestError {
