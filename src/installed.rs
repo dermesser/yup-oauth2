@@ -207,7 +207,8 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
                     .and_then(move |r| {
                         r.into_body()
                             .concat2()
-                            .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap()) // TODO: error handling
+                            .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
+                            // TODO: error handling
                     })
                     .then(|body_or| {
                         let resp = match body_or {
