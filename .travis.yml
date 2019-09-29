@@ -38,11 +38,9 @@ jobs:
       if: os = linux
       rust: stable
       install:
-        - rustup component add clippy
         - rustup component add rustfmt
       script:
         - cargo fmt --all -- --check
-        - cargo clippy --all-targets --all-features -- -D warnings || true
 
     - stage: coverage
       if: os = linux
