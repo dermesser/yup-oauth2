@@ -7,6 +7,6 @@ edition = "2018"
 [dependencies]
 yup-oauth2 = { path = "../../" }
 hyper = "0.12"
-hyper-rustls = "0.16"
+hyper-rustls = "0.17"
 futures = "0.1"
 tokio = "0.1"
