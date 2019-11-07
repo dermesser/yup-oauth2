@@ -61,10 +61,10 @@ where
     })
 }
 
-impl<
-        FD: FlowDelegate + 'static + Send + Sync + Clone,
-        C: hyper::client::connect::Connect + 'static,
-    > GetToken for InstalledFlowImpl<FD, C>
+impl<FD, C> GetToken for InstalledFlowImpl<FD, C>
+where
+    FD: FlowDelegate + 'static,
+    C: hyper::client::connect::Connect + 'static,
 {
     fn token<'a, I, T>(
         &'a self,
@@ -85,7 +85,11 @@ impl<
 }
 
 /// The InstalledFlow implementation.
-pub struct InstalledFlowImpl<FD: FlowDelegate, C: hyper::client::connect::Connect + 'static> {
+pub struct InstalledFlowImpl<FD, C>
+where
+    FD: FlowDelegate + 'static,
+    C: hyper::client::connect::Connect + 'static,
+{
     method: InstalledFlowReturnMethod,
     client: hyper::client::Client<C, hyper::Body>,
     fd: FD,
@@ -109,7 +113,7 @@ pub enum InstalledFlowReturnMethod {
 /// InstalledFlowImpl provides tokens for services that follow the "Installed" OAuth flow. (See
 /// https://www.oauth.com/oauth2-servers/authorization/,
 /// https://developers.google.com/identity/protocols/OAuth2InstalledApp).
-pub struct InstalledFlow<FD: FlowDelegate> {
+pub struct InstalledFlow<FD: FlowDelegate + 'static> {
     method: InstalledFlowReturnMethod,
     flow_delegate: FD,
     appsecret: ApplicationSecret,
@@ -145,7 +149,7 @@ where
 
 impl<FD, C> crate::authenticator::AuthFlow<C> for InstalledFlow<FD>
 where
-    FD: FlowDelegate + Send + Sync + 'static,
+    FD: FlowDelegate + 'static,
     C: hyper::client::connect::Connect + 'static,
 {
     type TokenGetter = InstalledFlowImpl<FD, C>;
@@ -160,8 +164,10 @@ where
     }
 }
 
-impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::connect::Connect>
-    InstalledFlowImpl<FD, C>
+impl<FD, C> InstalledFlowImpl<FD, C>
+where
+    FD: FlowDelegate + 'static,
+    C: hyper::client::connect::Connect + 'static,
 {
     /// Handles the token request flow; it consists of the following steps:
     /// . Obtain a authorization code with user cooperation or internal redirect.

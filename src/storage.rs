@@ -6,7 +6,6 @@
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
-use std::fmt;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io;
@@ -54,27 +53,12 @@ where
 #[derive(Default)]
 pub struct NullStorage;
 
-#[derive(Debug)]
-pub struct NullError;
-
-impl Error for NullError {
-    fn description(&self) -> &str {
-        "NULL"
-    }
-}
-
-impl fmt::Display for NullError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        "NULL-ERROR".fmt(f)
-    }
-}
-
 impl TokenStorage for NullStorage {
-    type Error = NullError;
-    fn set(&self, _: u64, _: &Vec<&str>, _: Option<Token>) -> Result<(), NullError> {
+    type Error = std::convert::Infallible;
+    fn set(&self, _: u64, _: &Vec<&str>, _: Option<Token>) -> Result<(), Self::Error> {
         Ok(())
     }
-    fn get(&self, _: u64, _: &Vec<&str>) -> Result<Option<Token>, NullError> {
+    fn get(&self, _: u64, _: &Vec<&str>) -> Result<Option<Token>, Self::Error> {
         Ok(None)
     }
 }
@@ -92,14 +76,14 @@ impl MemoryStorage {
 }
 
 impl TokenStorage for MemoryStorage {
-    type Error = NullError;
+    type Error = std::convert::Infallible;
 
     fn set(
         &self,
         scope_hash: u64,
         scopes: &Vec<&str>,
         token: Option<Token>,
-    ) -> Result<(), NullError> {
+    ) -> Result<(), Self::Error> {
         let mut tokens = self.tokens.lock().expect("poisoned mutex");
         let matched = tokens.iter().find_position(|x| x.hash == scope_hash);
         if let Some((idx, _)) = matched {
@@ -120,7 +104,7 @@ impl TokenStorage for MemoryStorage {
         Ok(())
     }
 
-    fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, NullError> {
+    fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, Self::Error> {
         let scopes: Vec<_> = scopes.iter().sorted().unique().collect();
 
         let tokens = self.tokens.lock().expect("poisoned mutex");

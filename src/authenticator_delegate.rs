@@ -71,11 +71,11 @@ impl Error for PollError {
 ///
 /// The only method that needs to be implemented manually is `present_user_code(...)`,
 /// as no assumptions are made on how this presentation should happen.
-pub trait AuthenticatorDelegate: Clone {
+pub trait AuthenticatorDelegate: Clone + Send + Sync {
     /// Called whenever there is an client, usually if there are network problems.
     ///
     /// Return retry information.
-    fn client_error(&mut self, _: &hyper::Error) -> Retry {
+    fn client_error(&self, _: &hyper::Error) -> Retry {
         Retry::Abort
     }
 
@@ -84,19 +84,19 @@ pub trait AuthenticatorDelegate: Clone {
     /// This can be useful if the underlying `TokenStorage` may fail occasionally.
     /// if `is_set` is true, the failure resulted from `TokenStorage.set(...)`. Otherwise,
     /// it was `TokenStorage.get(...)`
-    fn token_storage_failure(&mut self, is_set: bool, _: &(dyn Error + Send + Sync)) -> Retry {
+    fn token_storage_failure(&self, is_set: bool, _: &(dyn Error + Send + Sync)) -> Retry {
         let _ = is_set;
         Retry::Abort
     }
 
     /// The server denied the attempt to obtain a request code
-    fn request_failure(&mut self, _: RequestError) {}
+    fn request_failure(&self, _: RequestError) {}
 
     /// Called if we could not acquire a refresh token for a reason possibly specified
     /// by the server.
     /// This call is made for the delegate's information only.
     fn token_refresh_failed<S: AsRef<str>>(
-        &mut self,
+        &self,
         error: S,
         error_description: &Option<String>,
     ) {
@@ -111,7 +111,7 @@ pub trait AuthenticatorDelegate: Clone {
 
 /// FlowDelegate methods are called when an OAuth flow needs to ask the application what to do in
 /// certain cases.
-pub trait FlowDelegate: Clone {
+pub trait FlowDelegate: Clone + Send + Sync {
     /// Called if the request code is expired. You will have to start over in this case.
     /// This will be the last call the delegate receives.
     /// Given `DateTime` is the expiration date

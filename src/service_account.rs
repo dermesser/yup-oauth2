@@ -266,7 +266,10 @@ struct TokenResponse {
     expires_in: Option<i64>,
 }
 
-impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccessImpl<C> {
+impl<C> ServiceAccountAccessImpl<C> 
+where
+    C: hyper::client::connect::Connect + 'static,
+{
     /// Send a request for a new Bearer token to the OAuth provider.
     async fn request_token(
         client: hyper::client::Client<C>,
@@ -358,9 +361,9 @@ impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccessImpl<
     }
 }
 
-impl<C: 'static> GetToken for ServiceAccountAccessImpl<C>
+impl<C> GetToken for ServiceAccountAccessImpl<C>
 where
-    C: hyper::client::connect::Connect,
+    C: hyper::client::connect::Connect + 'static,
 {
     fn token<'a, I, T>(
         &'a self,

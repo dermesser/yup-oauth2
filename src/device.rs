@@ -73,7 +73,7 @@ impl<FD> DeviceFlow<FD> {
 
 impl<FD, C> crate::authenticator::AuthFlow<C> for DeviceFlow<FD>
 where
-    FD: FlowDelegate + Send + Sync + 'static,
+    FD: FlowDelegate + 'static,
     C: hyper::client::connect::Connect + 'static,
 {
     type TokenGetter = DeviceFlowImpl<FD, C>;
@@ -105,10 +105,10 @@ impl<FD, C> Flow for DeviceFlowImpl<FD, C> {
     }
 }
 
-impl<
-        FD: FlowDelegate + Clone + Send + Sync + 'static,
-        C: hyper::client::connect::Connect + Sync + 'static,
-    > GetToken for DeviceFlowImpl<FD, C>
+impl<FD, C> GetToken for DeviceFlowImpl<FD, C>
+where
+    FD: FlowDelegate + 'static,
+    C: hyper::client::connect::Connect + 'static,
 {
     fn token<'a, I, T>(
         &'a self,
@@ -130,10 +130,10 @@ impl<
 
 impl<FD, C> DeviceFlowImpl<FD, C>
 where
-    C: hyper::client::connect::Connect + Sync + 'static,
+    C: hyper::client::connect::Connect + 'static,
     C::Transport: 'static,
     C::Future: 'static,
-    FD: FlowDelegate + Clone + Send + 'static,
+    FD: FlowDelegate + 'static,
 {
     /// Essentially what `GetToken::token` does: Retrieve a token for the given scopes without
     /// caching.

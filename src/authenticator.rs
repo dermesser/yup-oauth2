@@ -167,9 +167,9 @@ where
     /// Create the authenticator.
     pub fn build(self) -> io::Result<impl GetToken>
     where
-        T::TokenGetter: 'static + GetToken + Send,
+        T::TokenGetter: 'static + GetToken,
         S: 'static + Send,
-        AD: 'static + Send + Sync,
+        AD: 'static,
         C::Connector: 'static + Clone + Send,
     {
         let client = self.client.build_hyper_client();
@@ -189,12 +189,12 @@ impl<GT, S, AD, C> AuthenticatorImpl<GT, S, AD, C>
 where
     GT: 'static + GetToken,
     S: 'static + TokenStorage,
-    AD: 'static + AuthenticatorDelegate + Send + Sync,
+    AD: 'static + AuthenticatorDelegate,
     C: 'static + hyper::client::connect::Connect + Clone + Send,
 {
     async fn get_token(&self, scope_key: u64, scopes: Vec<String>) -> Result<Token, RequestError> {
         let store = self.store.clone();
-        let mut delegate = self.delegate.clone();
+        let delegate = &self.delegate;
         let client = self.client.clone();
         let appsecret = self.inner.application_secret();
         let gettoken = self.inner.clone();
@@ -209,7 +209,6 @@ where
                     }
                     // Implement refresh flow.
                     let refresh_token = t.refresh_token.clone();
-                    let mut delegate = delegate.clone();
                     let store = store.clone();
                     let scopes = scopes.clone();
                     let rr = RefreshFlow::refresh_token(
@@ -254,7 +253,6 @@ where
                 Ok(None) => {
                     let store = store.clone();
                     let scopes = scopes.clone();
-                    let mut delegate = delegate.clone();
                     let t = gettoken.token(scopes.clone()).await?;
                     if let Err(e) = store.set(
                         scope_key,
@@ -282,7 +280,7 @@ where
 impl<
         GT: 'static + GetToken,
         S: 'static + TokenStorage,
-        AD: 'static + AuthenticatorDelegate + Send + Sync,
+        AD: 'static + AuthenticatorDelegate,
         C: 'static + hyper::client::connect::Connect + Clone + Send,
     > GetToken for AuthenticatorImpl<GT, S, AD, C>
 {
