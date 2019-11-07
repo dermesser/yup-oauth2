@@ -140,7 +140,7 @@ pub trait FlowDelegate: Clone + Send + Sync {
     /// along with the `verification_url`.
     /// # Notes
     /// * Will be called exactly once, provided we didn't abort during `request_code` phase.
-    /// * Will only be called if the Authenticator's flow_type is `FlowType::Device`.
+    /// * Will only be called if the Authenticator's flow_type is `DeviceFlow`.
     fn present_user_code(&self, pi: &PollInformation) {
         println!(
             "Please enter {} at {} and grant access to this application",

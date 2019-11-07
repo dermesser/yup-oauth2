@@ -13,7 +13,7 @@ use url::form_urlencoded;
 
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate, PollInformation, Retry};
 use crate::types::{
-    ApplicationSecret, Flow, FlowType, GetToken, JsonError, PollError, RequestError, Token,
+    ApplicationSecret, GetToken, JsonError, PollError, RequestError, Token,
 };
 
 pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/oauth2/device/code";
@@ -97,12 +97,6 @@ pub struct DeviceFlowImpl<FD, C> {
     device_code_url: String,
     fd: FD,
     wait: Duration,
-}
-
-impl<FD, C> Flow for DeviceFlowImpl<FD, C> {
-    fn type_id() -> FlowType {
-        FlowType::Device(String::new())
-    }
 }
 
 impl<FD, C> GetToken for DeviceFlowImpl<FD, C>
