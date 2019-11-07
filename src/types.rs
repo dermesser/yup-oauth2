@@ -3,6 +3,7 @@ use hyper;
 use std::error::Error;
 use std::fmt;
 use std::io;
+use std::pin::Pin;
 use std::str::FromStr;
 
 use futures::prelude::*;
@@ -239,16 +240,16 @@ impl FromStr for Scheme {
 /// A provider for authorization tokens, yielding tokens valid for a given scope.
 /// The `api_key()` method is an alternative in case there are no scopes or
 /// if no user is involved.
-pub trait GetToken {
-    fn token<I, T>(
-        &mut self,
+pub trait GetToken: Send + Sync {
+    fn token<'a, I, T>(
+        &'a self,
         scopes: I,
-    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
+    ) -> Pin<Box<dyn Future<Output = Result<Token, RequestError>> + Send + 'a>>
     where
         T: Into<String>,
         I: IntoIterator<Item = T>;
 
-    fn api_key(&mut self) -> Option<String>;
+    fn api_key(&self) -> Option<String>;
 
     /// Return an application secret with at least token_uri, client_secret, and client_id filled
     /// in. This is used for refreshing tokens without interaction from the flow.

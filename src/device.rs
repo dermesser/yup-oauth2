@@ -1,16 +1,14 @@
 use std::iter::{FromIterator, IntoIterator};
+use std::pin::Pin;
 use std::time::Duration;
 
 use ::log::{error, log};
 use chrono::{self, Utc};
-use futures::stream::Stream;
-use futures::{future, prelude::*};
-use http;
+use futures::{prelude::*};
 use hyper;
 use hyper::header;
 use itertools::Itertools;
 use serde_json as json;
-use tokio_timer;
 use url::form_urlencoded;
 
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate, PollInformation, Retry};
@@ -75,7 +73,7 @@ impl<FD> DeviceFlow<FD> {
 
 impl<FD, C> crate::authenticator::AuthFlow<C> for DeviceFlow<FD>
 where
-    FD: FlowDelegate + Send + 'static,
+    FD: FlowDelegate + Send + Sync + 'static,
     C: hyper::client::connect::Connect + 'static,
 {
     type TokenGetter = DeviceFlowImpl<FD, C>;
@@ -108,21 +106,21 @@ impl<FD, C> Flow for DeviceFlowImpl<FD, C> {
 }
 
 impl<
-        FD: FlowDelegate + Clone + Send + 'static,
+        FD: FlowDelegate + Clone + Send + Sync + 'static,
         C: hyper::client::connect::Connect + Sync + 'static,
     > GetToken for DeviceFlowImpl<FD, C>
 {
-    fn token<I, T>(
-        &mut self,
+    fn token<'a, I, T>(
+        &'a self,
         scopes: I,
-    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
+    ) -> Pin<Box<dyn Future<Output = Result<Token, RequestError>> + Send + 'a>>
     where
         T: Into<String>,
         I: IntoIterator<Item = T>,
     {
-        self.retrieve_device_token(Vec::from_iter(scopes.into_iter().map(Into::into)))
+        Box::pin(self.retrieve_device_token(Vec::from_iter(scopes.into_iter().map(Into::into))))
     }
-    fn api_key(&mut self) -> Option<String> {
+    fn api_key(&self) -> Option<String> {
         None
     }
     fn application_secret(&self) -> ApplicationSecret {
@@ -139,75 +137,51 @@ where
 {
     /// Essentially what `GetToken::token` does: Retrieve a token for the given scopes without
     /// caching.
-    fn retrieve_device_token<'a>(
-        &mut self,
+    pub async fn retrieve_device_token<'a>(
+        &self,
         scopes: Vec<String>,
-    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send> {
+    ) -> Result<Token, RequestError> {
         let application_secret = self.application_secret.clone();
         let client = self.client.clone();
         let wait = self.wait;
-        let mut fd = self.fd.clone();
-        let request_code = Self::request_code(
+        let fd = self.fd.clone();
+        let (pollinf, device_code) = Self::request_code(
             application_secret.clone(),
             client.clone(),
             self.device_code_url.clone(),
             scopes,
         )
-        .and_then(move |(pollinf, device_code)| {
-            fd.present_user_code(&pollinf);
-            Ok((pollinf, device_code))
-        });
-        let fd = self.fd.clone();
-        Box::new(request_code.and_then(move |(pollinf, device_code)| {
-            future::loop_fn(0, move |i| {
-                // Make a copy of everything every time, because the loop function needs to be
-                // repeatable, i.e. we can't move anything out.
-                let pt = Self::poll_token(
-                    application_secret.clone(),
-                    client.clone(),
-                    device_code.clone(),
-                    pollinf.clone(),
-                    fd.clone(),
-                );
-                let maxn = wait.as_secs() / pollinf.interval.as_secs();
-                let mut fd = fd.clone();
-                let pollinf = pollinf.clone();
-                tokio_timer::sleep(pollinf.interval)
-                    .then(|_| pt)
-                    .then(move |r| match r {
-                        Ok(None) if i < maxn => match fd.pending(&pollinf) {
-                            Retry::Abort | Retry::Skip => {
-                                Box::new(Err(RequestError::Poll(PollError::TimedOut)).into_future())
-                            }
-                            Retry::After(d) => Box::new(
-                                tokio_timer::sleep(d)
-                                    .then(move |_| Ok(future::Loop::Continue(i + 1))),
-                            )
-                                as Box<
-                                    dyn Future<
-                                            Item = future::Loop<Token, u64>,
-                                            Error = RequestError,
-                                        > + Send,
-                                >,
-                        },
-                        Ok(Some(tok)) => Box::new(Ok(future::Loop::Break(tok)).into_future()),
-                        Err(e @ PollError::AccessDenied)
-                        | Err(e @ PollError::TimedOut)
-                        | Err(e @ PollError::Expired(_)) => {
-                            Box::new(Err(RequestError::Poll(e)).into_future())
-                        }
-                        Err(ref e) if i < maxn => {
-                            error!("Unknown error from poll token api: {}", e);
-                            Box::new(Ok(future::Loop::Continue(i + 1)).into_future())
-                        }
-                        // Too many attempts.
-                        Ok(None) | Err(_) => {
-                            error!("Too many poll attempts");
-                            Box::new(Err(RequestError::Poll(PollError::TimedOut)).into_future())
-                        }
-                    })
-            })
-        }))
+        .await?;
+        fd.present_user_code(&pollinf);
+        let maxn = wait.as_secs() / pollinf.interval.as_secs();
+        for _ in 0..maxn {
+            let fd = fd.clone();
+            let pollinf = pollinf.clone();
+            tokio::timer::delay_for(pollinf.interval).await;
+            let r = Self::poll_token(
+                application_secret.clone(),
+                client.clone(),
+                device_code.clone(),
+                pollinf.clone(),
+                fd.clone(),
+            )
+            .await;
+            match r {
+                Ok(None) => match fd.pending(&pollinf) {
+                    Retry::Abort | Retry::Skip => {
+                        return Err(RequestError::Poll(PollError::TimedOut))
+                    }
+                    Retry::After(d) => tokio::timer::delay_for(d).await,
+                },
+                Ok(Some(tok)) => return Ok(tok),
+                Err(e @ PollError::AccessDenied)
+                | Err(e @ PollError::TimedOut)
+                | Err(e @ PollError::Expired(_)) => return Err(RequestError::Poll(e)),
+                Err(ref e) => error!("Unknown error from poll token api: {}", e),
+            }
+        }
+        error!("Too many poll attempts");
+        Err(RequestError::Poll(PollError::TimedOut))
     }
 
     /// The first step involves asking the server for a code that the user
@@ -225,12 +199,12 @@ where
     /// * If called after a successful result was returned at least once.
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    fn request_code(
+    async fn request_code(
         application_secret: ApplicationSecret,
         client: hyper::Client<C>,
         device_code_url: String,
         scopes: Vec<String>,
-    ) -> impl Future<Item = (PollInformation, String), Error = RequestError> {
+    ) -> Result<(PollInformation, String), RequestError> {
         // note: cloned() shouldn't be needed, see issue
         // https://github.com/servo/rust-url/issues/81
         let req = form_urlencoded::Serializer::new(String::new())
@@ -248,66 +222,48 @@ where
 
         // note: works around bug in rustlang
         // https://github.com/rust-lang/rust/issues/22252
-        let request = hyper::Request::post(device_code_url)
+        let req = hyper::Request::post(device_code_url)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(req))
-            .into_future();
-        request
-            .then(
-                move |request: Result<hyper::Request<hyper::Body>, http::Error>| {
-                    let request = request.unwrap();
-                    client.request(request)
-                },
-            )
-            .then(
-                |r: Result<hyper::Response<hyper::Body>, hyper::error::Error>| {
-                    match r {
-                        Err(err) => {
-                            return Err(RequestError::ClientError(err));
-                        }
-                        Ok(res) => {
-                            // This return type is defined in https://tools.ietf.org/html/draft-ietf-oauth-device-flow-15#section-3.2
-                            // The alias is present as Google use a non-standard name for verification_uri.
-                            // According to the standard interval is optional, however, all tested implementations provide it.
-                            // verification_uri_complete is optional in the standard but not provided in tested implementations.
-                            #[derive(Deserialize)]
-                            struct JsonData {
-                                device_code: String,
-                                user_code: String,
-                                #[serde(alias = "verification_url")]
-                                verification_uri: String,
-                                expires_in: Option<i64>,
-                                interval: i64,
-                            }
+            .unwrap();
+        let resp = client
+            .request(req)
+            .await
+            .map_err(|e| RequestError::ClientError(e))?;
+        // This return type is defined in https://tools.ietf.org/html/draft-ietf-oauth-device-flow-15#section-3.2
+        // The alias is present as Google use a non-standard name for verification_uri.
+        // According to the standard interval is optional, however, all tested implementations provide it.
+        // verification_uri_complete is optional in the standard but not provided in tested implementations.
+        #[derive(Deserialize)]
+        struct JsonData {
+            device_code: String,
+            user_code: String,
+            #[serde(alias = "verification_url")]
+            verification_uri: String,
+            expires_in: Option<i64>,
+            interval: i64,
+        }
 
-                            let json_str: String = res
-                                .into_body()
-                                .concat2()
-                                .wait()
-                                .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
-                                .unwrap(); // TODO: error handling
+        let json_bytes = resp.into_body().try_concat().await?;
 
-                            // check for error
-                            match json::from_str::<JsonError>(&json_str) {
-                                Err(_) => {} // ignore, move on
-                                Ok(res) => return Err(RequestError::from(res)),
-                            }
+        // check for error
+        match json::from_slice::<JsonError>(&json_bytes) {
+            Err(_) => {} // ignore, move on
+            Ok(res) => return Err(RequestError::from(res)),
+        }
 
-                            let decoded: JsonData = json::from_str(&json_str).unwrap();
+        let decoded: JsonData =
+            json::from_slice(&json_bytes).map_err(|e| RequestError::JSONError(e))?;
 
-                            let expires_in = decoded.expires_in.unwrap_or(60 * 60);
+        let expires_in = decoded.expires_in.unwrap_or(60 * 60);
 
-                            let pi = PollInformation {
-                                user_code: decoded.user_code,
-                                verification_url: decoded.verification_uri,
-                                expires_at: Utc::now() + chrono::Duration::seconds(expires_in),
-                                interval: Duration::from_secs(i64::abs(decoded.interval) as u64),
-                            };
-                            Ok((pi, decoded.device_code))
-                        }
-                    }
-                },
-            )
+        let pi = PollInformation {
+            user_code: decoded.user_code,
+            verification_url: decoded.verification_uri,
+            expires_at: Utc::now() + chrono::Duration::seconds(expires_in),
+            interval: Duration::from_secs(i64::abs(decoded.interval) as u64),
+        };
+        Ok((pi, decoded.device_code))
     }
 
     /// If the first call is successful, this method may be called.
@@ -328,19 +284,17 @@ where
     ///
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    fn poll_token<'a>(
+    async fn poll_token<'a>(
         application_secret: ApplicationSecret,
         client: hyper::Client<C>,
         device_code: String,
         pi: PollInformation,
-        mut fd: FD,
-    ) -> impl Future<Item = Option<Token>, Error = PollError> {
-        let expired = if pi.expires_at <= Utc::now() {
+        fd: FD,
+    ) -> Result<Option<Token>, PollError> {
+        if pi.expires_at <= Utc::now() {
             fd.expired(&pi.expires_at);
-            Err(PollError::Expired(pi.expires_at)).into_future()
-        } else {
-            Ok(()).into_future()
-        };
+            return Err(PollError::Expired(pi.expires_at));
+        }
 
         // We should be ready for a new request
         let req = form_urlencoded::Serializer::new(String::new())
@@ -356,46 +310,44 @@ where
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(req))
             .unwrap(); // TODO: Error checking
-        expired
-            .and_then(move |_| client.request(request).map_err(|e| PollError::HttpError(e)))
-            .map(|res| {
-                res.into_body()
-                    .concat2()
-                    .wait()
-                    .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
-                    .unwrap() // TODO: error handling
-            })
-            .and_then(move |json_str: String| {
-                #[derive(Deserialize)]
-                struct JsonError {
-                    error: String,
-                }
+        let res = client
+            .request(request)
+            .await
+            .map_err(|e| PollError::HttpError(e))?;
+        let body = res
+            .into_body()
+            .try_concat()
+            .await
+            .map_err(|e| PollError::HttpError(e))?;
+        #[derive(Deserialize)]
+        struct JsonError {
+            error: String,
+        }
 
-                match json::from_str::<JsonError>(&json_str) {
-                    Err(_) => {} // ignore, move on, it's not an error
-                    Ok(res) => {
-                        match res.error.as_ref() {
-                            "access_denied" => {
-                                fd.denied();
-                                return Err(PollError::AccessDenied);
-                            }
-                            "authorization_pending" => return Ok(None),
-                            s => {
-                                return Err(PollError::Other(format!(
-                                    "server message '{}' not understood",
-                                    s
-                                )))
-                            }
-                        };
+        match json::from_slice::<JsonError>(&body) {
+            Err(_) => {} // ignore, move on, it's not an error
+            Ok(res) => {
+                match res.error.as_ref() {
+                    "access_denied" => {
+                        fd.denied();
+                        return Err(PollError::AccessDenied);
                     }
-                }
+                    "authorization_pending" => return Ok(None),
+                    s => {
+                        return Err(PollError::Other(format!(
+                            "server message '{}' not understood",
+                            s
+                        )))
+                    }
+                };
+            }
+        }
 
-                // yes, we expect that !
-                let mut t: Token = json::from_str(&json_str).unwrap();
-                t.set_expiry_absolute();
+        // yes, we expect that !
+        let mut t: Token = json::from_slice(&body).unwrap();
+        t.set_expiry_absolute();
 
-                Ok(Some(t.clone()))
-            })
+        Ok(Some(t))
     }
 }
 
@@ -415,7 +367,7 @@ mod tests {
         #[derive(Clone)]
         struct FD;
         impl FlowDelegate for FD {
-            fn present_user_code(&mut self, pi: &PollInformation) {
+            fn present_user_code(&self, pi: &PollInformation) {
                 assert_eq!("https://example.com/verify", pi.verification_url);
             }
         }
@@ -426,17 +378,17 @@ mod tests {
         app_secret.token_uri = format!("{}/token", server_url);
         let device_code_url = format!("{}/code", server_url);
 
-        let https = HttpsConnector::new(1);
+        let https = HttpsConnector::new();
         let client = hyper::Client::builder()
             .keep_alive(false)
             .build::<_, hyper::Body>(https);
 
-        let mut flow = DeviceFlow::new(app_secret)
+        let flow = DeviceFlow::new(app_secret)
             .delegate(FD)
             .device_code_url(device_code_url)
             .build_token_getter(client);
 
-        let mut rt = tokio::runtime::Builder::new()
+        let rt = tokio::runtime::Builder::new()
             .core_threads(1)
             .panic_handler(|e| std::panic::resume_unwind(e))
             .build()
@@ -461,13 +413,14 @@ mod tests {
                 .with_body(token_response)
                 .create();
 
-            let fut = flow
-                .token(vec!["https://www.googleapis.com/scope/1"])
-                .then(|token| {
-                    let token = token.unwrap();
-                    assert_eq!("accesstoken", token.access_token);
-                    Ok(()) as Result<(), ()>
-                });
+            let fut = async {
+                let token = flow
+                    .token(vec!["https://www.googleapis.com/scope/1"])
+                    .await
+                    .unwrap();
+                assert_eq!("accesstoken", token.access_token);
+                Ok(()) as Result<(), ()>
+            };
             rt.block_on(fut).expect("block_on");
 
             _m.assert();
@@ -493,13 +446,12 @@ mod tests {
                 .expect(0) // Never called!
                 .create();
 
-            let fut = flow
-                .token(vec!["https://www.googleapis.com/scope/1"])
-                .then(|token| {
-                    assert!(token.is_err());
-                    assert!(format!("{}", token.unwrap_err()).contains("invalid_client_id"));
-                    Ok(()) as Result<(), ()>
-                });
+            let fut = async {
+                let res = flow.token(vec!["https://www.googleapis.com/scope/1"]).await;
+                assert!(res.is_err());
+                assert!(format!("{}", res.unwrap_err()).contains("invalid_client_id"));
+                Ok(()) as Result<(), ()>
+            };
             rt.block_on(fut).expect("block_on");
 
             _m.assert();
@@ -524,13 +476,12 @@ mod tests {
                 .expect(1)
                 .create();
 
-            let fut = flow
-                .token(vec!["https://www.googleapis.com/scope/1"])
-                .then(|token| {
-                    assert!(token.is_err());
-                    assert!(format!("{}", token.unwrap_err()).contains("Access denied by user"));
-                    Ok(()) as Result<(), ()>
-                });
+            let fut = async {
+                let res = flow.token(vec!["https://www.googleapis.com/scope/1"]).await;
+                assert!(res.is_err());
+                assert!(format!("{}", res.unwrap_err()).contains("Access denied by user"));
+                Ok(()) as Result<(), ()>
+            };
             rt.block_on(fut).expect("block_on");
 
             _m.assert();

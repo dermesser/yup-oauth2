@@ -2,8 +2,7 @@ use crate::types::{ApplicationSecret, JsonError, RefreshResult, RequestError};
 
 use super::Token;
 use chrono::Utc;
-use futures::stream::Stream;
-use futures::Future;
+use futures_util::try_stream::TryStreamExt;
 use hyper;
 use hyper::header;
 use serde_json as json;
@@ -31,11 +30,12 @@ impl RefreshFlow {
     ///
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub fn refresh_token<'a, C: 'static + hyper::client::connect::Connect>(
+    pub async fn refresh_token<C: 'static + hyper::client::connect::Connect>(
         client: hyper::Client<C>,
         client_secret: ApplicationSecret,
         refresh_token: String,
-    ) -> impl 'a + Future<Item = RefreshResult, Error = RequestError> {
+    ) -> Result<RefreshResult, RequestError> {
+        // TODO: Does this function ever return RequestError? Maybe have it just return RefreshResult.
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
                 ("client_id", client_secret.client_id.clone()),
@@ -50,53 +50,42 @@ impl RefreshFlow {
             .body(hyper::Body::from(req))
             .unwrap(); // TODO: error handling
 
-        client
-            .request(request)
-            .then(|r| {
-                match r {
-                    Err(err) => return Err(RefreshResult::Error(err)),
-                    Ok(res) => {
-                        Ok(res
-                            .into_body()
-                            .concat2()
-                            .wait()
-                            .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
-                            .unwrap()) // TODO: error handling
-                    }
-                }
-            })
-            .then(move |maybe_json_str: Result<String, RefreshResult>| {
-                if let Err(e) = maybe_json_str {
-                    return Ok(e);
-                }
-                let json_str = maybe_json_str.unwrap();
-                #[derive(Deserialize)]
-                struct JsonToken {
-                    access_token: String,
-                    token_type: String,
-                    expires_in: i64,
-                }
-
-                match json::from_str::<JsonError>(&json_str) {
-                    Err(_) => {}
-                    Ok(res) => {
-                        return Ok(RefreshResult::RefreshError(
-                            res.error,
-                            res.error_description,
-                        ))
-                    }
-                }
-
-                let t: JsonToken = json::from_str(&json_str).unwrap();
-                Ok(RefreshResult::Success(Token {
-                    access_token: t.access_token,
-                    token_type: t.token_type,
-                    refresh_token: Some(refresh_token.to_string()),
-                    expires_in: None,
-                    expires_in_timestamp: Some(Utc::now().timestamp() + t.expires_in),
-                }))
-            })
-            .map_err(RequestError::Refresh)
+        let resp = match client.request(request).await {
+            Ok(resp) => resp,
+            Err(err) => return Ok(RefreshResult::Error(err)),
+        };
+        let body = match resp.into_body().try_concat().await {
+            Ok(body) => body,
+            Err(err) => return Ok(RefreshResult::Error(err)),
+        };
+        if let Ok(json_err) = json::from_slice::<JsonError>(&body) {
+            return Ok(RefreshResult::RefreshError(
+                json_err.error,
+                json_err.error_description,
+            ));
+        }
+        #[derive(Deserialize)]
+        struct JsonToken {
+            access_token: String,
+            token_type: String,
+            expires_in: i64,
+        }
+        let t: JsonToken = match json::from_slice(&body) {
+            Err(_) => {
+                return Ok(RefreshResult::RefreshError(
+                    "failed to deserialized json token from refresh response".to_owned(),
+                    None,
+                ))
+            }
+            Ok(token) => token,
+        };
+        Ok(RefreshResult::Success(Token {
+            access_token: t.access_token,
+            token_type: t.token_type,
+            refresh_token: Some(refresh_token.to_string()),
+            expires_in: None,
+            expires_in_timestamp: Some(Utc::now().timestamp() + t.expires_in),
+        }))
     }
 }
 
@@ -119,12 +108,12 @@ mod tests {
         app_secret.token_uri = format!("{}/token", server_url);
         let refresh_token = "my-refresh-token".to_string();
 
-        let https = HttpsConnector::new(1);
+        let https = HttpsConnector::new();
         let client = hyper::Client::builder()
             .keep_alive(false)
             .build::<_, hyper::Body>(https);
 
-        let mut rt = tokio::runtime::Builder::new()
+        let rt = tokio::runtime::Builder::new()
             .core_threads(1)
             .panic_handler(|e| std::panic::resume_unwind(e))
             .build()
@@ -138,13 +127,14 @@ mod tests {
                 .with_status(200)
                 .with_body(r#"{"access_token": "new-access-token", "token_type": "Bearer", "expires_in": 1234567}"#)
                 .create();
-            let fut = RefreshFlow::refresh_token(
-                client.clone(),
-                app_secret.clone(),
-                refresh_token.clone(),
-            )
-            .then(|rr| {
-                let rr = rr.unwrap();
+            let fut = async {
+                let rr = RefreshFlow::refresh_token(
+                    client.clone(),
+                    app_secret.clone(),
+                    refresh_token.clone(),
+                )
+                .await
+                .unwrap();
                 match rr {
                     RefreshResult::Success(tok) => {
                         assert_eq!("new-access-token", tok.access_token);
@@ -153,7 +143,7 @@ mod tests {
                     _ => panic!(format!("unexpected RefreshResult {:?}", rr)),
                 }
                 Ok(()) as Result<(), ()>
-            });
+            };
 
             rt.block_on(fut).expect("block_on");
             _m.assert();
@@ -167,18 +157,20 @@ mod tests {
                 .with_body(r#"{"error": "invalid_token"}"#)
                 .create();
 
-            let fut = RefreshFlow::refresh_token(client, app_secret, refresh_token).then(|rr| {
-                let rr = rr.unwrap();
+            let fut = async {
+                let rr = RefreshFlow::refresh_token(client, app_secret, refresh_token)
+                    .await
+                    .unwrap();
                 match rr {
                     RefreshResult::RefreshError(e, None) => {
                         assert_eq!(e, "invalid_token");
                     }
                     _ => panic!(format!("unexpected RefreshResult {:?}", rr)),
                 }
-                Ok(())
-            });
+                Ok(()) as Result<(), ()>
+            };
 
-            tokio::run(fut);
+            rt.block_on(fut).expect("block_on");
             _m.assert();
         }
     }

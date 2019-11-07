@@ -12,14 +12,14 @@
 //!
 
 use std::default::Default;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 use crate::authenticator::{DefaultHyperClient, HyperClientBuilder};
 use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
-use crate::types::{ApplicationSecret, GetToken, JsonError, RequestError, StringError, Token};
+use crate::types::{ApplicationSecret, GetToken, JsonError, RequestError, Token};
 
-use futures::stream::Stream;
-use futures::{future, prelude::*};
+use futures::prelude::*;
 use hyper::header;
 use url::form_urlencoded;
 
@@ -266,83 +266,95 @@ struct TokenResponse {
     expires_in: Option<i64>,
 }
 
-impl TokenResponse {
-    fn to_oauth_token(self) -> Token {
-        let expires_ts = chrono::Utc::now().timestamp() + self.expires_in.unwrap_or(0);
-
-        Token {
-            access_token: self.access_token.unwrap(),
-            token_type: self.token_type.unwrap(),
-            refresh_token: Some(String::new()),
-            expires_in: self.expires_in,
-            expires_in_timestamp: Some(expires_ts),
-        }
-    }
-}
-
 impl<'a, C: 'static + hyper::client::connect::Connect> ServiceAccountAccessImpl<C> {
     /// Send a request for a new Bearer token to the OAuth provider.
-    fn request_token(
+    async fn request_token(
         client: hyper::client::Client<C>,
         sub: Option<String>,
         key: ServiceAccountKey,
         scopes: Vec<String>,
-    ) -> impl Future<Item = Token, Error = RequestError> {
+    ) -> Result<Token, RequestError> {
         let mut claims = init_claims_from_key(&key, &scopes);
         claims.sub = sub.clone();
         let signed = JWT::new(claims)
             .sign(key.private_key.as_ref().unwrap())
-            .into_future();
-        signed
-            .map_err(RequestError::LowLevelError)
-            .map(|signed| {
-                form_urlencoded::Serializer::new(String::new())
-                    .extend_pairs(vec![
-                        ("grant_type".to_string(), GRANT_TYPE.to_string()),
-                        ("assertion".to_string(), signed),
-                    ])
-                    .finish()
-            })
-            .map(|rqbody| {
-                hyper::Request::post(key.token_uri.unwrap())
-                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-                    .body(hyper::Body::from(rqbody))
-                    .unwrap()
-            })
-            .and_then(move |request| client.request(request).map_err(RequestError::ClientError))
-            .and_then(|response| {
-                response
-                    .into_body()
-                    .concat2()
-                    .map_err(RequestError::ClientError)
-            })
-            .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
-            .and_then(|s| {
-                if let Ok(jse) = serde_json::from_str::<JsonError>(&s) {
-                    Err(RequestError::NegativeServerResponse(
-                        jse.error,
-                        jse.error_description,
-                    ))
-                } else {
-                    serde_json::from_str(&s).map_err(RequestError::JSONError)
+            .map_err(RequestError::LowLevelError)?;
+        let rqbody = form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(vec![
+                ("grant_type".to_string(), GRANT_TYPE.to_string()),
+                ("assertion".to_string(), signed),
+            ])
+            .finish();
+        let request = hyper::Request::post(key.token_uri.unwrap())
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(hyper::Body::from(rqbody))
+            .unwrap();
+        let response = client
+            .request(request)
+            .await
+            .map_err(RequestError::ClientError)?;
+        let body = response
+            .into_body()
+            .try_concat()
+            .await
+            .map_err(RequestError::ClientError)?;
+        if let Ok(jse) = serde_json::from_slice::<JsonError>(&body) {
+            return Err(RequestError::NegativeServerResponse(
+                jse.error,
+                jse.error_description,
+            ));
+        }
+        let token: TokenResponse =
+            serde_json::from_slice(&body).map_err(RequestError::JSONError)?;
+        let token = match token {
+            TokenResponse {
+                access_token: Some(access_token),
+                token_type: Some(token_type),
+                expires_in: Some(expires_in),
+                ..
+            } => {
+                let expires_ts = chrono::Utc::now().timestamp() + expires_in;
+                Token {
+                    access_token,
+                    token_type,
+                    refresh_token: None,
+                    expires_in: Some(expires_in),
+                    expires_in_timestamp: Some(expires_ts),
                 }
-            })
-            .then(|token: Result<TokenResponse, RequestError>| match token {
-                Err(e) => return Err(e),
-                Ok(token) => {
-                    if token.access_token.is_none()
-                        || token.token_type.is_none()
-                        || token.expires_in.is_none()
-                    {
-                        Err(RequestError::BadServerResponse(format!(
-                            "Token response lacks fields: {:?}",
-                            token
-                        )))
-                    } else {
-                        Ok(token.to_oauth_token())
-                    }
-                }
-            })
+            }
+            _ => {
+                return Err(RequestError::BadServerResponse(format!(
+                    "Token response lacks fields: {:?}",
+                    token
+                )))
+            }
+        };
+        Ok(token)
+    }
+
+    async fn get_token(&self, hash: u64, scopes: Vec<String>) -> Result<Token, RequestError> {
+        let cache = self.cache.clone();
+        match cache
+            .lock()
+            .unwrap()
+            .get(hash, &scopes.iter().map(|s| s.as_str()).collect())
+        {
+            Ok(Some(token)) if !token.expired() => return Ok(token),
+            _ => {}
+        }
+        let token = Self::request_token(
+            self.client.clone(),
+            self.sub.clone(),
+            self.key.clone(),
+            scopes.iter().map(|s| s.to_string()).collect(),
+        )
+        .await?;
+        let _ = cache.lock().unwrap().set(
+            hash,
+            &scopes.iter().map(|s| s.as_str()).collect(),
+            Some(token.clone()),
+        );
+        Ok(token)
     }
 }
 
@@ -350,61 +362,16 @@ impl<C: 'static> GetToken for ServiceAccountAccessImpl<C>
 where
     C: hyper::client::connect::Connect,
 {
-    fn token<I, T>(
-        &mut self,
+    fn token<'a, I, T>(
+        &'a self,
         scopes: I,
-    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
+    ) -> Pin<Box<dyn Future<Output = Result<Token, RequestError>> + Send + 'a>>
     where
         T: Into<String>,
         I: IntoIterator<Item = T>,
     {
         let (hash, scps0) = hash_scopes(scopes);
-        let cache = self.cache.clone();
-        let scps = scps0.clone();
-
-        let cache_lookup = futures::lazy(move || {
-            match cache
-                .lock()
-                .unwrap()
-                .get(hash, &scps.iter().map(|s| s.as_str()).collect())
-            {
-                Ok(Some(token)) => {
-                    if !token.expired() {
-                        return Ok(token);
-                    }
-                    return Err(StringError::new("expired token in cache", None));
-                }
-                Err(e) => return Err(StringError::new(format!("cache lookup error: {}", e), None)),
-                Ok(None) => return Err(StringError::new("no token in cache", None)),
-            }
-        });
-
-        let cache = self.cache.clone();
-        let req_token = Self::request_token(
-            self.client.clone(),
-            self.sub.clone(),
-            self.key.clone(),
-            scps0.iter().map(|s| s.to_string()).collect(),
-        )
-        .then(move |r| match r {
-            Ok(token) => {
-                let _ = cache.lock().unwrap().set(
-                    hash,
-                    &scps0.iter().map(|s| s.as_str()).collect(),
-                    Some(token.clone()),
-                );
-                Box::new(future::ok(token))
-            }
-            Err(e) => Box::new(future::err(e)),
-        });
-
-        Box::new(cache_lookup.then(|r| match r {
-            Ok(t) => Box::new(Ok(t).into_future())
-                as Box<dyn Future<Item = Token, Error = RequestError> + Send>,
-            Err(_) => {
-                Box::new(req_token) as Box<dyn Future<Item = Token, Error = RequestError> + Send>
-            }
-        }))
+        Box::pin(self.get_token(hash, scps0))
     }
 
     /// Returns an empty ApplicationSecret as tokens for service accounts don't need to be
@@ -413,7 +380,7 @@ where
         Default::default()
     }
 
-    fn api_key(&mut self) -> Option<String> {
+    fn api_key(&self) -> Option<String> {
         None
     }
 }
@@ -458,11 +425,11 @@ mod tests {
   "token_type": "Bearer"
 }"#;
 
-        let https = HttpsConnector::new(1);
+        let https = HttpsConnector::new();
         let client = hyper::Client::builder()
             .keep_alive(false)
             .build::<_, hyper::Body>(https);
-        let mut rt = tokio::runtime::Builder::new()
+        let rt = tokio::runtime::Builder::new()
             .core_threads(1)
             .panic_handler(|e| std::panic::resume_unwind(e))
             .build()
@@ -476,14 +443,15 @@ mod tests {
                 .with_body(json_response)
                 .expect(1)
                 .create();
-            let mut acc = ServiceAccountAccessImpl::new(client.clone(), key.clone(), None);
-            let fut = acc
-                .token(vec!["https://www.googleapis.com/auth/pubsub"])
-                .and_then(|tok| {
-                    assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
-                    assert_eq!(Some(3600), tok.expires_in);
-                    Ok(())
-                });
+            let acc = ServiceAccountAccessImpl::new(client.clone(), key.clone(), None);
+            let fut = async {
+                let tok = acc
+                    .token(vec!["https://www.googleapis.com/auth/pubsub"])
+                    .await?;
+                assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
+                assert_eq!(Some(3600), tok.expires_in);
+                Ok(()) as Result<(), RequestError>
+            };
             rt.block_on(fut).expect("block_on");
 
             assert!(acc
@@ -497,13 +465,14 @@ mod tests {
                 .unwrap()
                 .is_some());
             // Test that token is in cache (otherwise mock will tell us)
-            let fut = acc
-                .token(vec!["https://www.googleapis.com/auth/pubsub"])
-                .and_then(|tok| {
-                    assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
-                    assert_eq!(Some(3600), tok.expires_in);
-                    Ok(())
-                });
+            let fut = async {
+                let tok = acc
+                    .token(vec!["https://www.googleapis.com/auth/pubsub"])
+                    .await?;
+                assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
+                assert_eq!(Some(3600), tok.expires_in);
+                Ok(()) as Result<(), RequestError>
+            };
             rt.block_on(fut).expect("block_on 2");
 
             _m.assert();
@@ -515,19 +484,20 @@ mod tests {
                 .with_header("content-type", "text/json")
                 .with_body(bad_json_response)
                 .create();
-            let mut acc = ServiceAccountAccess::new(key.clone())
+            let acc = ServiceAccountAccess::new(key.clone())
                 .hyper_client(client.clone())
                 .build();
-            let fut = acc
-                .token(vec!["https://www.googleapis.com/auth/pubsub"])
-                .then(|result| {
-                    assert!(result.is_err());
-                    Ok(()) as Result<(), ()>
-                });
+            let fut = async {
+                let result = acc
+                    .token(vec!["https://www.googleapis.com/auth/pubsub"])
+                    .await;
+                assert!(result.is_err());
+                Ok(()) as Result<(), ()>
+            };
             rt.block_on(fut).expect("block_on");
             _m.assert();
         }
-        rt.shutdown_on_idle().wait().expect("shutdown");
+        rt.shutdown_on_idle();
     }
 
     // Valid but deactivated key.
@@ -538,17 +508,21 @@ mod tests {
     #[allow(dead_code)]
     fn test_service_account_e2e() {
         let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
-        let https = HttpsConnector::new(4);
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let client = hyper::Client::builder()
-            .executor(runtime.executor())
-            .build(https);
-        let mut acc = ServiceAccountAccess::new(key).hyper_client(client).build();
-        println!(
-            "{:?}",
-            acc.token(vec!["https://www.googleapis.com/auth/pubsub"])
-                .wait()
-        );
+        let https = HttpsConnector::new();
+        let client = hyper::Client::builder().build(https);
+        let acc = ServiceAccountAccess::new(key).hyper_client(client).build();
+        let rt = tokio::runtime::Builder::new()
+            .core_threads(1)
+            .panic_handler(|e| std::panic::resume_unwind(e))
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            println!(
+                "{:?}",
+                acc.token(vec!["https://www.googleapis.com/auth/pubsub"])
+                    .await
+            );
+        });
     }
 
     #[test]

@@ -47,7 +47,8 @@
 //!
 //! use std::path::Path;
 //!
-//! fn main() {
+//! #[tokio::main]
+//! async fn main() {
 //!     // Read application secret from a file. Sometimes it's easier to compile it directly into
 //!     // the binary. The clientsecret file contains JSON like `{"installed":{"client_id": ... }}`
 //!     let secret = yup_oauth2::read_application_secret(Path::new("clientsecret.json"))
@@ -69,14 +70,10 @@
 //!
 //!     // token(<scopes>) is the one important function of this crate; it does everything to
 //!     // obtain a token that can be sent e.g. as Bearer token.
-//!     let tok = auth.token(scopes);
-//!     // Finally we print the token.
-//!     let fut = tok.map_err(|e| println!("error: {:?}", e)).and_then(|t| {
-//!         println!("The token is {:?}", t);
-//!         Ok(())
-//!     });
-//!
-//!     tokio::run(fut)
+//!     match auth.token(scopes).await {
+//!         Ok(token) => println!("The token is {:?}", token),
+//!         Err(e) => println!("error: {:?}", e),
+//!     }
 //! }
 //! ```
 //!

@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 yup-oauth2 = { path = "../../" }
-hyper = "0.12"
-hyper-rustls = "0.17"
-futures = "0.1"
-tokio = "0.1"
+hyper = {version = "0.13.0-alpha.4", features = ["unstable-stream"]}
+hyper-rustls = "=0.18.0-alpha.2"
+futures-preview = "=0.3.0-alpha.19"
+tokio = "=0.2.0-alpha.6"

@@ -10,7 +10,9 @@ use std::fmt;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io;
-use std::io::{Read, Write};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use crate::types::Token;
 use itertools::Itertools;
@@ -20,13 +22,13 @@ use itertools::Itertools;
 /// should be stored or retrieved.
 /// For completeness, the underlying, sorted scopes are provided as well. They might be
 /// useful for presentation to the user.
-pub trait TokenStorage {
+pub trait TokenStorage: Send + Sync {
     type Error: 'static + Error + Send + Sync;
 
     /// If `token` is None, it is invalid or revoked and should be removed from storage.
     /// Otherwise, it should be saved.
     fn set(
-        &mut self,
+        &self,
         scope_hash: u64,
         scopes: &Vec<&str>,
         token: Option<Token>,
@@ -69,7 +71,7 @@ impl fmt::Display for NullError {
 
 impl TokenStorage for NullStorage {
     type Error = NullError;
-    fn set(&mut self, _: u64, _: &Vec<&str>, _: Option<Token>) -> Result<(), NullError> {
+    fn set(&self, _: u64, _: &Vec<&str>, _: Option<Token>) -> Result<(), NullError> {
         Ok(())
     }
     fn get(&self, _: u64, _: &Vec<&str>) -> Result<Option<Token>, NullError> {
@@ -80,7 +82,7 @@ impl TokenStorage for NullStorage {
 /// A storage that remembers values for one session only.
 #[derive(Debug, Default)]
 pub struct MemoryStorage {
-    tokens: Vec<JSONToken>,
+    tokens: Mutex<Vec<JSONToken>>,
 }
 
 impl MemoryStorage {
@@ -93,19 +95,20 @@ impl TokenStorage for MemoryStorage {
     type Error = NullError;
 
     fn set(
-        &mut self,
+        &self,
         scope_hash: u64,
         scopes: &Vec<&str>,
         token: Option<Token>,
     ) -> Result<(), NullError> {
-        let matched = self.tokens.iter().find_position(|x| x.hash == scope_hash);
-        if let Some(_) = matched {
+        let mut tokens = self.tokens.lock().expect("poisoned mutex");
+        let matched = tokens.iter().find_position(|x| x.hash == scope_hash);
+        if let Some((idx, _)) = matched {
             self.tokens.retain(|x| x.hash != scope_hash);
         }
 
         match token {
             Some(t) => {
-                self.tokens.push(JSONToken {
+                tokens.push(JSONToken {
                     hash: scope_hash,
                     scopes: Some(scopes.iter().map(|x| x.to_string()).collect()),
                     token: t.clone(),
@@ -120,7 +123,8 @@ impl TokenStorage for MemoryStorage {
     fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, NullError> {
         let scopes: Vec<_> = scopes.iter().sorted().unique().collect();
 
-        for t in &self.tokens {
+        let tokens = self.tokens.lock().expect("poisoned mutex");
+        for t in tokens.iter() {
             if let Some(token_scopes) = &t.scopes {
                 let matched = token_scopes
                     .iter()
@@ -174,58 +178,32 @@ struct JSONTokens {
 /// Serializes tokens to a JSON file on disk.
 #[derive(Default)]
 pub struct DiskTokenStorage {
-    location: String,
-    tokens: Vec<JSONToken>,
+    location: PathBuf,
+    tokens: Mutex<Vec<JSONToken>>,
 }
 
 impl DiskTokenStorage {
-    pub fn new<S: AsRef<str>>(location: S) -> Result<DiskTokenStorage, io::Error> {
-        let mut dts = DiskTokenStorage {
-            location: location.as_ref().to_owned(),
-            tokens: Vec::new(),
+    pub fn new<S: Into<PathBuf>>(location: S) -> Result<DiskTokenStorage, io::Error> {
+        let filename = location.into();
+        let tokens = match load_from_file(&filename) {
+            Ok(tokens) => tokens,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Vec::new(),
+            Err(e) => return Err(e),
         };
-
-        // best-effort
-        let read_result = dts.load_from_file();
-
-        match read_result {
-            Result::Ok(()) => Result::Ok(dts),
-            Result::Err(e) => {
-                match e.kind() {
-                    io::ErrorKind::NotFound => Result::Ok(dts), // File not found; ignore and create new one
-                    _ => Result::Err(e),                        // e.g. PermissionDenied
-                }
-            }
-        }
+        Ok(DiskTokenStorage {
+            location: filename,
+            tokens: Mutex::new(tokens),
+        })
     }
 
-    fn load_from_file(&mut self) -> Result<(), io::Error> {
-        let mut f = fs::OpenOptions::new().read(true).open(&self.location)?;
-        let mut contents = String::new();
-
-        match f.read_to_string(&mut contents) {
-            Result::Err(e) => return Result::Err(e),
-            Result::Ok(_sz) => (),
-        }
-
-        let tokens: JSONTokens;
-
-        match serde_json::from_str(&contents) {
-            Result::Err(e) => return Result::Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-            Result::Ok(t) => tokens = t,
-        }
-
-        for t in tokens.tokens {
-            self.tokens.push(t);
-        }
-        return Result::Ok(());
-    }
-
-    pub fn dump_to_file(&mut self) -> Result<(), io::Error> {
+    pub fn dump_to_file(&self) -> Result<(), io::Error> {
         let mut jsontokens = JSONTokens { tokens: Vec::new() };
 
-        for token in self.tokens.iter() {
-            jsontokens.tokens.push((*token).clone());
+        {
+            let tokens = self.tokens.lock().expect("mutex poisoned");
+            for token in tokens.iter() {
+                jsontokens.tokens.push((*token).clone());
+            }
         }
 
         let serialized;
@@ -235,6 +213,7 @@ impl DiskTokenStorage {
             Result::Ok(s) => serialized = s,
         }
 
+        // TODO: Write to disk asynchronously so that we don't stall the eventloop if invoked in async context.
         let mut f = fs::OpenOptions::new()
             .create(true)
             .write(true)
@@ -244,28 +223,38 @@ impl DiskTokenStorage {
     }
 }
 
+fn load_from_file(filename: &Path) -> Result<Vec<JSONToken>, io::Error> {
+    let contents = std::fs::read_to_string(filename)?;
+    let container: JSONTokens = serde_json::from_str(&contents)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    Ok(container.tokens)
+}
+
 impl TokenStorage for DiskTokenStorage {
     type Error = io::Error;
     fn set(
-        &mut self,
+        &self,
         scope_hash: u64,
         scopes: &Vec<&str>,
         token: Option<Token>,
     ) -> Result<(), Self::Error> {
-        let matched = self.tokens.iter().find_position(|x| x.hash == scope_hash);
-        if let Some(_) = matched {
-            self.tokens.retain(|x| x.hash != scope_hash);
-        }
+        {
+            let mut tokens = self.tokens.lock().expect("poisoned mutex");
+            let matched = tokens.iter().find_position(|x| x.hash == scope_hash);
+            if let Some((idx, _)) = matched {
+                self.tokens.retain(|x| x.hash != scope_hash);
+            }
 
-        match token {
-            None => (),
-            Some(t) => {
-                self.tokens.push(JSONToken {
-                    hash: scope_hash,
-                    scopes: Some(scopes.iter().map(|x| x.to_string()).collect()),
-                    token: t.clone(),
-                });
-                ()
+            match token {
+                None => (),
+                Some(t) => {
+                    tokens.push(JSONToken {
+                        hash: scope_hash,
+                        scopes: Some(scopes.iter().map(|x| x.to_string()).collect()),
+                        token: t.clone(),
+                    });
+                    ()
+                }
             }
         }
         self.dump_to_file()
@@ -273,7 +262,8 @@ impl TokenStorage for DiskTokenStorage {
     fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, Self::Error> {
         let scopes: Vec<_> = scopes.iter().sorted().unique().collect();
 
-        for t in &self.tokens {
+        let tokens = self.tokens.lock().expect("poisoned mutex");
+        for t in tokens.iter() {
             if let Some(token_scopes) = &t.scopes {
                 let matched = token_scopes
                     .iter()

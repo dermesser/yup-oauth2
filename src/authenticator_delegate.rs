@@ -2,14 +2,15 @@ use hyper;
 
 use std::error::Error;
 use std::fmt;
-use std::io;
+use std::pin::Pin;
 
 use crate::types::{PollError, RequestError};
 
 use chrono::{DateTime, Local, Utc};
 use std::time::Duration;
 
-use futures::{future, prelude::*};
+use futures::prelude::*;
+use tio::AsyncBufReadExt;
 use tokio::io as tio;
 
 /// A utility type to indicate how operations DeviceFlowHelper operations should be retried
@@ -83,7 +84,7 @@ pub trait AuthenticatorDelegate: Clone {
     /// This can be useful if the underlying `TokenStorage` may fail occasionally.
     /// if `is_set` is true, the failure resulted from `TokenStorage.set(...)`. Otherwise,
     /// it was `TokenStorage.get(...)`
-    fn token_storage_failure(&mut self, is_set: bool, _: &dyn Error) -> Retry {
+    fn token_storage_failure(&mut self, is_set: bool, _: &(dyn Error + Send + Sync)) -> Retry {
         let _ = is_set;
         Retry::Abort
     }
@@ -114,11 +115,11 @@ pub trait FlowDelegate: Clone {
     /// Called if the request code is expired. You will have to start over in this case.
     /// This will be the last call the delegate receives.
     /// Given `DateTime` is the expiration date
-    fn expired(&mut self, _: &DateTime<Utc>) {}
+    fn expired(&self, _: &DateTime<Utc>) {}
 
     /// Called if the user denied access. You would have to start over.
     /// This will be the last call the delegate receives.
-    fn denied(&mut self) {}
+    fn denied(&self) {}
 
     /// Called as long as we are waiting for the user to authorize us.
     /// Can be used to print progress information, or decide to time-out.
@@ -127,7 +128,7 @@ pub trait FlowDelegate: Clone {
     /// # Notes
     /// * Only used in `DeviceFlow`. Return value will only be used if it
     /// is larger than the interval desired by the server.
-    fn pending(&mut self, _: &PollInformation) -> Retry {
+    fn pending(&self, _: &PollInformation) -> Retry {
         Retry::After(Duration::from_secs(5))
     }
 
@@ -140,7 +141,7 @@ pub trait FlowDelegate: Clone {
     /// # Notes
     /// * Will be called exactly once, provided we didn't abort during `request_code` phase.
     /// * Will only be called if the Authenticator's flow_type is `FlowType::Device`.
-    fn present_user_code(&mut self, pi: &PollInformation) {
+    fn present_user_code(&self, pi: &PollInformation) {
         println!(
             "Please enter {} at {} and grant access to this application",
             pi.user_code, pi.verification_url
@@ -156,35 +157,44 @@ pub trait FlowDelegate: Clone {
     /// We need the user to navigate to a URL using their browser and potentially paste back a code
     /// (or maybe not). Whether they have to enter a code depends on the InstalledFlowReturnMethod
     /// used.
-    fn present_user_url<S: AsRef<str> + fmt::Display>(
-        &mut self,
+    fn present_user_url<'a, S: AsRef<str> + fmt::Display + Send + Sync + 'a>(
+        &'a self,
         url: S,
         need_code: bool,
-    ) -> Box<dyn Future<Item = Option<String>, Error = Box<dyn Error + Send>> + Send> {
-        if need_code {
-            println!(
-                "Please direct your browser to {}, follow the instructions and enter the \
-                 code displayed here: ",
-                url
-            );
+    ) -> Pin<Box<dyn Future<Output = Result<String, Box<dyn Error + Send + Sync>>> + Send + 'a>>
+    {
+        Box::pin(present_user_url(url, need_code))
+    }
+}
 
-            Box::new(
-                tio::lines(io::BufReader::new(tio::stdin()))
-                    .into_future()
-                    .map_err(|(e, _)| {
-                        println!("{:?}", e);
-                        Box::new(e) as Box<dyn Error + Send>
-                    })
-                    .and_then(|(l, _)| Ok(l)),
-            )
-        } else {
-            println!(
-                "Please direct your browser to {} and follow the instructions displayed \
-                 there.",
-                url
-            );
-            Box::new(future::ok(None))
+async fn present_user_url<S: AsRef<str> + fmt::Display>(
+    url: S,
+    need_code: bool,
+) -> Result<String, Box<dyn Error + Send + Sync>> {
+    if need_code {
+        println!(
+            "Please direct your browser to {}, follow the instructions and enter the \
+             code displayed here: ",
+            url
+        );
+        let mut user_input = String::new();
+        match tio::BufReader::new(tio::stdin())
+            .read_line(&mut user_input)
+            .await
+        {
+            Err(err) => {
+                println!("{:?}", err);
+                Err(Box::new(err) as Box<dyn Error + Send + Sync>)
+            }
+            Ok(_) => Ok(user_input),
         }
+    } else {
+        println!(
+            "Please direct your browser to {} and follow the instructions displayed \
+             there.",
+            url
+        );
+        Ok(String::new())
     }
 }
 
