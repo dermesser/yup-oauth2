@@ -29,7 +29,7 @@ struct AuthenticatorImpl<
 > {
     client: hyper::Client<C>,
     inner: Arc<T>,
-    store: Arc<S>,
+    store: S,
     delegate: AD,
 }
 
@@ -173,7 +173,7 @@ where
         C::Connector: 'static + Clone + Send,
     {
         let client = self.client.build_hyper_client();
-        let store = Arc::new(self.store?);
+        let store = self.store?;
         let inner = Arc::new(self.token_getter.build_token_getter(client.clone()));
 
         Ok(AuthenticatorImpl {
@@ -197,7 +197,7 @@ where
         T: AsRef<str> + Sync,
     {
         let scope_key = hash_scopes(scopes);
-        let store = self.store.clone();
+        let store = &self.store;
         let delegate = &self.delegate;
         let client = self.client.clone();
         let appsecret = self.inner.application_secret();
@@ -213,7 +213,6 @@ where
                     }
                     // Implement refresh flow.
                     let refresh_token = t.refresh_token.clone();
-                    let store = store.clone();
                     let rr = RefreshFlow::refresh_token(
                         client.clone(),
                         appsecret,
@@ -254,7 +253,6 @@ where
                     }
                 }
                 Ok(None) => {
-                    let store = store.clone();
                     let t = gettoken.token(scopes).await?;
                     if let Err(e) = store.set(
                         scope_key,
