@@ -66,18 +66,25 @@ impl RefreshFlow {
         }
 
         match serde_json::from_slice::<JsonErrorOr<JsonToken>>(&body) {
-            Err(_) => Ok(RefreshResult::RefreshError("failed to deserialized json token from refresh response".to_owned(), None)),
-            Ok(JsonErrorOr::Err(json_err)) => Ok(RefreshResult::RefreshError(json_err.error, json_err.error_description)),
-            Ok(JsonErrorOr::Data(JsonToken{access_token, token_type, expires_in})) => {
-                    Ok(RefreshResult::Success(
-                        Token{
-                            access_token,
-                            token_type,
-                            refresh_token: Some(refresh_token.to_string()),
-                            expires_in: None,
-                            expires_in_timestamp: Some(Utc::now().timestamp() + expires_in),
-                        }))
-            },
+            Err(_) => Ok(RefreshResult::RefreshError(
+                "failed to deserialized json token from refresh response".to_owned(),
+                None,
+            )),
+            Ok(JsonErrorOr::Err(json_err)) => Ok(RefreshResult::RefreshError(
+                json_err.error,
+                json_err.error_description,
+            )),
+            Ok(JsonErrorOr::Data(JsonToken {
+                access_token,
+                token_type,
+                expires_in,
+            })) => Ok(RefreshResult::Success(Token {
+                access_token,
+                token_type,
+                refresh_token: Some(refresh_token.to_string()),
+                expires_in: None,
+                expires_in_timestamp: Some(Utc::now().timestamp() + expires_in),
+            })),
         }
     }
 }
@@ -121,13 +128,9 @@ mod tests {
                 .with_body(r#"{"access_token": "new-access-token", "token_type": "Bearer", "expires_in": 1234567}"#)
                 .create();
             let fut = async {
-                let rr = RefreshFlow::refresh_token(
-                    &client,
-                    &app_secret,
-                    refresh_token,
-                )
-                .await
-                .unwrap();
+                let rr = RefreshFlow::refresh_token(&client, &app_secret, refresh_token)
+                    .await
+                    .unwrap();
                 match rr {
                     RefreshResult::Success(tok) => {
                         assert_eq!("new-access-token", tok.access_token);

@@ -202,10 +202,7 @@ where
         let gettoken = &self.inner;
         let appsecret = gettoken.application_secret();
         loop {
-            match store.get(
-                scope_key,
-                scopes,
-            ) {
+            match store.get(scope_key, scopes) {
                 Ok(Some(t)) => {
                     if !t.expired() {
                         return Ok(t);
@@ -233,11 +230,7 @@ where
                             return Err(RequestError::Refresh(rr));
                         }
                         RefreshResult::Success(t) => {
-                            let x = store.set(
-                                scope_key,
-                                scopes,
-                                Some(t.clone()),
-                            );
+                            let x = store.set(scope_key, scopes, Some(t.clone()));
                             if let Err(e) = x {
                                 match delegate.token_storage_failure(true, &e) {
                                     Retry::Skip => return Ok(t),
@@ -252,11 +245,7 @@ where
                 }
                 Ok(None) => {
                     let t = gettoken.token(scopes).await?;
-                    if let Err(e) = store.set(
-                        scope_key,
-                        scopes,
-                        Some(t.clone()),
-                    ) {
+                    if let Err(e) = store.set(scope_key, scopes, Some(t.clone())) {
                         match delegate.token_storage_failure(true, &e) {
                             Retry::Skip => return Ok(t),
                             Retry::Abort => return Err(RequestError::Cache(Box::new(e))),

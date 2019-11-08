@@ -3,16 +3,14 @@ use std::time::Duration;
 
 use ::log::{error, log};
 use chrono::{self, Utc};
-use futures::{prelude::*};
+use futures::prelude::*;
 use hyper;
 use hyper::header;
 use serde_json as json;
 use url::form_urlencoded;
 
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate, PollInformation, Retry};
-use crate::types::{
-    ApplicationSecret, GetToken, JsonErrorOr, PollError, RequestError, Token,
-};
+use crate::types::{ApplicationSecret, GetToken, JsonErrorOr, PollError, RequestError, Token};
 
 pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/oauth2/device/code";
 
@@ -128,10 +126,7 @@ where
 {
     /// Essentially what `GetToken::token` does: Retrieve a token for the given scopes without
     /// caching.
-    pub async fn retrieve_device_token<T>(
-        &self,
-        scopes: &[T],
-    ) -> Result<Token, RequestError>
+    pub async fn retrieve_device_token<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
     where
         T: AsRef<str>,
     {

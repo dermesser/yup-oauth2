@@ -65,14 +65,14 @@ impl TokenStorage for NullStorage {
     type Error = std::convert::Infallible;
     fn set<T>(&self, _: u64, _: &[T], _: Option<Token>) -> Result<(), Self::Error>
     where
-        T: AsRef<str>
+        T: AsRef<str>,
     {
         Ok(())
     }
 
     fn get<T>(&self, _: u64, _: &[T]) -> Result<Option<Token>, Self::Error>
     where
-        T: AsRef<str>
+        T: AsRef<str>,
     {
         Ok(None)
     }
@@ -93,14 +93,9 @@ impl MemoryStorage {
 impl TokenStorage for MemoryStorage {
     type Error = std::convert::Infallible;
 
-    fn set<T>(
-        &self,
-        scope_hash: u64,
-        scopes: &[T],
-        token: Option<Token>,
-    ) -> Result<(), Self::Error>
+    fn set<T>(&self, scope_hash: u64, scopes: &[T], token: Option<Token>) -> Result<(), Self::Error>
     where
-        T: AsRef<str>
+        T: AsRef<str>,
     {
         let mut tokens = self.tokens.lock().expect("poisoned mutex");
         let matched = tokens.iter().find_position(|x| x.hash == scope_hash);
@@ -124,7 +119,7 @@ impl TokenStorage for MemoryStorage {
 
     fn get<T>(&self, scope_hash: u64, scopes: &[T]) -> Result<Option<Token>, Self::Error>
     where
-        T: AsRef<str>
+        T: AsRef<str>,
     {
         let tokens = self.tokens.lock().expect("poisoned mutex");
         Ok(token_for_scopes(&tokens, scope_hash, scopes))
@@ -222,14 +217,9 @@ fn load_from_file(filename: &Path) -> Result<Vec<JSONToken>, io::Error> {
 
 impl TokenStorage for DiskTokenStorage {
     type Error = io::Error;
-    fn set<T>(
-        &self,
-        scope_hash: u64,
-        scopes: &[T],
-        token: Option<Token>,
-    ) -> Result<(), Self::Error>
+    fn set<T>(&self, scope_hash: u64, scopes: &[T], token: Option<Token>) -> Result<(), Self::Error>
     where
-        T: AsRef<str>
+        T: AsRef<str>,
     {
         {
             let mut tokens = self.tokens.lock().expect("poisoned mutex");
@@ -255,7 +245,7 @@ impl TokenStorage for DiskTokenStorage {
 
     fn get<T>(&self, scope_hash: u64, scopes: &[T]) -> Result<Option<Token>, Self::Error>
     where
-        T: AsRef<str>
+        T: AsRef<str>,
     {
         let tokens = self.tokens.lock().expect("poisoned mutex");
         Ok(token_for_scopes(&tokens, scope_hash, scopes))
@@ -268,11 +258,14 @@ where
 {
     for t in tokens.iter() {
         if let Some(token_scopes) = &t.scopes {
-            if scopes.iter().all(|s| token_scopes.iter().any(|t| t == s.as_ref())) {
+            if scopes
+                .iter()
+                .all(|s| token_scopes.iter().any(|t| t == s.as_ref()))
+            {
                 return Some(t.token.clone());
             }
         } else if scope_hash == t.hash {
-            return Some(t.token.clone())
+            return Some(t.token.clone());
         }
     }
     None
@@ -288,10 +281,16 @@ mod tests {
         assert_eq!(hash_scopes(&["foo", "bar"]), hash_scopes(&["foo", "bar"]));
         // The hash should be order independent.
         assert_eq!(hash_scopes(&["bar", "foo"]), hash_scopes(&["foo", "bar"]));
-        assert_eq!(hash_scopes(&["bar", "baz", "bat"]), hash_scopes(&["baz", "bar", "bat"]));
+        assert_eq!(
+            hash_scopes(&["bar", "baz", "bat"]),
+            hash_scopes(&["baz", "bar", "bat"])
+        );
 
         // Ensure hashes differ when the contents are different by more than
         // just order.
-        assert_ne!(hash_scopes(&["foo", "bar", "baz"]), hash_scopes(&["foo", "bar"]));
+        assert_ne!(
+            hash_scopes(&["foo", "bar", "baz"]),
+            hash_scopes(&["foo", "bar"])
+        );
     }
 }

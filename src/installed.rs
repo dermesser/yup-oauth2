@@ -17,7 +17,7 @@ use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate};
-use crate::types::{ApplicationSecret, GetToken, RequestError, Token, JsonErrorOr};
+use crate::types::{ApplicationSecret, GetToken, JsonErrorOr, RequestError, Token};
 
 const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
 
@@ -40,10 +40,7 @@ where
     vec![
         format!("?scope={}", scopes_string),
         format!("&access_type=offline"),
-        format!(
-            "&redirect_uri={}",
-            redirect_uri.unwrap_or(OOB_REDIRECT_URI)
-        ),
+        format!("&redirect_uri={}", redirect_uri.unwrap_or(OOB_REDIRECT_URI)),
         format!("&response_type=code"),
         format!("&client_id={}", client_id),
     ]
@@ -167,10 +164,7 @@ where
     /// . Return that token
     ///
     /// It's recommended not to use the DefaultFlowDelegate, but a specialized one.
-    async fn obtain_token<T>(
-        &self,
-        scopes: &[T],
-    ) -> Result<Token, RequestError>
+    async fn obtain_token<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
     where
         T: AsRef<str>,
     {
@@ -281,7 +275,12 @@ where
 
         match serde_json::from_slice::<JsonErrorOr<JSONTokenResponse>>(&body)? {
             JsonErrorOr::Err(err) => Err(err.into()),
-            JsonErrorOr::Data(JSONTokenResponse{access_token, refresh_token, token_type, expires_in}) => {
+            JsonErrorOr::Data(JSONTokenResponse {
+                access_token,
+                refresh_token,
+                token_type,
+                expires_in,
+            }) => {
                 let mut token = Token {
                     access_token,
                     refresh_token: Some(refresh_token),
@@ -465,8 +464,8 @@ mod tests {
     use std::fmt;
     use std::str::FromStr;
 
-    use hyper::Uri;
     use hyper::client::connect::HttpConnector;
+    use hyper::Uri;
     use hyper_rustls::HttpsConnector;
     use mockito::{self, mock};
     use tokio;
@@ -539,10 +538,9 @@ mod tests {
             .build::<_, hyper::Body>(https);
 
         let fd = FD("authorizationcode".to_string(), client.clone());
-        let inf =
-            InstalledFlow::new(app_secret.clone(), InstalledFlowReturnMethod::Interactive)
-                .delegate(fd)
-                .build_token_getter(client.clone());
+        let inf = InstalledFlow::new(app_secret.clone(), InstalledFlowReturnMethod::Interactive)
+            .delegate(fd)
+            .build_token_getter(client.clone());
 
         let rt = tokio::runtime::Builder::new()
             .core_threads(1)
@@ -575,13 +573,12 @@ mod tests {
         }
         // Successful path with HTTP redirect.
         {
-            let inf =
-                InstalledFlow::new(app_secret, InstalledFlowReturnMethod::HTTPRedirect(8081))
-                    .delegate(FD(
-                        "authorizationcodefromlocalserver".to_string(),
-                        client.clone(),
-                    ))
-                    .build_token_getter(client.clone());
+            let inf = InstalledFlow::new(app_secret, InstalledFlowReturnMethod::HTTPRedirect(8081))
+                .delegate(FD(
+                    "authorizationcodefromlocalserver".to_string(),
+                    client.clone(),
+                ))
+                .build_token_getter(client.clone());
             let _m = mock("POST", "/token")
             .match_body(mockito::Matcher::Regex(".*code=authorizationcodefromlocalserver.*client_id=9022167.*".to_string()))
             .with_body(r#"{"access_token": "accesstoken", "refresh_token": "refreshtoken", "token_type": "Bearer", "expires_in": 12345678}"#)

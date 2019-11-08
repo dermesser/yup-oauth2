@@ -264,7 +264,7 @@ struct TokenResponse {
     expires_in: Option<i64>,
 }
 
-impl<C> ServiceAccountAccessImpl<C> 
+impl<C> ServiceAccountAccessImpl<C>
 where
     C: hyper::client::connect::Connect + 'static,
 {
@@ -303,9 +303,7 @@ where
             .await
             .map_err(RequestError::ClientError)?;
         match serde_json::from_slice::<JsonErrorOr<TokenResponse>>(&body)? {
-            JsonErrorOr::Err(err) => {
-                Err(err.into())
-            },
+            JsonErrorOr::Err(err) => Err(err.into()),
             JsonErrorOr::Data(TokenResponse {
                 access_token: Some(access_token),
                 token_type: Some(token_type),
@@ -320,13 +318,11 @@ where
                     expires_in: Some(expires_in),
                     expires_in_timestamp: Some(expires_ts),
                 })
-            },
-            JsonErrorOr::Data(token) => {
-                Err(RequestError::BadServerResponse(format!(
-                    "Token response lacks fields: {:?}",
-                    token
-                )))
             }
+            JsonErrorOr::Data(token) => Err(RequestError::BadServerResponse(format!(
+                "Token response lacks fields: {:?}",
+                token
+            ))),
         }
     }
 
@@ -336,11 +332,7 @@ where
     {
         let hash = hash_scopes(scopes);
         let cache = &self.cache;
-        match cache
-            .lock()
-            .unwrap()
-            .get(hash, scopes)
-        {
+        match cache.lock().unwrap().get(hash, scopes) {
             Ok(Some(token)) if !token.expired() => return Ok(token),
             _ => {}
         }
@@ -351,11 +343,7 @@ where
             scopes,
         )
         .await?;
-        let _ = cache.lock().unwrap().set(
-            hash,
-            scopes,
-            Some(token.clone()),
-        );
+        let _ = cache.lock().unwrap().set(hash, scopes, Some(token.clone()));
         Ok(token)
     }
 }
@@ -489,9 +477,7 @@ mod tests {
                 .hyper_client(client.clone())
                 .build();
             let fut = async {
-                let result = acc
-                    .token(&["https://www.googleapis.com/auth/pubsub"])
-                    .await;
+                let result = acc.token(&["https://www.googleapis.com/auth/pubsub"]).await;
                 assert!(result.is_err());
                 Ok(()) as Result<(), ()>
             };
@@ -520,8 +506,7 @@ mod tests {
         rt.block_on(async {
             println!(
                 "{:?}",
-                acc.token(&["https://www.googleapis.com/auth/pubsub"])
-                    .await
+                acc.token(&["https://www.googleapis.com/auth/pubsub"]).await
             );
         });
     }

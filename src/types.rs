@@ -358,7 +358,7 @@ pub struct ApplicationSecret {
 
 impl ApplicationSecret {
     pub const fn empty() -> Self {
-        ApplicationSecret{
+        ApplicationSecret {
             client_id: String::new(),
             client_secret: String::new(),
             token_uri: String::new(),

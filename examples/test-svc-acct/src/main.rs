@@ -10,14 +10,8 @@ async fn main() {
     let sa = yup_oauth2::ServiceAccountAccess::new(creds).build();
     let scopes = &["https://www.googleapis.com/auth/pubsub"];
 
-    let tok = sa
-        .token(scopes)
-        .await
-        .unwrap();
+    let tok = sa.token(scopes).await.unwrap();
     println!("token is: {:?}", tok);
-    let tok = sa
-        .token(scopes)
-        .await
-        .unwrap();
+    let tok = sa.token(scopes).await.unwrap();
     println!("cached token is {:?} and should be identical", tok);
 }

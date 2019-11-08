@@ -100,6 +100,6 @@ pub use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 pub use crate::service_account::*;
 pub use crate::storage::{DiskTokenStorage, MemoryStorage, NullStorage, TokenStorage};
 pub use crate::types::{
-    ApplicationSecret, ConsoleApplicationSecret, GetToken, PollError, RefreshResult,
-    RequestError, Scheme, Token, TokenType,
+    ApplicationSecret, ConsoleApplicationSecret, GetToken, PollError, RefreshResult, RequestError,
+    Scheme, Token, TokenType,
 };
