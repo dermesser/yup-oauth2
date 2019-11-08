@@ -201,7 +201,7 @@ where
         loop {
             match store.get(
                 scope_key.clone(),
-                &scopes.iter().map(|s| s.as_str()).collect(),
+                &scopes,
             ) {
                 Ok(Some(t)) => {
                     if !t.expired() {
@@ -210,7 +210,6 @@ where
                     // Implement refresh flow.
                     let refresh_token = t.refresh_token.clone();
                     let store = store.clone();
-                    let scopes = scopes.clone();
                     let rr = RefreshFlow::refresh_token(
                         client.clone(),
                         appsecret.clone(),
@@ -235,7 +234,7 @@ where
                         RefreshResult::Success(t) => {
                             let x = store.set(
                                 scope_key,
-                                &scopes.iter().map(|s| s.as_str()).collect(),
+                                &scopes,
                                 Some(t.clone()),
                             );
                             if let Err(e) = x {
@@ -252,11 +251,10 @@ where
                 }
                 Ok(None) => {
                     let store = store.clone();
-                    let scopes = scopes.clone();
                     let t = gettoken.token(scopes.clone()).await?;
                     if let Err(e) = store.set(
                         scope_key,
-                        &scopes.iter().map(|s| s.as_str()).collect(),
+                        &scopes,
                         Some(t.clone()),
                     ) {
                         match delegate.token_storage_failure(true, &e) {

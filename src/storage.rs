@@ -26,14 +26,21 @@ pub trait TokenStorage: Send + Sync {
 
     /// If `token` is None, it is invalid or revoked and should be removed from storage.
     /// Otherwise, it should be saved.
-    fn set(
+    fn set<I>(
         &self,
         scope_hash: u64,
-        scopes: &Vec<&str>,
+        scopes: I,
         token: Option<Token>,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::Error>
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str>;
+
     /// A `None` result indicates that there is no token for the given scope_hash.
-    fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, Self::Error>;
+    fn get<I>(&self, scope_hash: u64, scopes: I) -> Result<Option<Token>, Self::Error>
+    where
+        I: IntoIterator + Clone,
+        I::Item: AsRef<str>;
 }
 
 /// Calculate a hash value describing the scopes, and return a sorted Vec of the scopes.
@@ -55,10 +62,19 @@ pub struct NullStorage;
 
 impl TokenStorage for NullStorage {
     type Error = std::convert::Infallible;
-    fn set(&self, _: u64, _: &Vec<&str>, _: Option<Token>) -> Result<(), Self::Error> {
+    fn set<I>(&self, _: u64, _: I, _: Option<Token>) -> Result<(), Self::Error>
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str>,
+    {
         Ok(())
     }
-    fn get(&self, _: u64, _: &Vec<&str>) -> Result<Option<Token>, Self::Error> {
+
+    fn get<I>(&self, _: u64, _: I) -> Result<Option<Token>, Self::Error>
+    where
+        I: IntoIterator + Clone,
+        I::Item: AsRef<str>,
+    {
         Ok(None)
     }
 }
@@ -78,12 +94,16 @@ impl MemoryStorage {
 impl TokenStorage for MemoryStorage {
     type Error = std::convert::Infallible;
 
-    fn set(
+    fn set<I>(
         &self,
         scope_hash: u64,
-        scopes: &Vec<&str>,
+        scopes: I,
         token: Option<Token>,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::Error>
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str>,
+    {
         let mut tokens = self.tokens.lock().expect("poisoned mutex");
         let matched = tokens.iter().find_position(|x| x.hash == scope_hash);
         if let Some((idx, _)) = matched {
@@ -94,7 +114,7 @@ impl TokenStorage for MemoryStorage {
             Some(t) => {
                 tokens.push(JSONToken {
                     hash: scope_hash,
-                    scopes: Some(scopes.iter().map(|x| x.to_string()).collect()),
+                    scopes: Some(scopes.into_iter().map(|x| x.as_ref().to_string()).collect()),
                     token: t.clone(),
                 });
                 ()
@@ -104,24 +124,13 @@ impl TokenStorage for MemoryStorage {
         Ok(())
     }
 
-    fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, Self::Error> {
-        let scopes: Vec<_> = scopes.iter().sorted().unique().collect();
-
+    fn get<I>(&self, scope_hash: u64, scopes: I) -> Result<Option<Token>, Self::Error>
+    where
+        I: IntoIterator + Clone,
+        I::Item: AsRef<str>,
+    {
         let tokens = self.tokens.lock().expect("poisoned mutex");
-        for t in tokens.iter() {
-            if let Some(token_scopes) = &t.scopes {
-                let matched = token_scopes
-                    .iter()
-                    .filter(|x| scopes.contains(&&&x[..]))
-                    .count();
-                if matched >= scopes.len() {
-                    return Result::Ok(Some(t.token.clone()));
-                }
-            } else if scope_hash == t.hash {
-                return Result::Ok(Some(t.token.clone()));
-            }
-        }
-        Result::Ok(None)
+        Ok(token_for_scopes(&tokens, scope_hash, scopes))
     }
 }
 
@@ -216,12 +225,16 @@ fn load_from_file(filename: &Path) -> Result<Vec<JSONToken>, io::Error> {
 
 impl TokenStorage for DiskTokenStorage {
     type Error = io::Error;
-    fn set(
+    fn set<I>(
         &self,
         scope_hash: u64,
-        scopes: &Vec<&str>,
+        scopes: I,
         token: Option<Token>,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::Error>
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str>,
+    {
         {
             let mut tokens = self.tokens.lock().expect("poisoned mutex");
             let matched = tokens.iter().find_position(|x| x.hash == scope_hash);
@@ -234,7 +247,7 @@ impl TokenStorage for DiskTokenStorage {
                 Some(t) => {
                     tokens.push(JSONToken {
                         hash: scope_hash,
-                        scopes: Some(scopes.iter().map(|x| x.to_string()).collect()),
+                        scopes: Some(scopes.into_iter().map(|x| x.as_ref().to_string()).collect()),
                         token: t.clone(),
                     });
                     ()
@@ -243,24 +256,30 @@ impl TokenStorage for DiskTokenStorage {
         }
         self.dump_to_file()
     }
-    fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, Self::Error> {
-        let scopes: Vec<_> = scopes.iter().sorted().unique().collect();
 
+    fn get<I>(&self, scope_hash: u64, scopes: I) -> Result<Option<Token>, Self::Error>
+    where
+        I: IntoIterator + Clone,
+        I::Item: AsRef<str>,
+    {
         let tokens = self.tokens.lock().expect("poisoned mutex");
-        for t in tokens.iter() {
-            if let Some(token_scopes) = &t.scopes {
-                let matched = token_scopes
-                    .iter()
-                    .filter(|x| scopes.contains(&&&x[..]))
-                    .count();
-                // we may have some of the tokens as denormalized (many namespaces repeated)
-                if matched >= scopes.len() {
-                    return Result::Ok(Some(t.token.clone()));
-                }
-            } else if scope_hash == t.hash {
-                return Result::Ok(Some(t.token.clone()));
-            }
-        }
-        Result::Ok(None)
+        Ok(token_for_scopes(&tokens, scope_hash, scopes))
     }
+}
+
+fn token_for_scopes<I>(tokens: &[JSONToken], scope_hash: u64, scopes: I) -> Option<Token>
+where
+    I: IntoIterator + Clone,
+    I::Item: AsRef<str>,
+{
+    for t in tokens.iter() {
+        if let Some(token_scopes) = &t.scopes {
+            if scopes.clone().into_iter().all(|s| token_scopes.iter().any(|t| t == s.as_ref())) {
+                return Some(t.token.clone());
+            }
+        } else if scope_hash == t.hash {
+            return Some(t.token.clone())
+        }
+    }
+    None
 }

@@ -340,7 +340,7 @@ where
         match cache
             .lock()
             .unwrap()
-            .get(hash, &scopes.iter().map(|s| s.as_str()).collect())
+            .get(hash, scopes.iter())
         {
             Ok(Some(token)) if !token.expired() => return Ok(token),
             _ => {}
@@ -354,7 +354,7 @@ where
         .await?;
         let _ = cache.lock().unwrap().set(
             hash,
-            &scopes.iter().map(|s| s.as_str()).collect(),
+            scopes.iter(),
             Some(token.clone()),
         );
         Ok(token)
@@ -463,7 +463,7 @@ mod tests {
                 .unwrap()
                 .get(
                     3502164897243251857,
-                    &vec!["https://www.googleapis.com/auth/pubsub"]
+                    ["https://www.googleapis.com/auth/pubsub"].iter(),
                 )
                 .unwrap()
                 .is_some());
