@@ -33,14 +33,14 @@ impl RefreshFlow {
     pub async fn refresh_token<C: 'static + hyper::client::connect::Connect>(
         client: &hyper::Client<C>,
         client_secret: &ApplicationSecret,
-        refresh_token: String,
+        refresh_token: &str,
     ) -> Result<RefreshResult, RequestError> {
         // TODO: Does this function ever return RequestError? Maybe have it just return RefreshResult.
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
                 ("client_id", client_secret.client_id.as_str()),
                 ("client_secret", client_secret.client_secret.as_str()),
-                ("refresh_token", refresh_token.as_str()),
+                ("refresh_token", refresh_token),
                 ("grant_type", "refresh_token"),
             ])
             .finish();
@@ -106,7 +106,7 @@ mod tests {
         let app_secret = r#"{"installed":{"client_id":"902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com","project_id":"yup-test-243420","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"iuMPN6Ne1PD7cos29Tk9rlqH","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"#;
         let mut app_secret = helper::parse_application_secret(app_secret).unwrap();
         app_secret.token_uri = format!("{}/token", server_url);
-        let refresh_token = "my-refresh-token".to_string();
+        let refresh_token = "my-refresh-token";
 
         let https = HttpsConnector::new();
         let client = hyper::Client::builder()
@@ -131,7 +131,7 @@ mod tests {
                 let rr = RefreshFlow::refresh_token(
                     &client,
                     &app_secret,
-                    refresh_token.clone(),
+                    refresh_token,
                 )
                 .await
                 .unwrap();

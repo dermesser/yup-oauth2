@@ -211,11 +211,10 @@ where
                         return Ok(t);
                     }
                     // Implement refresh flow.
-                    let refresh_token = t.refresh_token.clone();
                     let rr = RefreshFlow::refresh_token(
                         client,
                         appsecret,
-                        refresh_token.unwrap(),
+                        &t.refresh_token.as_ref().unwrap(),
                     )
                     .await?;
                     match rr {

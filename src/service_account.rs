@@ -270,16 +270,16 @@ where
 {
     /// Send a request for a new Bearer token to the OAuth provider.
     async fn request_token<T>(
-        client: hyper::client::Client<C>,
-        sub: Option<String>,
-        key: ServiceAccountKey,
+        client: &hyper::client::Client<C>,
+        sub: Option<&str>,
+        key: &ServiceAccountKey,
         scopes: &[T],
     ) -> Result<Token, RequestError>
     where
         T: AsRef<str>,
     {
         let mut claims = init_claims_from_key(&key, scopes);
-        claims.sub = sub.clone();
+        claims.sub = sub.map(|x| x.to_owned());
         let signed = JWT::new(claims)
             .sign(key.private_key.as_ref().unwrap())
             .map_err(RequestError::LowLevelError)?;
@@ -289,7 +289,7 @@ where
                 ("assertion".to_string(), signed),
             ])
             .finish();
-        let request = hyper::Request::post(key.token_uri.unwrap())
+        let request = hyper::Request::post(key.token_uri.as_ref().unwrap())
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(rqbody))
             .unwrap();
@@ -341,7 +341,7 @@ where
         T: AsRef<str>,
     {
         let hash = hash_scopes(scopes);
-        let cache = self.cache.clone();
+        let cache = &self.cache;
         match cache
             .lock()
             .unwrap()
@@ -351,9 +351,9 @@ where
             _ => {}
         }
         let token = Self::request_token(
-            self.client.clone(),
-            self.sub.clone(),
-            self.key.clone(),
+            &self.client,
+            self.sub.as_ref().map(|x| x.as_str()),
+            &self.key,
             scopes,
         )
         .await?;

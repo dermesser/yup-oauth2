@@ -142,7 +142,7 @@ where
         let (pollinf, device_code) = Self::request_code(
             application_secret,
             client.clone(),
-            self.device_code_url.clone(),
+            &self.device_code_url,
             scopes,
         )
         .await?;
@@ -155,7 +155,7 @@ where
             let r = Self::poll_token(
                 application_secret,
                 client.clone(),
-                device_code.clone(),
+                &device_code,
                 pollinf.clone(),
                 fd.clone(),
             )
@@ -196,7 +196,7 @@ where
     async fn request_code<T>(
         application_secret: &ApplicationSecret,
         client: hyper::Client<C>,
-        device_code_url: String,
+        device_code_url: &str,
         scopes: &[T],
     ) -> Result<(PollInformation, String), RequestError>
     where
@@ -278,7 +278,7 @@ where
     async fn poll_token<'a>(
         application_secret: &ApplicationSecret,
         client: hyper::Client<C>,
-        device_code: String,
+        device_code: &str,
         pi: PollInformation,
         fd: FD,
     ) -> Result<Option<Token>, PollError> {
@@ -292,7 +292,7 @@ where
             .extend_pairs(&[
                 ("client_id", application_secret.client_id.as_str()),
                 ("client_secret", application_secret.client_secret.as_str()),
-                ("code", &device_code),
+                ("code", device_code),
                 ("grant_type", "http://oauth.net/grant_type/device/1.0"),
             ])
             .finish();

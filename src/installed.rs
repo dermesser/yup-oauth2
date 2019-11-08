@@ -214,7 +214,7 @@ where
             }
             _ => return Err(RequestError::UserError("couldn't read code".to_string())),
         };
-        self.exchange_auth_code(authcode, None).await
+        self.exchange_auth_code(&authcode, None).await
     }
 
     async fn ask_auth_code_via_http<T>(
@@ -249,12 +249,12 @@ where
             .await;
 
         let auth_code = server.wait_for_auth_code().await;
-        self.exchange_auth_code(auth_code, Some(bound_port)).await
+        self.exchange_auth_code(&auth_code, Some(bound_port)).await
     }
 
     async fn exchange_auth_code(
         &self,
-        authcode: String,
+        authcode: &str,
         port: Option<u16>,
     ) -> Result<Token, RequestError> {
         let appsec = &self.appsecret;
@@ -307,7 +307,7 @@ where
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.
     fn request_token<'a>(
         appsecret: &ApplicationSecret,
-        authcode: String,
+        authcode: &str,
         custom_redirect_uri: Option<&str>,
         port: Option<u16>,
     ) -> hyper::Request<hyper::Body> {
@@ -320,7 +320,7 @@ where
 
         let body = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(vec![
-                ("code", authcode.as_str()),
+                ("code", authcode),
                 ("client_id", appsecret.client_id.as_str()),
                 ("client_secret", appsecret.client_secret.as_str()),
                 ("redirect_uri", redirect_uri.as_ref()),
