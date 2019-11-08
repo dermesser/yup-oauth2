@@ -114,8 +114,8 @@ where
     fn api_key(&self) -> Option<String> {
         None
     }
-    fn application_secret(&self) -> ApplicationSecret {
-        self.application_secret.clone()
+    fn application_secret(&self) -> &ApplicationSecret {
+        &self.application_secret
     }
 }
 
@@ -135,12 +135,12 @@ where
     where
         T: AsRef<str>,
     {
-        let application_secret = self.application_secret.clone();
+        let application_secret = &self.application_secret;
         let client = self.client.clone();
         let wait = self.wait;
         let fd = self.fd.clone();
         let (pollinf, device_code) = Self::request_code(
-            application_secret.clone(),
+            application_secret,
             client.clone(),
             self.device_code_url.clone(),
             scopes,
@@ -153,7 +153,7 @@ where
             let pollinf = pollinf.clone();
             tokio::timer::delay_for(pollinf.interval).await;
             let r = Self::poll_token(
-                application_secret.clone(),
+                application_secret,
                 client.clone(),
                 device_code.clone(),
                 pollinf.clone(),
@@ -194,7 +194,7 @@ where
     /// # Examples
     /// See test-cases in source code for a more complete example.
     async fn request_code<T>(
-        application_secret: ApplicationSecret,
+        application_secret: &ApplicationSecret,
         client: hyper::Client<C>,
         device_code_url: String,
         scopes: &[T],
@@ -206,8 +206,8 @@ where
         // https://github.com/servo/rust-url/issues/81
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
-                ("client_id", application_secret.client_id.clone()),
-                ("scope", crate::helper::join(scopes, " ")),
+                ("client_id", application_secret.client_id.as_str()),
+                ("scope", crate::helper::join(scopes, " ").as_str()),
             ])
             .finish();
 
@@ -276,7 +276,7 @@ where
     /// # Examples
     /// See test-cases in source code for a more complete example.
     async fn poll_token<'a>(
-        application_secret: ApplicationSecret,
+        application_secret: &ApplicationSecret,
         client: hyper::Client<C>,
         device_code: String,
         pi: PollInformation,
@@ -290,8 +290,8 @@ where
         // We should be ready for a new request
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
-                ("client_id", &application_secret.client_id[..]),
-                ("client_secret", &application_secret.client_secret),
+                ("client_id", application_secret.client_id.as_str()),
+                ("client_secret", application_secret.client_secret.as_str()),
                 ("code", &device_code),
                 ("grant_type", "http://oauth.net/grant_type/device/1.0"),
             ])

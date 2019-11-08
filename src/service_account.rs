@@ -382,8 +382,9 @@ where
 
     /// Returns an empty ApplicationSecret as tokens for service accounts don't need to be
     /// refreshed (they are simply reissued).
-    fn application_secret(&self) -> ApplicationSecret {
-        Default::default()
+    fn application_secret(&self) -> &ApplicationSecret {
+        static APP_SECRET: ApplicationSecret = ApplicationSecret::empty();
+        &APP_SECRET
     }
 
     fn api_key(&self) -> Option<String> {

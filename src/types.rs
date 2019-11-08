@@ -247,7 +247,7 @@ pub trait GetToken: Send + Sync {
 
     /// Return an application secret with at least token_uri, client_secret, and client_id filled
     /// in. This is used for refreshing tokens without interaction from the flow.
-    fn application_secret(&self) -> ApplicationSecret;
+    fn application_secret(&self) -> &ApplicationSecret;
 }
 
 /// Represents a token as returned by OAuth2 servers.
@@ -340,6 +340,22 @@ pub struct ApplicationSecret {
     pub auth_provider_x509_cert_url: Option<String>,
     ///  The URL of the public x509 certificate, used to verify JWTs signed by the client.
     pub client_x509_cert_url: Option<String>,
+}
+
+impl ApplicationSecret {
+    pub const fn empty() -> Self {
+        ApplicationSecret{
+            client_id: String::new(),
+            client_secret: String::new(),
+            token_uri: String::new(),
+            auth_uri: String::new(),
+            redirect_uris: Vec::new(),
+            project_id: None,
+            client_email: None,
+            auth_provider_x509_cert_url: None,
+            client_x509_cert_url: None,
+        }
+    }
 }
 
 /// A type to facilitate reading and writing the json secret file

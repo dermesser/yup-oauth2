@@ -133,7 +133,7 @@ pub trait FlowDelegate: Clone + Send + Sync {
     }
 
     /// Configure a custom redirect uri if needed.
-    fn redirect_uri(&self) -> Option<String> {
+    fn redirect_uri(&self) -> Option<&str> {
         None
     }
     /// The server has returned a `user_code` which must be shown to the user,

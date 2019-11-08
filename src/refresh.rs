@@ -32,20 +32,20 @@ impl RefreshFlow {
     /// Please see the crate landing page for an example.
     pub async fn refresh_token<C: 'static + hyper::client::connect::Connect>(
         client: hyper::Client<C>,
-        client_secret: ApplicationSecret,
+        client_secret: &ApplicationSecret,
         refresh_token: String,
     ) -> Result<RefreshResult, RequestError> {
         // TODO: Does this function ever return RequestError? Maybe have it just return RefreshResult.
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
-                ("client_id", client_secret.client_id.clone()),
-                ("client_secret", client_secret.client_secret.clone()),
-                ("refresh_token", refresh_token.to_string()),
-                ("grant_type", "refresh_token".to_string()),
+                ("client_id", client_secret.client_id.as_str()),
+                ("client_secret", client_secret.client_secret.as_str()),
+                ("refresh_token", refresh_token.as_str()),
+                ("grant_type", "refresh_token"),
             ])
             .finish();
 
-        let request = hyper::Request::post(client_secret.token_uri.clone())
+        let request = hyper::Request::post(&client_secret.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(req))
             .unwrap(); // TODO: error handling
@@ -130,7 +130,7 @@ mod tests {
             let fut = async {
                 let rr = RefreshFlow::refresh_token(
                     client.clone(),
-                    app_secret.clone(),
+                    &app_secret,
                     refresh_token.clone(),
                 )
                 .await
@@ -158,7 +158,7 @@ mod tests {
                 .create();
 
             let fut = async {
-                let rr = RefreshFlow::refresh_token(client, app_secret, refresh_token)
+                let rr = RefreshFlow::refresh_token(client, &app_secret, refresh_token)
                     .await
                     .unwrap();
                 match rr {

@@ -24,24 +24,17 @@ const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
 /// Assembles a URL to request an authorization token (with user interaction).
 /// Note that the redirect_uri here has to be either None or some variation of
 /// http://localhost:{port}, or the authorization won't work (error "redirect_uri_mismatch")
-fn build_authentication_request_url<'a, T, I>(
+fn build_authentication_request_url<T>(
     auth_uri: &str,
     client_id: &str,
-    scopes: I,
-    redirect_uri: Option<String>,
+    scopes: &[T],
+    redirect_uri: Option<&str>,
 ) -> String
 where
-    T: AsRef<str> + 'a,
-    I: IntoIterator<Item = &'a T>,
+    T: AsRef<str>,
 {
     let mut url = String::new();
-    let mut scopes_string = scopes.into_iter().fold(String::new(), |mut acc, sc| {
-        acc.push_str(sc.as_ref());
-        acc.push_str(" ");
-        acc
-    });
-    // Remove last space
-    scopes_string.pop();
+    let scopes_string = crate::helper::join(scopes, " ");
 
     url.push_str(auth_uri);
     vec![
@@ -49,7 +42,7 @@ where
         format!("&access_type=offline"),
         format!(
             "&redirect_uri={}",
-            redirect_uri.unwrap_or(OOB_REDIRECT_URI.to_string())
+            redirect_uri.unwrap_or(OOB_REDIRECT_URI)
         ),
         format!("&response_type=code"),
         format!("&client_id={}", client_id),
@@ -78,8 +71,8 @@ where
     fn api_key(&self) -> Option<String> {
         None
     }
-    fn application_secret(&self) -> ApplicationSecret {
-        self.appsecret.clone()
+    fn application_secret(&self) -> &ApplicationSecret {
+        &self.appsecret
     }
 }
 
@@ -232,6 +225,7 @@ where
     where
         T: AsRef<str>,
     {
+        use std::borrow::Cow;
         let auth_delegate = &self.fd;
         let appsecret = &self.appsecret;
         let server = InstalledFlowServer::run(desired_port)?;
@@ -240,13 +234,15 @@ where
         // Present url to user.
         // The redirect URI must be this very localhost URL, otherwise authorization is refused
         // by certain providers.
+        let redirect_uri: Cow<str> = match auth_delegate.redirect_uri() {
+            Some(uri) => uri.into(),
+            None => format!("http://localhost:{}", bound_port).into(),
+        };
         let url = build_authentication_request_url(
             &appsecret.auth_uri,
             &appsecret.client_id,
             scopes,
-            auth_delegate
-                .redirect_uri()
-                .or_else(|| Some(format!("http://localhost:{}", bound_port))),
+            Some(redirect_uri.as_ref()),
         );
         let _ = auth_delegate
             .present_user_url(&url, false /* need code */)
@@ -262,8 +258,8 @@ where
         port: Option<u16>,
     ) -> Result<Token, RequestError> {
         let appsec = &self.appsecret;
-        let redirect_uri = &self.fd.redirect_uri();
-        let request = Self::request_token(appsec.clone(), authcode, redirect_uri.clone(), port);
+        let redirect_uri = self.fd.redirect_uri();
+        let request = Self::request_token(appsec, authcode, redirect_uri, port);
         let resp = self
             .client
             .request(request)
@@ -310,27 +306,29 @@ where
 
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.
     fn request_token<'a>(
-        appsecret: ApplicationSecret,
+        appsecret: &ApplicationSecret,
         authcode: String,
-        custom_redirect_uri: Option<String>,
+        custom_redirect_uri: Option<&str>,
         port: Option<u16>,
     ) -> hyper::Request<hyper::Body> {
-        let redirect_uri = custom_redirect_uri.unwrap_or_else(|| match port {
-            None => OOB_REDIRECT_URI.to_string(),
-            Some(port) => format!("http://localhost:{}", port),
-        });
+        use std::borrow::Cow;
+        let redirect_uri: Cow<str> = match (custom_redirect_uri, port) {
+            (Some(uri), _) => uri.into(),
+            (None, Some(port)) => format!("http://localhost:{}", port).into(),
+            (None, None) => OOB_REDIRECT_URI.into(),
+        };
 
         let body = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(vec![
-                ("code".to_string(), authcode.to_string()),
-                ("client_id".to_string(), appsecret.client_id.clone()),
-                ("client_secret".to_string(), appsecret.client_secret.clone()),
-                ("redirect_uri".to_string(), redirect_uri),
-                ("grant_type".to_string(), "authorization_code".to_string()),
+                ("code", authcode.as_str()),
+                ("client_id", appsecret.client_id.as_str()),
+                ("client_secret", appsecret.client_secret.as_str()),
+                ("redirect_uri", redirect_uri.as_ref()),
+                ("grant_type", "authorization_code"),
             ])
             .finish();
 
-        let request = hyper::Request::post(appsecret.token_uri)
+        let request = hyper::Request::post(&appsecret.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(body))
             .unwrap(); // TODO: error check
@@ -657,7 +655,7 @@ mod tests {
                 "https://accounts.google.com/o/oauth2/auth",
                 "812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5am\
                  rf.apps.googleusercontent.com",
-                vec![&"email".to_string(), &"profile".to_string()],
+                &["email", "profile"],
                 None
             )
         );

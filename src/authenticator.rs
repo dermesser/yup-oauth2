@@ -216,7 +216,7 @@ where
                     let store = store.clone();
                     let rr = RefreshFlow::refresh_token(
                         client.clone(),
-                        appsecret.clone(),
+                        appsecret,
                         refresh_token.unwrap(),
                     )
                     .await?;
@@ -291,7 +291,7 @@ impl<
         self.inner.api_key()
     }
     /// Returns the application secret of the inner flow.
-    fn application_secret(&self) -> ApplicationSecret {
+    fn application_secret(&self) -> &ApplicationSecret {
         self.inner.application_secret()
     }
 
