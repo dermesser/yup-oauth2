@@ -9,7 +9,6 @@ use std::error::Error;
 use std::io;
 use std::path::Path;
 use std::pin::Pin;
-use std::sync::Arc;
 
 /// Authenticator abstracts different `GetToken` implementations behind one type and handles
 /// caching received tokens. It's important to use it (instead of the flows directly) because
@@ -28,7 +27,7 @@ struct AuthenticatorImpl<
     C: hyper::client::connect::Connect,
 > {
     client: hyper::Client<C>,
-    inner: Arc<T>,
+    inner: T,
     store: S,
     delegate: AD,
 }
@@ -174,7 +173,7 @@ where
     {
         let client = self.client.build_hyper_client();
         let store = self.store?;
-        let inner = Arc::new(self.token_getter.build_token_getter(client.clone()));
+        let inner = self.token_getter.build_token_getter(client.clone());
 
         Ok(AuthenticatorImpl {
             client,
@@ -200,8 +199,8 @@ where
         let store = &self.store;
         let delegate = &self.delegate;
         let client = &self.client;
-        let appsecret = self.inner.application_secret();
-        let gettoken = self.inner.clone();
+        let gettoken = &self.inner;
+        let appsecret = gettoken.application_secret();
         loop {
             match store.get(
                 scope_key,
