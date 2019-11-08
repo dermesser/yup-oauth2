@@ -36,8 +36,8 @@ use chrono;
 use hyper;
 use serde_json;
 
-const GRANT_TYPE: &'static str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
-const GOOGLE_RS256_HEAD: &'static str = "{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
+const GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
+const GOOGLE_RS256_HEAD: &str = "{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
 
 /// Encodes s as Base64
 fn encode_base64<T: AsRef<[u8]>>(s: T) -> String {
@@ -51,7 +51,7 @@ fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, io::Error> {
     let private_keys = pemfile::pkcs8_private_keys(&mut private_reader);
 
     if let Ok(pk) = private_keys {
-        if pk.len() > 0 {
+        if !pk.is_empty() {
             Ok(pk[0].clone())
         } else {
             Err(io::Error::new(
@@ -112,7 +112,7 @@ impl JWT {
     fn new(claims: Claims) -> JWT {
         JWT {
             header: GOOGLE_RS256_HEAD.to_string(),
-            claims: claims,
+            claims,
         }
     }
 
@@ -141,10 +141,9 @@ impl JWT {
             .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't initialize signer"))?;
         let signer = signing_key
             .choose_scheme(&[rustls::SignatureScheme::RSA_PKCS1_SHA256])
-            .ok_or(io::Error::new(
-                io::ErrorKind::Other,
-                "Couldn't choose signing scheme",
-            ))?;
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::Other, "Couldn't choose signing scheme")
+            })?;
         let signature = signer
             .sign(jwt_head.as_bytes())
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("{}", e)))?;
@@ -176,7 +175,7 @@ where
         iss: key.client_email.clone().unwrap(),
         aud: key.token_uri.clone().unwrap(),
         exp: expiry,
-        iat: iat,
+        iat,
         sub: None,
         scope: scopes_string,
     }

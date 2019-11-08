@@ -12,7 +12,7 @@ use url::form_urlencoded;
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate, PollInformation, Retry};
 use crate::types::{ApplicationSecret, GetToken, JsonErrorOr, PollError, RequestError, Token};
 
-pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/oauth2/device/code";
+pub const GOOGLE_DEVICE_CODE_URL: &str = "https://accounts.google.com/o/oauth2/device/code";
 
 /// Implements the [Oauth2 Device Flow](https://developers.google.com/youtube/v3/guides/authentication#devices)
 /// It operates in two steps:
@@ -215,7 +215,7 @@ where
         let resp = client
             .request(req)
             .await
-            .map_err(|e| RequestError::ClientError(e))?;
+            .map_err(RequestError::ClientError)?;
         // This return type is defined in https://tools.ietf.org/html/draft-ietf-oauth-device-flow-15#section-3.2
         // The alias is present as Google use a non-standard name for verification_uri.
         // According to the standard interval is optional, however, all tested implementations provide it.
@@ -294,12 +294,12 @@ where
         let res = client
             .request(request)
             .await
-            .map_err(|e| PollError::HttpError(e))?;
+            .map_err(PollError::HttpError)?;
         let body = res
             .into_body()
             .try_concat()
             .await
-            .map_err(|e| PollError::HttpError(e))?;
+            .map_err(PollError::HttpError)?;
         #[derive(Deserialize)]
         struct JsonError {
             error: String,

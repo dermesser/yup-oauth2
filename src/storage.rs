@@ -103,17 +103,13 @@ impl TokenStorage for MemoryStorage {
             self.tokens.retain(|x| x.hash != scope_hash);
         }
 
-        match token {
-            Some(t) => {
-                tokens.push(JSONToken {
-                    hash: scope_hash,
-                    scopes: Some(scopes.into_iter().map(|x| x.as_ref().to_string()).collect()),
-                    token: t,
-                });
-                ()
-            }
-            None => {}
-        };
+        if let Some(t) = token {
+            tokens.push(JSONToken {
+                hash: scope_hash,
+                scopes: Some(scopes.iter().map(|x| x.as_ref().to_string()).collect()),
+                token: t,
+            });
+        }
         Ok(())
     }
 
@@ -233,10 +229,9 @@ impl TokenStorage for DiskTokenStorage {
                 Some(t) => {
                     tokens.push(JSONToken {
                         hash: scope_hash,
-                        scopes: Some(scopes.into_iter().map(|x| x.as_ref().to_string()).collect()),
+                        scopes: Some(scopes.iter().map(|x| x.as_ref().to_string()).collect()),
                         token: t,
                     });
-                    ()
                 }
             }
         }

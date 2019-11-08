@@ -159,7 +159,7 @@ where
             client: self.client,
             token_getter: self.token_getter,
             store: self.store,
-            delegate: delegate,
+            delegate,
         }
     }
 
@@ -217,15 +217,15 @@ where
                     match rr {
                         RefreshResult::Error(ref e) => {
                             delegate.token_refresh_failed(
-                                format!("{}", e.description().to_string()),
-                                &Some("the request has likely timed out".to_string()),
+                                e.description(),
+                                Some("the request has likely timed out"),
                             );
                             return Err(RequestError::Refresh(rr));
                         }
                         RefreshResult::RefreshError(ref s, ref ss) => {
                             delegate.token_refresh_failed(
-                                format!("{} {}", s, ss.clone().map(|s| format!("({})", s)).unwrap_or("".to_string())),
-                                &Some("the refresh token is likely invalid and your authorization has been revoked".to_string()),
+                                &format!("{}{}", s, ss.as_ref().map(|s| format!(" ({})", s)).unwrap_or_else(String::new)),
+                                Some("the refresh token is likely invalid and your authorization has been revoked"),
                                 );
                             return Err(RequestError::Refresh(rr));
                         }

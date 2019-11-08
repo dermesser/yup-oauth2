@@ -91,7 +91,7 @@ impl From<JsonError> for RequestError {
             "invalid_scope" => RequestError::InvalidScope(
                 value
                     .error_description
-                    .unwrap_or("no description provided".to_string()),
+                    .unwrap_or_else(|| "no description provided".to_string()),
             ),
             _ => RequestError::NegativeServerResponse(value.error, value.error_description),
         }
@@ -112,7 +112,7 @@ impl fmt::Display for RequestError {
             RequestError::InvalidScope(ref scope) => writeln!(f, "Invalid Scope: '{}'", scope),
             RequestError::NegativeServerResponse(ref error, ref desc) => {
                 error.fmt(f)?;
-                if let &Some(ref desc) = desc {
+                if let Some(ref desc) = *desc {
                     write!(f, ": {}", desc)?;
                 }
                 "\n".fmt(f)
@@ -162,7 +162,7 @@ impl StringError {
             error.push_str(d.as_ref());
         }
 
-        StringError { error: error }
+        StringError { error }
     }
 }
 
@@ -298,7 +298,7 @@ impl Token {
     /// # Panics
     /// * if our access_token is unset
     pub fn expired(&self) -> bool {
-        if self.access_token.len() == 0 {
+        if self.access_token.is_empty() {
             panic!("called expired() on unset token");
         }
         if let Some(expiry_date) = self.expiry_date() {

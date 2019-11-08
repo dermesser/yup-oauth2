@@ -19,7 +19,7 @@ use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate};
 use crate::types::{ApplicationSecret, GetToken, JsonErrorOr, RequestError, Token};
 
-const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
+const OOB_REDIRECT_URI: &str = "urn:ietf:wg:oauth:2.0:oob";
 
 /// Assembles a URL to request an authorization token (with user interaction).
 /// Note that the redirect_uri here has to be either None or some variation of
@@ -39,9 +39,9 @@ where
     url.push_str(auth_uri);
     vec![
         format!("?scope={}", scopes_string),
-        format!("&access_type=offline"),
+        "&access_type=offline".to_string(),
         format!("&redirect_uri={}", redirect_uri.unwrap_or(OOB_REDIRECT_URI)),
-        format!("&response_type=code"),
+        "&response_type=code".to_string(),
         format!("&client_id={}", client_id),
     ]
     .into_iter()
@@ -258,12 +258,12 @@ where
             .client
             .request(request)
             .await
-            .map_err(|e| RequestError::ClientError(e))?;
+            .map_err(RequestError::ClientError)?;
         let body = resp
             .into_body()
             .try_concat()
             .await
-            .map_err(|e| RequestError::ClientError(e))?;
+            .map_err(RequestError::ClientError)?;
 
         #[derive(Deserialize)]
         struct JSONTokenResponse {
@@ -295,7 +295,7 @@ where
     }
 
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.
-    fn request_token<'a>(
+    fn request_token(
         appsecret: &ApplicationSecret,
         authcode: &str,
         custom_redirect_uri: Option<&str>,
@@ -318,11 +318,10 @@ where
             ])
             .finish();
 
-        let request = hyper::Request::post(&appsecret.token_uri)
+        hyper::Request::post(&appsecret.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(body))
-            .unwrap(); // TODO: error check
-        request
+            .unwrap() // TODO: error check
     }
 }
 

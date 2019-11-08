@@ -95,7 +95,7 @@ pub trait AuthenticatorDelegate: Clone + Send + Sync {
     /// Called if we could not acquire a refresh token for a reason possibly specified
     /// by the server.
     /// This call is made for the delegate's information only.
-    fn token_refresh_failed<S: AsRef<str>>(&self, error: S, error_description: &Option<String>) {
+    fn token_refresh_failed(&self, error: &str, error_description: Option<&str>) {
         {
             let _ = error;
         }
