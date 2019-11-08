@@ -61,3 +61,25 @@ pub fn service_account_key_from_file<S: AsRef<Path>>(path: S) -> io::Result<Serv
         Ok(decoded) => Ok(decoded),
     }
 }
+
+pub(crate) fn join<T>(pieces: &[T], separator: &str) -> String
+where
+    T: AsRef<str>,
+{
+    let mut iter = pieces.iter();
+    let first = match iter.next() {
+        Some(p) => p,
+        None => return String::new(),
+    };
+    let num_separators = pieces.len() - 1;
+    let pieces_size: usize = pieces.iter().map(|p| p.as_ref().len()).sum();
+    let size = pieces_size + separator.len() * num_separators;
+    let mut result = String::with_capacity(size);
+    result.push_str(first.as_ref());
+    for p in iter {
+        result.push_str(separator);
+        result.push_str(p.as_ref());
+    }
+    debug_assert_eq!(size, result.len());
+    result
+}

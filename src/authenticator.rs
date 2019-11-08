@@ -192,7 +192,11 @@ where
     AD: 'static + AuthenticatorDelegate,
     C: 'static + hyper::client::connect::Connect + Clone + Send,
 {
-    async fn get_token(&self, scope_key: u64, scopes: Vec<String>) -> Result<Token, RequestError> {
+    async fn get_token<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
+    where
+        T: AsRef<str> + Sync,
+    {
+        let scope_key = hash_scopes(scopes);
         let store = self.store.clone();
         let delegate = &self.delegate;
         let client = self.client.clone();
@@ -200,8 +204,8 @@ where
         let gettoken = self.inner.clone();
         loop {
             match store.get(
-                scope_key.clone(),
-                &scopes,
+                scope_key,
+                scopes,
             ) {
                 Ok(Some(t)) => {
                     if !t.expired() {
@@ -234,7 +238,7 @@ where
                         RefreshResult::Success(t) => {
                             let x = store.set(
                                 scope_key,
-                                &scopes,
+                                scopes,
                                 Some(t.clone()),
                             );
                             if let Err(e) = x {
@@ -251,10 +255,10 @@ where
                 }
                 Ok(None) => {
                     let store = store.clone();
-                    let t = gettoken.token(scopes.clone()).await?;
+                    let t = gettoken.token(scopes).await?;
                     if let Err(e) = store.set(
                         scope_key,
-                        &scopes,
+                        scopes,
                         Some(t.clone()),
                     ) {
                         match delegate.token_storage_failure(true, &e) {
@@ -291,15 +295,13 @@ impl<
         self.inner.application_secret()
     }
 
-    fn token<'a, I, T>(
+    fn token<'a, T>(
         &'a self,
-        scopes: I,
+        scopes: &'a [T],
     ) -> Pin<Box<dyn Future<Output = Result<Token, RequestError>> + Send + 'a>>
     where
-        T: Into<String>,
-        I: IntoIterator<Item = T>,
+        T: AsRef<str> + Sync,
     {
-        let (scope_key, scopes) = hash_scopes(scopes);
-        Box::pin(self.get_token(scope_key, scopes))
+        Box::pin(self.get_token(scopes))
     }
 }

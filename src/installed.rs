@@ -66,15 +66,14 @@ where
     FD: FlowDelegate + 'static,
     C: hyper::client::connect::Connect + 'static,
 {
-    fn token<'a, I, T>(
+    fn token<'a, T>(
         &'a self,
-        scopes: I,
+        scopes: &'a [T],
     ) -> Pin<Box<dyn Future<Output = Result<Token, RequestError>> + Send + 'a>>
     where
-        T: Into<String>,
-        I: IntoIterator<Item = T>,
+        T: AsRef<str> + Sync,
     {
-        Box::pin(self.obtain_token(scopes.into_iter().map(Into::into).collect()))
+        Box::pin(self.obtain_token(scopes))
     }
     fn api_key(&self) -> Option<String> {
         None
@@ -175,27 +174,29 @@ where
     /// . Return that token
     ///
     /// It's recommended not to use the DefaultFlowDelegate, but a specialized one.
-    async fn obtain_token<'a>(
+    async fn obtain_token<T>(
         &self,
-        scopes: Vec<String>, // Note: I haven't found a better way to give a list of strings here, due to ownership issues with futures.
-    ) -> Result<Token, RequestError> {
+        scopes: &[T],
+    ) -> Result<Token, RequestError>
+    where
+        T: AsRef<str>,
+    {
         match self.method {
             InstalledFlowReturnMethod::HTTPRedirect(port) => {
-                self.ask_auth_code_via_http(scopes.iter(), port).await
+                self.ask_auth_code_via_http(scopes, port).await
             }
             InstalledFlowReturnMethod::HTTPRedirectEphemeral => {
-                self.ask_auth_code_via_http(scopes.iter(), 0).await
+                self.ask_auth_code_via_http(scopes, 0).await
             }
             InstalledFlowReturnMethod::Interactive => {
-                self.ask_auth_code_interactively(scopes.iter()).await
+                self.ask_auth_code_interactively(scopes).await
             }
         }
     }
 
-    async fn ask_auth_code_interactively<'a, S, T>(&self, scopes: S) -> Result<Token, RequestError>
+    async fn ask_auth_code_interactively<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
     where
-        T: AsRef<str> + 'a,
-        S: Iterator<Item = &'a T>,
+        T: AsRef<str>,
     {
         let auth_delegate = &self.fd;
         let appsecret = &self.appsecret;
@@ -223,14 +224,13 @@ where
         self.exchange_auth_code(authcode, None).await
     }
 
-    async fn ask_auth_code_via_http<'a, S, T>(
+    async fn ask_auth_code_via_http<T>(
         &self,
-        scopes: S,
+        scopes: &[T],
         desired_port: u16,
     ) -> Result<Token, RequestError>
     where
-        T: AsRef<str> + 'a,
-        S: Iterator<Item = &'a T>,
+        T: AsRef<str>,
     {
         let auth_delegate = &self.fd;
         let appsecret = &self.appsecret;
@@ -583,7 +583,7 @@ mod tests {
             let fut = || {
                 async {
                     let tok = inf
-                        .token(vec!["https://googleapis.com/some/scope"])
+                        .token(&["https://googleapis.com/some/scope"])
                         .await
                         .map_err(|_| ())?;
                     assert_eq!("accesstoken", tok.access_token);
@@ -612,7 +612,7 @@ mod tests {
 
             let fut = async {
                 let tok = inf
-                    .token(vec!["https://googleapis.com/some/scope"])
+                    .token(&["https://googleapis.com/some/scope"])
                     .await
                     .map_err(|_| ())?;
                 assert_eq!("accesstoken", tok.access_token);
@@ -635,7 +635,7 @@ mod tests {
                 .create();
 
             let fut = async {
-                let tokr = inf.token(vec!["https://googleapis.com/some/scope"]).await;
+                let tokr = inf.token(&["https://googleapis.com/some/scope"]).await;
                 assert!(tokr.is_err());
                 assert!(format!("{}", tokr.unwrap_err()).contains("invalid_code"));
                 Ok(()) as Result<(), ()>

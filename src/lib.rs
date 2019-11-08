@@ -65,8 +65,7 @@
 //!     .build()
 //!     .unwrap();
 //!
-//!     let s = "https://www.googleapis.com/auth/drive.file".to_string();
-//!     let scopes = vec![s];
+//!     let scopes = &["https://www.googleapis.com/auth/drive.file"];
 //!
 //!     // token(<scopes>) is the one important function of this crate; it does everything to
 //!     // obtain a token that can be sent e.g. as Bearer token.

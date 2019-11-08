@@ -26,34 +26,35 @@ pub trait TokenStorage: Send + Sync {
 
     /// If `token` is None, it is invalid or revoked and should be removed from storage.
     /// Otherwise, it should be saved.
-    fn set<I>(
+    fn set<T>(
         &self,
         scope_hash: u64,
-        scopes: I,
+        scopes: &[T],
         token: Option<Token>,
     ) -> Result<(), Self::Error>
     where
-        I: IntoIterator,
-        I::Item: AsRef<str>;
+        T: AsRef<str>;
 
     /// A `None` result indicates that there is no token for the given scope_hash.
-    fn get<I>(&self, scope_hash: u64, scopes: I) -> Result<Option<Token>, Self::Error>
+    fn get<T>(&self, scope_hash: u64, scopes: &[T]) -> Result<Option<Token>, Self::Error>
     where
-        I: IntoIterator + Clone,
-        I::Item: AsRef<str>;
+        T: AsRef<str>;
 }
 
-/// Calculate a hash value describing the scopes, and return a sorted Vec of the scopes.
-pub fn hash_scopes<I, T>(scopes: I) -> (u64, Vec<String>)
+/// Calculate a hash value describing the scopes. The order of the scopes in the
+/// list does not change the hash value. i.e. two lists that contains the exact
+/// same scopes, but in different order will return the same hash value.
+pub fn hash_scopes<T>(scopes: &[T]) -> u64
 where
-    T: Into<String>,
-    I: IntoIterator<Item = T>,
+    T: AsRef<str>,
 {
-    let mut sv: Vec<String> = scopes.into_iter().map(Into::into).collect();
-    sv.sort();
-    let mut sh = DefaultHasher::new();
-    sv.hash(&mut sh);
-    (sh.finish(), sv)
+    let mut hash_sum = DefaultHasher::new().finish();
+    for scope in scopes {
+        let mut hasher = DefaultHasher::new();
+        scope.as_ref().hash(&mut hasher);
+        hash_sum ^= hasher.finish();
+    }
+    hash_sum
 }
 
 /// A storage that remembers nothing.
@@ -62,18 +63,16 @@ pub struct NullStorage;
 
 impl TokenStorage for NullStorage {
     type Error = std::convert::Infallible;
-    fn set<I>(&self, _: u64, _: I, _: Option<Token>) -> Result<(), Self::Error>
+    fn set<T>(&self, _: u64, _: &[T], _: Option<Token>) -> Result<(), Self::Error>
     where
-        I: IntoIterator,
-        I::Item: AsRef<str>,
+        T: AsRef<str>
     {
         Ok(())
     }
 
-    fn get<I>(&self, _: u64, _: I) -> Result<Option<Token>, Self::Error>
+    fn get<T>(&self, _: u64, _: &[T]) -> Result<Option<Token>, Self::Error>
     where
-        I: IntoIterator + Clone,
-        I::Item: AsRef<str>,
+        T: AsRef<str>
     {
         Ok(None)
     }
@@ -94,15 +93,14 @@ impl MemoryStorage {
 impl TokenStorage for MemoryStorage {
     type Error = std::convert::Infallible;
 
-    fn set<I>(
+    fn set<T>(
         &self,
         scope_hash: u64,
-        scopes: I,
+        scopes: &[T],
         token: Option<Token>,
     ) -> Result<(), Self::Error>
     where
-        I: IntoIterator,
-        I::Item: AsRef<str>,
+        T: AsRef<str>
     {
         let mut tokens = self.tokens.lock().expect("poisoned mutex");
         let matched = tokens.iter().find_position(|x| x.hash == scope_hash);
@@ -124,10 +122,9 @@ impl TokenStorage for MemoryStorage {
         Ok(())
     }
 
-    fn get<I>(&self, scope_hash: u64, scopes: I) -> Result<Option<Token>, Self::Error>
+    fn get<T>(&self, scope_hash: u64, scopes: &[T]) -> Result<Option<Token>, Self::Error>
     where
-        I: IntoIterator + Clone,
-        I::Item: AsRef<str>,
+        T: AsRef<str>
     {
         let tokens = self.tokens.lock().expect("poisoned mutex");
         Ok(token_for_scopes(&tokens, scope_hash, scopes))
@@ -225,15 +222,14 @@ fn load_from_file(filename: &Path) -> Result<Vec<JSONToken>, io::Error> {
 
 impl TokenStorage for DiskTokenStorage {
     type Error = io::Error;
-    fn set<I>(
+    fn set<T>(
         &self,
         scope_hash: u64,
-        scopes: I,
+        scopes: &[T],
         token: Option<Token>,
     ) -> Result<(), Self::Error>
     where
-        I: IntoIterator,
-        I::Item: AsRef<str>,
+        T: AsRef<str>
     {
         {
             let mut tokens = self.tokens.lock().expect("poisoned mutex");
@@ -257,24 +253,22 @@ impl TokenStorage for DiskTokenStorage {
         self.dump_to_file()
     }
 
-    fn get<I>(&self, scope_hash: u64, scopes: I) -> Result<Option<Token>, Self::Error>
+    fn get<T>(&self, scope_hash: u64, scopes: &[T]) -> Result<Option<Token>, Self::Error>
     where
-        I: IntoIterator + Clone,
-        I::Item: AsRef<str>,
+        T: AsRef<str>
     {
         let tokens = self.tokens.lock().expect("poisoned mutex");
         Ok(token_for_scopes(&tokens, scope_hash, scopes))
     }
 }
 
-fn token_for_scopes<I>(tokens: &[JSONToken], scope_hash: u64, scopes: I) -> Option<Token>
+fn token_for_scopes<T>(tokens: &[JSONToken], scope_hash: u64, scopes: &[T]) -> Option<Token>
 where
-    I: IntoIterator + Clone,
-    I::Item: AsRef<str>,
+    T: AsRef<str>,
 {
     for t in tokens.iter() {
         if let Some(token_scopes) = &t.scopes {
-            if scopes.clone().into_iter().all(|s| token_scopes.iter().any(|t| t == s.as_ref())) {
+            if scopes.iter().all(|s| token_scopes.iter().any(|t| t == s.as_ref())) {
                 return Some(t.token.clone());
             }
         } else if scope_hash == t.hash {
@@ -282,4 +276,22 @@ where
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hash_scopes() {
+        // Idential list should hash equal.
+        assert_eq!(hash_scopes(&["foo", "bar"]), hash_scopes(&["foo", "bar"]));
+        // The hash should be order independent.
+        assert_eq!(hash_scopes(&["bar", "foo"]), hash_scopes(&["foo", "bar"]));
+        assert_eq!(hash_scopes(&["bar", "baz", "bat"]), hash_scopes(&["baz", "bar", "bat"]));
+
+        // Ensure hashes differ when the contents are different by more than
+        // just order.
+        assert_ne!(hash_scopes(&["foo", "bar", "baz"]), hash_scopes(&["foo", "bar"]));
+    }
 }

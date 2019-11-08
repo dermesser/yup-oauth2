@@ -157,17 +157,15 @@ impl JWT {
     }
 }
 
-/// Set `iss`, `aud`, `exp`, `iat`, `scope` field in the returned `Claims`. `scopes` is an iterator
-/// yielding strings with OAuth scopes.
-fn init_claims_from_key<'a, I, T>(key: &ServiceAccountKey, scopes: I) -> Claims
+/// Set `iss`, `aud`, `exp`, `iat`, `scope` field in the returned `Claims`.
+fn init_claims_from_key<T>(key: &ServiceAccountKey, scopes: &[T]) -> Claims
 where
-    T: AsRef<str> + 'a,
-    I: IntoIterator<Item = &'a T>,
+    T: AsRef<str>,
 {
     let iat = chrono::Utc::now().timestamp();
     let expiry = iat + 3600 - 5; // Max validity is 1h.
 
-    let mut scopes_string = scopes.into_iter().fold(String::new(), |mut acc, sc| {
+    let mut scopes_string = scopes.iter().fold(String::new(), |mut acc, sc| {
         acc.push_str(sc.as_ref());
         acc.push_str(" ");
         acc
@@ -271,13 +269,16 @@ where
     C: hyper::client::connect::Connect + 'static,
 {
     /// Send a request for a new Bearer token to the OAuth provider.
-    async fn request_token(
+    async fn request_token<T>(
         client: hyper::client::Client<C>,
         sub: Option<String>,
         key: ServiceAccountKey,
-        scopes: Vec<String>,
-    ) -> Result<Token, RequestError> {
-        let mut claims = init_claims_from_key(&key, &scopes);
+        scopes: &[T],
+    ) -> Result<Token, RequestError>
+    where
+        T: AsRef<str>,
+    {
+        let mut claims = init_claims_from_key(&key, scopes);
         claims.sub = sub.clone();
         let signed = JWT::new(claims)
             .sign(key.private_key.as_ref().unwrap())
@@ -335,12 +336,16 @@ where
         Ok(token)
     }
 
-    async fn get_token(&self, hash: u64, scopes: Vec<String>) -> Result<Token, RequestError> {
+    async fn get_token<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
+    where
+        T: AsRef<str>,
+    {
+        let hash = hash_scopes(scopes);
         let cache = self.cache.clone();
         match cache
             .lock()
             .unwrap()
-            .get(hash, scopes.iter())
+            .get(hash, scopes)
         {
             Ok(Some(token)) if !token.expired() => return Ok(token),
             _ => {}
@@ -349,12 +354,12 @@ where
             self.client.clone(),
             self.sub.clone(),
             self.key.clone(),
-            scopes.iter().map(|s| s.to_string()).collect(),
+            scopes,
         )
         .await?;
         let _ = cache.lock().unwrap().set(
             hash,
-            scopes.iter(),
+            scopes,
             Some(token.clone()),
         );
         Ok(token)
@@ -365,16 +370,14 @@ impl<C> GetToken for ServiceAccountAccessImpl<C>
 where
     C: hyper::client::connect::Connect + 'static,
 {
-    fn token<'a, I, T>(
+    fn token<'a, T>(
         &'a self,
-        scopes: I,
+        scopes: &'a [T],
     ) -> Pin<Box<dyn Future<Output = Result<Token, RequestError>> + Send + 'a>>
     where
-        T: Into<String>,
-        I: IntoIterator<Item = T>,
+        T: AsRef<str> + Sync,
     {
-        let (hash, scps0) = hash_scopes(scopes);
-        Box::pin(self.get_token(hash, scps0))
+        Box::pin(self.get_token(scopes))
     }
 
     /// Returns an empty ApplicationSecret as tokens for service accounts don't need to be
@@ -449,7 +452,7 @@ mod tests {
             let acc = ServiceAccountAccessImpl::new(client.clone(), key.clone(), None);
             let fut = async {
                 let tok = acc
-                    .token(vec!["https://www.googleapis.com/auth/pubsub"])
+                    .token(&["https://www.googleapis.com/auth/pubsub"])
                     .await?;
                 assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
                 assert_eq!(Some(3600), tok.expires_in);
@@ -463,14 +466,14 @@ mod tests {
                 .unwrap()
                 .get(
                     3502164897243251857,
-                    ["https://www.googleapis.com/auth/pubsub"].iter(),
+                    &["https://www.googleapis.com/auth/pubsub"],
                 )
                 .unwrap()
                 .is_some());
             // Test that token is in cache (otherwise mock will tell us)
             let fut = async {
                 let tok = acc
-                    .token(vec!["https://www.googleapis.com/auth/pubsub"])
+                    .token(&["https://www.googleapis.com/auth/pubsub"])
                     .await?;
                 assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
                 assert_eq!(Some(3600), tok.expires_in);
@@ -492,7 +495,7 @@ mod tests {
                 .build();
             let fut = async {
                 let result = acc
-                    .token(vec!["https://www.googleapis.com/auth/pubsub"])
+                    .token(&["https://www.googleapis.com/auth/pubsub"])
                     .await;
                 assert!(result.is_err());
                 Ok(()) as Result<(), ()>
@@ -522,7 +525,7 @@ mod tests {
         rt.block_on(async {
             println!(
                 "{:?}",
-                acc.token(vec!["https://www.googleapis.com/auth/pubsub"])
+                acc.token(&["https://www.googleapis.com/auth/pubsub"])
                     .await
             );
         });

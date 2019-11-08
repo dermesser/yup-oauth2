@@ -1,4 +1,3 @@
-use std::iter::{FromIterator, IntoIterator};
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -7,7 +6,6 @@ use chrono::{self, Utc};
 use futures::{prelude::*};
 use hyper;
 use hyper::header;
-use itertools::Itertools;
 use serde_json as json;
 use url::form_urlencoded;
 
@@ -104,15 +102,14 @@ where
     FD: FlowDelegate + 'static,
     C: hyper::client::connect::Connect + 'static,
 {
-    fn token<'a, I, T>(
+    fn token<'a, T>(
         &'a self,
-        scopes: I,
+        scopes: &'a [T],
     ) -> Pin<Box<dyn Future<Output = Result<Token, RequestError>> + Send + 'a>>
     where
-        T: Into<String>,
-        I: IntoIterator<Item = T>,
+        T: AsRef<str> + Sync,
     {
-        Box::pin(self.retrieve_device_token(Vec::from_iter(scopes.into_iter().map(Into::into))))
+        Box::pin(self.retrieve_device_token(scopes))
     }
     fn api_key(&self) -> Option<String> {
         None
@@ -131,10 +128,13 @@ where
 {
     /// Essentially what `GetToken::token` does: Retrieve a token for the given scopes without
     /// caching.
-    pub async fn retrieve_device_token<'a>(
+    pub async fn retrieve_device_token<T>(
         &self,
-        scopes: Vec<String>,
-    ) -> Result<Token, RequestError> {
+        scopes: &[T],
+    ) -> Result<Token, RequestError>
+    where
+        T: AsRef<str>,
+    {
         let application_secret = self.application_secret.clone();
         let client = self.client.clone();
         let wait = self.wait;
@@ -193,24 +193,21 @@ where
     /// * If called after a successful result was returned at least once.
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    async fn request_code(
+    async fn request_code<T>(
         application_secret: ApplicationSecret,
         client: hyper::Client<C>,
         device_code_url: String,
-        scopes: Vec<String>,
-    ) -> Result<(PollInformation, String), RequestError> {
+        scopes: &[T],
+    ) -> Result<(PollInformation, String), RequestError>
+    where
+        T: AsRef<str>,
+    {
         // note: cloned() shouldn't be needed, see issue
         // https://github.com/servo/rust-url/issues/81
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
                 ("client_id", application_secret.client_id.clone()),
-                (
-                    "scope",
-                    scopes
-                        .into_iter()
-                        .intersperse(" ".to_string())
-                        .collect::<String>(),
-                ),
+                ("scope", crate::helper::join(scopes, " ")),
             ])
             .finish();
 
@@ -409,7 +406,7 @@ mod tests {
 
             let fut = async {
                 let token = flow
-                    .token(vec!["https://www.googleapis.com/scope/1"])
+                    .token(&["https://www.googleapis.com/scope/1"])
                     .await
                     .unwrap();
                 assert_eq!("accesstoken", token.access_token);
@@ -441,7 +438,7 @@ mod tests {
                 .create();
 
             let fut = async {
-                let res = flow.token(vec!["https://www.googleapis.com/scope/1"]).await;
+                let res = flow.token(&["https://www.googleapis.com/scope/1"]).await;
                 assert!(res.is_err());
                 assert!(format!("{}", res.unwrap_err()).contains("invalid_client_id"));
                 Ok(()) as Result<(), ()>
@@ -471,7 +468,7 @@ mod tests {
                 .create();
 
             let fut = async {
-                let res = flow.token(vec!["https://www.googleapis.com/scope/1"]).await;
+                let res = flow.token(&["https://www.googleapis.com/scope/1"]).await;
                 assert!(res.is_err());
                 assert!(format!("{}", res.unwrap_err()).contains("Access denied by user"));
                 Ok(()) as Result<(), ()>

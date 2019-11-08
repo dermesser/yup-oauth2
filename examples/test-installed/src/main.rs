@@ -15,8 +15,7 @@ async fn main() {
     .persist_tokens_to_disk("tokencache.json")
     .build()
     .unwrap();
-    let s = "https://www.googleapis.com/auth/drive.file".to_string();
-    let scopes = vec![s];
+    let scopes = &["https://www.googleapis.com/auth/drive.file"];
 
     match auth.token(scopes).await {
         Err(e) => println!("error: {:?}", e),

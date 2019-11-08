@@ -12,7 +12,7 @@ async fn main() {
         .build()
         .expect("authenticator");
 
-    let scopes = vec!["https://www.googleapis.com/auth/youtube.readonly"];
+    let scopes = &["https://www.googleapis.com/auth/youtube.readonly"];
     match auth.token(scopes).await {
         Err(e) => println!("error: {:?}", e),
         Ok(t) => println!("token: {:?}", t),
