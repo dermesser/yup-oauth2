@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::authenticator::{DefaultHyperClient, HyperClientBuilder};
 use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
-use crate::types::{ApplicationSecret, GetToken, JsonError, RequestError, Token};
+use crate::types::{ApplicationSecret, GetToken, JsonErrorOr, RequestError, Token};
 
 use futures::prelude::*;
 use hyper::header;
@@ -302,38 +302,32 @@ where
             .try_concat()
             .await
             .map_err(RequestError::ClientError)?;
-        if let Ok(jse) = serde_json::from_slice::<JsonError>(&body) {
-            return Err(RequestError::NegativeServerResponse(
-                jse.error,
-                jse.error_description,
-            ));
-        }
-        let token: TokenResponse =
-            serde_json::from_slice(&body).map_err(RequestError::JSONError)?;
-        let token = match token {
-            TokenResponse {
+        match serde_json::from_slice::<JsonErrorOr<TokenResponse>>(&body)? {
+            JsonErrorOr::Err(err) => {
+                Err(err.into())
+            },
+            JsonErrorOr::Data(TokenResponse {
                 access_token: Some(access_token),
                 token_type: Some(token_type),
                 expires_in: Some(expires_in),
                 ..
-            } => {
+            }) => {
                 let expires_ts = chrono::Utc::now().timestamp() + expires_in;
-                Token {
+                Ok(Token {
                     access_token,
                     token_type,
                     refresh_token: None,
                     expires_in: Some(expires_in),
                     expires_in_timestamp: Some(expires_ts),
-                }
-            }
-            _ => {
-                return Err(RequestError::BadServerResponse(format!(
+                })
+            },
+            JsonErrorOr::Data(token) => {
+                Err(RequestError::BadServerResponse(format!(
                     "Token response lacks fields: {:?}",
                     token
                 )))
             }
-        };
-        Ok(token)
+        }
     }
 
     async fn get_token<T>(&self, scopes: &[T]) -> Result<Token, RequestError>

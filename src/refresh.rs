@@ -1,11 +1,10 @@
-use crate::types::{ApplicationSecret, JsonError, RefreshResult, RequestError};
+use crate::types::{ApplicationSecret, JsonErrorOr, RefreshResult, RequestError};
 
 use super::Token;
 use chrono::Utc;
 use futures_util::try_stream::TryStreamExt;
 use hyper;
 use hyper::header;
-use serde_json as json;
 use url::form_urlencoded;
 
 /// Implements the [OAuth2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
@@ -58,34 +57,28 @@ impl RefreshFlow {
             Ok(body) => body,
             Err(err) => return Ok(RefreshResult::Error(err)),
         };
-        if let Ok(json_err) = json::from_slice::<JsonError>(&body) {
-            return Ok(RefreshResult::RefreshError(
-                json_err.error,
-                json_err.error_description,
-            ));
-        }
+
         #[derive(Deserialize)]
         struct JsonToken {
             access_token: String,
             token_type: String,
             expires_in: i64,
         }
-        let t: JsonToken = match json::from_slice(&body) {
-            Err(_) => {
-                return Ok(RefreshResult::RefreshError(
-                    "failed to deserialized json token from refresh response".to_owned(),
-                    None,
-                ))
-            }
-            Ok(token) => token,
-        };
-        Ok(RefreshResult::Success(Token {
-            access_token: t.access_token,
-            token_type: t.token_type,
-            refresh_token: Some(refresh_token.to_string()),
-            expires_in: None,
-            expires_in_timestamp: Some(Utc::now().timestamp() + t.expires_in),
-        }))
+
+        match serde_json::from_slice::<JsonErrorOr<JsonToken>>(&body) {
+            Err(_) => Ok(RefreshResult::RefreshError("failed to deserialized json token from refresh response".to_owned(), None)),
+            Ok(JsonErrorOr::Err(json_err)) => Ok(RefreshResult::RefreshError(json_err.error, json_err.error_description)),
+            Ok(JsonErrorOr::Data(JsonToken{access_token, token_type, expires_in})) => {
+                    Ok(RefreshResult::Success(
+                        Token{
+                            access_token,
+                            token_type,
+                            refresh_token: Some(refresh_token.to_string()),
+                            expires_in: None,
+                            expires_in_timestamp: Some(Utc::now().timestamp() + expires_in),
+                        }))
+            },
+        }
     }
 }
 

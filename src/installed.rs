@@ -17,7 +17,7 @@ use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate};
-use crate::types::{ApplicationSecret, GetToken, RequestError, Token};
+use crate::types::{ApplicationSecret, GetToken, RequestError, Token, JsonErrorOr};
 
 const OOB_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
 
@@ -270,24 +270,21 @@ where
             .try_concat()
             .await
             .map_err(|e| RequestError::ClientError(e))?;
-        let tokens: JSONTokenResponse =
-            serde_json::from_slice(&body).map_err(|e| RequestError::JSONError(e))?;
-        match tokens {
-            JSONTokenResponse {
-                error: Some(err),
-                error_description,
-                ..
-            } => Err(RequestError::NegativeServerResponse(err, error_description)),
-            JSONTokenResponse {
-                access_token: Some(access_token),
-                refresh_token,
-                token_type: Some(token_type),
-                expires_in,
-                ..
-            } => {
+
+        #[derive(Deserialize)]
+        struct JSONTokenResponse {
+            access_token: String,
+            refresh_token: String,
+            token_type: String,
+            expires_in: Option<i64>,
+        }
+
+        match serde_json::from_slice::<JsonErrorOr<JSONTokenResponse>>(&body)? {
+            JsonErrorOr::Err(err) => Err(err.into()),
+            JsonErrorOr::Data(JSONTokenResponse{access_token, refresh_token, token_type, expires_in}) => {
                 let mut token = Token {
                     access_token,
-                    refresh_token,
+                    refresh_token: Some(refresh_token),
                     token_type,
                     expires_in,
                     expires_in_timestamp: None,
@@ -295,12 +292,6 @@ where
                 token.set_expiry_absolute();
                 Ok(token)
             }
-            JSONTokenResponse {
-                error_description, ..
-            } => Err(RequestError::NegativeServerResponse(
-                "".to_owned(),
-                error_description,
-            )),
         }
     }
 
@@ -334,17 +325,6 @@ where
             .unwrap(); // TODO: error check
         request
     }
-}
-
-#[derive(Deserialize)]
-struct JSONTokenResponse {
-    access_token: Option<String>,
-    refresh_token: Option<String>,
-    token_type: Option<String>,
-    expires_in: Option<i64>,
-
-    error: Option<String>,
-    error_description: Option<String>,
 }
 
 fn spawn_with_handle<F>(f: F) -> impl Future<Output = ()>

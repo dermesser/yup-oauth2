@@ -15,6 +15,14 @@ pub struct JsonError {
     pub error_uri: Option<String>,
 }
 
+/// A helper type to deserialize either a JsonError or another piece of data.
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+pub enum JsonErrorOr<T> {
+    Err(JsonError),
+    Data(T),
+}
+
 /// All possible outcomes of the refresh flow
 #[derive(Debug)]
 pub enum RefreshResult {
@@ -57,7 +65,7 @@ pub enum RequestError {
     /// A malformed server response.
     BadServerResponse(String),
     /// Error while decoding a JSON response.
-    JSONError(serde_json::error::Error),
+    JSONError(serde_json::Error),
     /// Error within user input.
     UserError(String),
     /// A lower level IO error.
@@ -87,6 +95,12 @@ impl From<JsonError> for RequestError {
             ),
             _ => RequestError::NegativeServerResponse(value.error, value.error_description),
         }
+    }
+}
+
+impl From<serde_json::Error> for RequestError {
+    fn from(value: serde_json::Error) -> RequestError {
+        RequestError::JSONError(value)
     }
 }
 
