@@ -199,7 +199,7 @@ where
         let scope_key = hash_scopes(scopes);
         let store = &self.store;
         let delegate = &self.delegate;
-        let client = self.client.clone();
+        let client = &self.client;
         let appsecret = self.inner.application_secret();
         let gettoken = self.inner.clone();
         loop {
@@ -214,7 +214,7 @@ where
                     // Implement refresh flow.
                     let refresh_token = t.refresh_token.clone();
                     let rr = RefreshFlow::refresh_token(
-                        client.clone(),
+                        client,
                         appsecret,
                         refresh_token.unwrap(),
                     )

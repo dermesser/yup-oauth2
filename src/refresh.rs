@@ -31,7 +31,7 @@ impl RefreshFlow {
     /// # Examples
     /// Please see the crate landing page for an example.
     pub async fn refresh_token<C: 'static + hyper::client::connect::Connect>(
-        client: hyper::Client<C>,
+        client: &hyper::Client<C>,
         client_secret: &ApplicationSecret,
         refresh_token: String,
     ) -> Result<RefreshResult, RequestError> {
@@ -129,7 +129,7 @@ mod tests {
                 .create();
             let fut = async {
                 let rr = RefreshFlow::refresh_token(
-                    client.clone(),
+                    &client,
                     &app_secret,
                     refresh_token.clone(),
                 )
@@ -158,7 +158,7 @@ mod tests {
                 .create();
 
             let fut = async {
-                let rr = RefreshFlow::refresh_token(client, &app_secret, refresh_token)
+                let rr = RefreshFlow::refresh_token(&client, &app_secret, refresh_token)
                     .await
                     .unwrap();
                 match rr {
