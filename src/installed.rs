@@ -92,11 +92,7 @@ pub enum InstalledFlowReturnMethod {
     Interactive,
     /// Involves spinning up a local HTTP server and Google redirecting the browser to
     /// the server with a URL containing the code (preferred, but not as reliable).
-    HTTPRedirectEphemeral,
-    /// Involves spinning up a local HTTP server and Google redirecting the browser to
-    /// the server with a URL containing the code (preferred, but not as reliable). The
-    /// parameter is the port to listen on.
-    HTTPRedirect(u16),
+    HTTPRedirect,
 }
 
 /// InstalledFlowImpl provides tokens for services that follow the "Installed" OAuth flow. (See
@@ -169,12 +165,7 @@ where
         T: AsRef<str>,
     {
         match self.method {
-            InstalledFlowReturnMethod::HTTPRedirect(port) => {
-                self.ask_auth_code_via_http(scopes, port).await
-            }
-            InstalledFlowReturnMethod::HTTPRedirectEphemeral => {
-                self.ask_auth_code_via_http(scopes, 0).await
-            }
+            InstalledFlowReturnMethod::HTTPRedirect => self.ask_auth_code_via_http(scopes).await,
             InstalledFlowReturnMethod::Interactive => {
                 self.ask_auth_code_interactively(scopes).await
             }
@@ -211,26 +202,22 @@ where
         self.exchange_auth_code(&authcode, None).await
     }
 
-    async fn ask_auth_code_via_http<T>(
-        &self,
-        scopes: &[T],
-        desired_port: u16,
-    ) -> Result<Token, RequestError>
+    async fn ask_auth_code_via_http<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
     where
         T: AsRef<str>,
     {
         use std::borrow::Cow;
         let auth_delegate = &self.fd;
         let appsecret = &self.appsecret;
-        let server = InstalledFlowServer::run(desired_port)?;
-        let bound_port = server.local_addr().port();
+        let server = InstalledFlowServer::run()?;
+        let server_addr = server.local_addr();
 
         // Present url to user.
         // The redirect URI must be this very localhost URL, otherwise authorization is refused
         // by certain providers.
         let redirect_uri: Cow<str> = match auth_delegate.redirect_uri() {
             Some(uri) => uri.into(),
-            None => format!("http://localhost:{}", bound_port).into(),
+            None => format!("http://{}", server_addr).into(),
         };
         let url = build_authentication_request_url(
             &appsecret.auth_uri,
@@ -243,17 +230,17 @@ where
             .await;
 
         let auth_code = server.wait_for_auth_code().await;
-        self.exchange_auth_code(&auth_code, Some(bound_port)).await
+        self.exchange_auth_code(&auth_code, Some(server_addr)).await
     }
 
     async fn exchange_auth_code(
         &self,
         authcode: &str,
-        port: Option<u16>,
+        server_addr: Option<SocketAddr>,
     ) -> Result<Token, RequestError> {
         let appsec = &self.appsecret;
         let redirect_uri = self.fd.redirect_uri();
-        let request = Self::request_token(appsec, authcode, redirect_uri, port);
+        let request = Self::request_token(appsec, authcode, redirect_uri, server_addr);
         let resp = self
             .client
             .request(request)
@@ -299,12 +286,12 @@ where
         appsecret: &ApplicationSecret,
         authcode: &str,
         custom_redirect_uri: Option<&str>,
-        port: Option<u16>,
+        server_addr: Option<SocketAddr>,
     ) -> hyper::Request<hyper::Body> {
         use std::borrow::Cow;
-        let redirect_uri: Cow<str> = match (custom_redirect_uri, port) {
+        let redirect_uri: Cow<str> = match (custom_redirect_uri, server_addr) {
             (Some(uri), _) => uri.into(),
-            (None, Some(port)) => format!("http://localhost:{}", port).into(),
+            (None, Some(addr)) => format!("http://{}", addr).into(),
             (None, None) => OOB_REDIRECT_URI.into(),
         };
 
@@ -344,7 +331,7 @@ struct InstalledFlowServer {
 }
 
 impl InstalledFlowServer {
-    fn run(desired_port: u16) -> Result<Self, RequestError> {
+    fn run() -> Result<Self, RequestError> {
         use hyper::service::{make_service_fn, service_fn};
         let (auth_code_tx, auth_code_rx) = oneshot::channel::<String>();
         let (trigger_shutdown_tx, trigger_shutdown_rx) = oneshot::channel::<()>();
@@ -359,7 +346,7 @@ impl InstalledFlowServer {
                 }))
             }
         });
-        let addr: std::net::SocketAddr = ([127, 0, 0, 1], desired_port).into();
+        let addr: std::net::SocketAddr = ([127, 0, 0, 1], 0).into();
         let server = hyper::server::Server::try_bind(&addr)?;
         let server = server.http1_only(true).serve(service);
         let addr = server.local_addr();
@@ -572,7 +559,7 @@ mod tests {
         }
         // Successful path with HTTP redirect.
         {
-            let inf = InstalledFlow::new(app_secret, InstalledFlowReturnMethod::HTTPRedirect(8081))
+            let inf = InstalledFlow::new(app_secret, InstalledFlowReturnMethod::HTTPRedirect)
                 .delegate(FD(
                     "authorizationcodefromlocalserver".to_string(),
                     client.clone(),
@@ -639,8 +626,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_random_local_port() {
-        let addr1 = InstalledFlowServer::run(0).unwrap().local_addr();
-        let addr2 = InstalledFlowServer::run(0).unwrap().local_addr();
+        let addr1 = InstalledFlowServer::run().unwrap().local_addr();
+        let addr2 = InstalledFlowServer::run().unwrap().local_addr();
         assert_ne!(addr1.port(), addr2.port());
     }
 
@@ -662,7 +649,7 @@ mod tests {
     async fn test_server() {
         let client: hyper::Client<hyper::client::HttpConnector, hyper::Body> =
             hyper::Client::builder().build_http();
-        let server = InstalledFlowServer::run(0).unwrap();
+        let server = InstalledFlowServer::run().unwrap();
 
         let response = client
             .get(format!("http://{}/", server.local_addr()).parse().unwrap())

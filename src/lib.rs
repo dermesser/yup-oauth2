@@ -59,7 +59,7 @@
 //!      // authenticator takes care of caching tokens to disk and refreshing tokens once
 //!      // they've expired.
 //!     let mut auth = Authenticator::new(
-//!         InstalledFlow::new(secret, yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect(0))
+//!         InstalledFlow::new(secret, yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect)
 //!     )
 //!     .persist_tokens_to_disk("tokencache.json")
 //!     .build()

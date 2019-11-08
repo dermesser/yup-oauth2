@@ -10,7 +10,7 @@ async fn main() {
 
     let auth = Authenticator::new(InstalledFlow::new(
         secret,
-        yup_oauth2::InstalledFlowReturnMethod::HTTPRedirectEphemeral,
+        yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect,
     ))
     .persist_tokens_to_disk("tokencache.json")
     .build()
