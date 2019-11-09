@@ -189,7 +189,7 @@ where
     GT: 'static + GetToken,
     S: 'static + TokenStorage,
     AD: 'static + AuthenticatorDelegate,
-    C: 'static + hyper::client::connect::Connect + Clone + Send,
+    C: 'static + hyper::client::connect::Connect,
 {
     async fn get_token<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
     where
@@ -264,12 +264,12 @@ where
     }
 }
 
-impl<
-        GT: 'static + GetToken,
-        S: 'static + TokenStorage,
-        AD: 'static + AuthenticatorDelegate,
-        C: 'static + hyper::client::connect::Connect + Clone + Send,
-    > GetToken for AuthenticatorImpl<GT, S, AD, C>
+impl<GT, S, AD, C> GetToken for AuthenticatorImpl<GT, S, AD, C>
+where
+    GT: 'static + GetToken,
+    S: 'static + TokenStorage,
+    AD: 'static + AuthenticatorDelegate,
+    C: 'static + hyper::client::connect::Connect,
 {
     /// Returns the API Key of the inner flow.
     fn api_key(&self) -> Option<String> {
