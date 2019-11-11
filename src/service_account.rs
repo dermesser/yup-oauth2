@@ -273,7 +273,7 @@ impl TokenResponse {
         Token {
             access_token: self.access_token.unwrap(),
             token_type: self.token_type.unwrap(),
-            refresh_token: String::new(),
+            refresh_token: Some(String::new()),
             expires_in: self.expires_in,
             expires_in_timestamp: Some(expires_ts),
         }

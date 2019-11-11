@@ -272,7 +272,7 @@ pub struct Token {
     /// used when authenticating calls to oauth2 enabled services.
     pub access_token: String,
     /// used to refresh an expired access_token.
-    pub refresh_token: String,
+    pub refresh_token: Option<String>,
     /// The token type as string - usually 'Bearer'.
     pub token_type: String,
     /// access_token will expire after this amount of time.

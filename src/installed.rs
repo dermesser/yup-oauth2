@@ -242,7 +242,7 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
                 if tokens.access_token.is_some() {
                     let mut token = Token {
                         access_token: tokens.access_token.unwrap(),
-                        refresh_token: tokens.refresh_token.unwrap(),
+                        refresh_token: Some(tokens.refresh_token.unwrap()),
                         token_type: tokens.token_type.unwrap(),
                         expires_in: tokens.expires_in,
                         expires_in_timestamp: None,
