@@ -133,7 +133,7 @@ where
         let application_secret = &self.application_secret;
         let client = self.client.clone();
         let wait = self.wait;
-        let fd = self.fd.clone();
+        let fd = &self.fd;
         let (pollinf, device_code) = Self::request_code(
             application_secret,
             client.clone(),
@@ -152,7 +152,7 @@ where
                 client.clone(),
                 &device_code,
                 pollinf.clone(),
-                fd.clone(),
+                fd,
             )
             .await;
             match r {
@@ -270,7 +270,7 @@ where
         client: hyper::Client<C>,
         device_code: &str,
         pi: PollInformation,
-        fd: FD,
+        fd: &FD,
     ) -> Result<Option<Token>, PollError> {
         if pi.expires_at <= Utc::now() {
             fd.expired(&pi.expires_at);

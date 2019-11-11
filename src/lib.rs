@@ -45,13 +45,11 @@
 //! use hyper::client::Client;
 //! use hyper_rustls::HttpsConnector;
 //!
-//! use std::path::Path;
-//!
 //! #[tokio::main]
 //! async fn main() {
 //!     // Read application secret from a file. Sometimes it's easier to compile it directly into
 //!     // the binary. The clientsecret file contains JSON like `{"installed":{"client_id": ... }}`
-//!     let secret = yup_oauth2::read_application_secret(Path::new("clientsecret.json"))
+//!     let secret = yup_oauth2::read_application_secret("clientsecret.json")
 //!         .expect("clientsecret.json");
 //!
 //!     // Create an authenticator that uses an InstalledFlow to authenticate. The

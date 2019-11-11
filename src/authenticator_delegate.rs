@@ -71,7 +71,7 @@ impl Error for PollError {
 ///
 /// The only method that needs to be implemented manually is `present_user_code(...)`,
 /// as no assumptions are made on how this presentation should happen.
-pub trait AuthenticatorDelegate: Clone + Send + Sync {
+pub trait AuthenticatorDelegate: Send + Sync {
     /// Called whenever there is an client, usually if there are network problems.
     ///
     /// Return retry information.
@@ -107,7 +107,7 @@ pub trait AuthenticatorDelegate: Clone + Send + Sync {
 
 /// FlowDelegate methods are called when an OAuth flow needs to ask the application what to do in
 /// certain cases.
-pub trait FlowDelegate: Clone + Send + Sync {
+pub trait FlowDelegate: Send + Sync {
     /// Called if the request code is expired. You will have to start over in this case.
     /// This will be the last call the delegate receives.
     /// Given `DateTime` is the expiration date
