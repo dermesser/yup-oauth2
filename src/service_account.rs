@@ -205,7 +205,6 @@ impl ServiceAccountAccess<DefaultHyperClient> {
 impl<C> ServiceAccountAccess<C>
 where
     C: HyperClientBuilder,
-    C::Connector: 'static,
 {
     /// Use the provided hyper client.
     pub fn hyper_client<NewC: HyperClientBuilder>(

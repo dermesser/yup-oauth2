@@ -29,7 +29,7 @@ impl RefreshFlow {
     ///
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub async fn refresh_token<C: 'static + hyper::client::connect::Connect>(
+    pub async fn refresh_token<C: hyper::client::connect::Connect + 'static>(
         client: &hyper::Client<C>,
         client_secret: &ApplicationSecret,
         refresh_token: &str,

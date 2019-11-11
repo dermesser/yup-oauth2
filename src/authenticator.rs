@@ -34,7 +34,7 @@ struct AuthenticatorImpl<
 
 /// A trait implemented for any hyper::Client as well as teh DefaultHyperClient.
 pub trait HyperClientBuilder {
-    type Connector: hyper::client::connect::Connect;
+    type Connector: hyper::client::connect::Connect + 'static;
 
     fn build_hyper_client(self) -> hyper::Client<Self::Connector>;
 }
@@ -53,7 +53,7 @@ impl HyperClientBuilder for DefaultHyperClient {
 
 impl<C> HyperClientBuilder for hyper::Client<C>
 where
-    C: hyper::client::connect::Connect,
+    C: hyper::client::connect::Connect + 'static,
 {
     type Connector = C;
 
@@ -72,12 +72,7 @@ pub trait AuthFlow<C> {
 /// An authenticator can be used with `InstalledFlow`'s or `DeviceFlow`'s and
 /// will refresh tokens as they expire as well as optionally persist tokens to
 /// disk.
-pub struct Authenticator<
-    T: AuthFlow<C::Connector>,
-    S: TokenStorage,
-    AD: AuthenticatorDelegate,
-    C: HyperClientBuilder,
-> {
+pub struct Authenticator<T, S, AD, C> {
     client: C,
     token_getter: T,
     store: io::Result<S>,
@@ -125,7 +120,7 @@ where
         hyper_client: hyper::Client<NewC>,
     ) -> Authenticator<T, S, AD, hyper::Client<NewC>>
     where
-        NewC: hyper::client::connect::Connect,
+        NewC: hyper::client::connect::Connect + 'static,
         T: AuthFlow<NewC>,
     {
         Authenticator {
@@ -166,10 +161,8 @@ where
     /// Create the authenticator.
     pub fn build(self) -> io::Result<impl GetToken>
     where
-        T::TokenGetter: 'static + GetToken,
-        S: 'static,
-        AD: 'static,
-        C::Connector: 'static + hyper::client::connect::Connect,
+        T::TokenGetter: GetToken,
+        C::Connector: hyper::client::connect::Connect + 'static,
     {
         let client = self.client.build_hyper_client();
         let store = self.store?;
@@ -186,10 +179,10 @@ where
 
 impl<GT, S, AD, C> AuthenticatorImpl<GT, S, AD, C>
 where
-    GT: 'static + GetToken,
-    S: 'static + TokenStorage,
-    AD: 'static + AuthenticatorDelegate,
-    C: 'static + hyper::client::connect::Connect,
+    GT: GetToken,
+    S: TokenStorage,
+    AD: AuthenticatorDelegate,
+    C: hyper::client::connect::Connect + 'static,
 {
     async fn get_token<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
     where
@@ -266,10 +259,10 @@ where
 
 impl<GT, S, AD, C> GetToken for AuthenticatorImpl<GT, S, AD, C>
 where
-    GT: 'static + GetToken,
-    S: 'static + TokenStorage,
-    AD: 'static + AuthenticatorDelegate,
-    C: 'static + hyper::client::connect::Connect,
+    GT: GetToken,
+    S: TokenStorage,
+    AD: AuthenticatorDelegate,
+    C: hyper::client::connect::Connect + 'static,
 {
     /// Returns the API Key of the inner flow.
     fn api_key(&self) -> Option<String> {

@@ -69,7 +69,7 @@ impl<FD> DeviceFlow<FD> {
 
 impl<FD, C> crate::authenticator::AuthFlow<C> for DeviceFlow<FD>
 where
-    FD: FlowDelegate + 'static,
+    FD: FlowDelegate,
     C: hyper::client::connect::Connect + 'static,
 {
     type TokenGetter = DeviceFlowImpl<FD, C>;
@@ -97,7 +97,7 @@ pub struct DeviceFlowImpl<FD, C> {
 
 impl<FD, C> GetToken for DeviceFlowImpl<FD, C>
 where
-    FD: FlowDelegate + 'static,
+    FD: FlowDelegate,
     C: hyper::client::connect::Connect + 'static,
 {
     fn token<'a, T>(
@@ -120,9 +120,7 @@ where
 impl<FD, C> DeviceFlowImpl<FD, C>
 where
     C: hyper::client::connect::Connect + 'static,
-    C::Transport: 'static,
-    C::Future: 'static,
-    FD: FlowDelegate + 'static,
+    FD: FlowDelegate,
 {
     /// Essentially what `GetToken::token` does: Retrieve a token for the given scopes without
     /// caching.
