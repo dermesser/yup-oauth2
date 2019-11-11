@@ -131,44 +131,55 @@ where
         T: AsRef<str>,
     {
         let application_secret = &self.application_secret;
-        let client = self.client.clone();
-        let wait = self.wait;
-        let fd = &self.fd;
         let (pollinf, device_code) = Self::request_code(
             application_secret,
-            client.clone(),
+            &self.client,
             &self.device_code_url,
             scopes,
         )
         .await?;
-        fd.present_user_code(&pollinf);
-        let maxn = wait.as_secs() / pollinf.interval.as_secs();
-        for _ in 0..maxn {
-            tokio::timer::delay_for(pollinf.interval).await;
+        self.fd.present_user_code(&pollinf);
+        tokio::timer::Timeout::new(
+            self.wait_for_device_token(&pollinf, &device_code),
+            self.wait,
+        )
+        .await
+        .map_err(|_| RequestError::Poll(PollError::TimedOut))?
+    }
+
+    async fn wait_for_device_token(
+        &self,
+        pollinf: &PollInformation,
+        device_code: &str,
+    ) -> Result<Token, RequestError> {
+        let mut interval = pollinf.interval;
+        loop {
+            tokio::timer::delay_for(interval).await;
             let r = Self::poll_token(
-                application_secret,
-                client.clone(),
-                &device_code,
+                &self.application_secret,
+                &self.client,
+                device_code,
                 pollinf.expires_at,
-                fd,
+                &self.fd,
             )
             .await;
-            match r {
-                Ok(None) => match fd.pending(&pollinf) {
+            interval = match r {
+                Ok(None) => match self.fd.pending(&pollinf) {
                     Retry::Abort | Retry::Skip => {
                         return Err(RequestError::Poll(PollError::TimedOut))
                     }
-                    Retry::After(d) => tokio::timer::delay_for(d).await,
+                    Retry::After(d) => d,
                 },
                 Ok(Some(tok)) => return Ok(tok),
                 Err(e @ PollError::AccessDenied)
                 | Err(e @ PollError::TimedOut)
                 | Err(e @ PollError::Expired(_)) => return Err(RequestError::Poll(e)),
-                Err(ref e) => error!("Unknown error from poll token api: {}", e),
+                Err(ref e) => {
+                    error!("Unknown error from poll token api: {}", e);
+                    pollinf.interval
+                }
             }
         }
-        error!("Too many poll attempts");
-        Err(RequestError::Poll(PollError::TimedOut))
     }
 
     /// The first step involves asking the server for a code that the user
@@ -188,15 +199,13 @@ where
     /// See test-cases in source code for a more complete example.
     async fn request_code<T>(
         application_secret: &ApplicationSecret,
-        client: hyper::Client<C>,
+        client: &hyper::Client<C>,
         device_code_url: &str,
         scopes: &[T],
     ) -> Result<(PollInformation, String), RequestError>
     where
         T: AsRef<str>,
     {
-        // note: cloned() shouldn't be needed, see issue
-        // https://github.com/servo/rust-url/issues/81
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
                 ("client_id", application_secret.client_id.as_str()),
@@ -265,7 +274,7 @@ where
     /// See test-cases in source code for a more complete example.
     async fn poll_token<'a>(
         application_secret: &ApplicationSecret,
-        client: hyper::Client<C>,
+        client: &hyper::Client<C>,
         device_code: &str,
         expires_at: DateTime<Utc>,
         fd: &FD,
