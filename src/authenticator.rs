@@ -167,9 +167,9 @@ where
     pub fn build(self) -> io::Result<impl GetToken>
     where
         T::TokenGetter: 'static + GetToken,
-        S: 'static + Send,
+        S: 'static,
         AD: 'static,
-        C::Connector: 'static + Clone + Send,
+        C::Connector: 'static + hyper::client::connect::Connect,
     {
         let client = self.client.build_hyper_client();
         let store = self.store?;

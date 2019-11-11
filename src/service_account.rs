@@ -233,7 +233,6 @@ where
     }
 }
 
-#[derive(Clone)]
 struct ServiceAccountAccessImpl<C> {
     client: hyper::Client<C, hyper::Body>,
     key: ServiceAccountKey,
