@@ -111,7 +111,7 @@ pub trait FlowDelegate: Send + Sync {
     /// Called if the request code is expired. You will have to start over in this case.
     /// This will be the last call the delegate receives.
     /// Given `DateTime` is the expiration date
-    fn expired(&self, _: &DateTime<Utc>) {}
+    fn expired(&self, _: DateTime<Utc>) {}
 
     /// Called if the user denied access. You would have to start over.
     /// This will be the last call the delegate receives.

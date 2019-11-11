@@ -2,7 +2,7 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use ::log::{error, log};
-use chrono::{self, Utc};
+use chrono::{DateTime, Utc};
 use futures::prelude::*;
 use hyper;
 use hyper::header;
@@ -144,14 +144,12 @@ where
         fd.present_user_code(&pollinf);
         let maxn = wait.as_secs() / pollinf.interval.as_secs();
         for _ in 0..maxn {
-            let fd = fd.clone();
-            let pollinf = pollinf.clone();
             tokio::timer::delay_for(pollinf.interval).await;
             let r = Self::poll_token(
                 application_secret,
                 client.clone(),
                 &device_code,
-                pollinf.clone(),
+                pollinf.expires_at,
                 fd,
             )
             .await;
@@ -269,12 +267,12 @@ where
         application_secret: &ApplicationSecret,
         client: hyper::Client<C>,
         device_code: &str,
-        pi: PollInformation,
+        expires_at: DateTime<Utc>,
         fd: &FD,
     ) -> Result<Option<Token>, PollError> {
-        if pi.expires_at <= Utc::now() {
-            fd.expired(&pi.expires_at);
-            return Err(PollError::Expired(pi.expires_at));
+        if expires_at <= Utc::now() {
+            fd.expired(expires_at);
+            return Err(PollError::Expired(expires_at));
         }
 
         // We should be ready for a new request
