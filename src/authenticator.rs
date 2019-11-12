@@ -237,7 +237,7 @@ impl<
                     let refresh_fut = RefreshFlow::refresh_token(
                         client.clone(),
                         appsecret.clone(),
-                        refresh_token,
+                        refresh_token.unwrap(),
                     )
                         .and_then(move |rr| -> Box<dyn Future<Item=future::Loop<Token, ()>, Error=RequestError> + Send> {
                             match rr {

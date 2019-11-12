@@ -91,7 +91,7 @@ impl RefreshFlow {
                 Ok(RefreshResult::Success(Token {
                     access_token: t.access_token,
                     token_type: t.token_type,
-                    refresh_token: refresh_token.to_string(),
+                    refresh_token: Some(refresh_token.to_string()),
                     expires_in: None,
                     expires_in_timestamp: Some(Utc::now().timestamp() + t.expires_in),
                 }))

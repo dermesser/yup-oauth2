@@ -242,7 +242,7 @@ impl<'c, FD: 'static + FlowDelegate + Clone + Send, C: 'c + hyper::client::conne
                 if tokens.access_token.is_some() {
                     let mut token = Token {
                         access_token: tokens.access_token.unwrap(),
-                        refresh_token: tokens.refresh_token.unwrap(),
+                        refresh_token: Some(tokens.refresh_token.unwrap()),
                         token_type: tokens.token_type.unwrap(),
                         expires_in: tokens.expires_in,
                         expires_in_timestamp: None,
@@ -669,7 +669,7 @@ mod tests {
                 .token(vec!["https://googleapis.com/some/scope"])
                 .and_then(|tok| {
                     assert_eq!("accesstoken", tok.access_token);
-                    assert_eq!("refreshtoken", tok.refresh_token);
+                    assert_eq!("refreshtoken", tok.refresh_token.unwrap());
                     assert_eq!("Bearer", tok.token_type);
                     Ok(())
                 });
@@ -695,7 +695,7 @@ mod tests {
                 .token(vec!["https://googleapis.com/some/scope"])
                 .and_then(|tok| {
                     assert_eq!("accesstoken", tok.access_token);
-                    assert_eq!("refreshtoken", tok.refresh_token);
+                    assert_eq!("refreshtoken", tok.refresh_token.unwrap());
                     assert_eq!("Bearer", tok.token_type);
                     Ok(())
                 });
