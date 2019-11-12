@@ -669,7 +669,7 @@ mod tests {
                 .token(vec!["https://googleapis.com/some/scope"])
                 .and_then(|tok| {
                     assert_eq!("accesstoken", tok.access_token);
-                    assert_eq!("refreshtoken", tok.refresh_token);
+                    assert_eq!("refreshtoken", tok.refresh_token.unwrap());
                     assert_eq!("Bearer", tok.token_type);
                     Ok(())
                 });
@@ -695,7 +695,7 @@ mod tests {
                 .token(vec!["https://googleapis.com/some/scope"])
                 .and_then(|tok| {
                     assert_eq!("accesstoken", tok.access_token);
-                    assert_eq!("refreshtoken", tok.refresh_token);
+                    assert_eq!("refreshtoken", tok.refresh_token.unwrap());
                     assert_eq!("Bearer", tok.token_type);
                     Ok(())
                 });
