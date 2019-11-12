@@ -207,7 +207,7 @@ impl DiskTokenStorage {
             jsontokens.tokens.push((*token).clone());
         }
 
-        let serialized;;
+        let serialized;
 
         match serde_json::to_string(&jsontokens) {
             Result::Err(e) => return Result::Err(io::Error::new(io::ErrorKind::InvalidData, e)),
