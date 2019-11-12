@@ -163,7 +163,6 @@ where
         let client = self.client.clone();
         let wait = self.wait;
         let mut fd = self.fd.clone();
-        println!("device_code_url {:?}", self.device_code_url);
         let request_code = Self::request_code(
             application_secret.clone(),
             client.clone(),
