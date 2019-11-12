@@ -255,7 +255,7 @@ where
         #[derive(Deserialize)]
         struct JSONTokenResponse {
             access_token: String,
-            refresh_token: String,
+            refresh_token: Option<String>,
             token_type: String,
             expires_in: Option<i64>,
         }
@@ -270,7 +270,7 @@ where
             }) => {
                 let mut token = Token {
                     access_token,
-                    refresh_token: Some(refresh_token),
+                    refresh_token,
                     token_type,
                     expires_in,
                     expires_in_timestamp: None,

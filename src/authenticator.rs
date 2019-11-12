@@ -196,17 +196,16 @@ where
         let appsecret = gettoken.application_secret();
         loop {
             match store.get(scope_key, scopes) {
-                Ok(Some(t)) => {
-                    if !t.expired() {
-                        return Ok(t);
-                    }
-                    // Implement refresh flow.
-                    let rr = RefreshFlow::refresh_token(
-                        client,
-                        appsecret,
-                        &t.refresh_token.as_ref().unwrap(),
-                    )
-                    .await?;
+                Ok(Some(t)) if !t.expired() => {
+                    // unexpired token found
+                    return Ok(t);
+                }
+                Ok(Some(Token {
+                    refresh_token: Some(refresh_token),
+                    ..
+                })) => {
+                    // token is expired but has a refresh token.
+                    let rr = RefreshFlow::refresh_token(client, appsecret, &refresh_token).await?;
                     match rr {
                         RefreshResult::Error(ref e) => {
                             delegate.token_refresh_failed(
@@ -236,7 +235,12 @@ where
                         }
                     }
                 }
-                Ok(None) => {
+                Ok(None)
+                | Ok(Some(Token {
+                    refresh_token: None,
+                    ..
+                })) => {
+                    // no token in the cache or the token returned does not contain a refresh token.
                     let t = gettoken.token(scopes).await?;
                     if let Err(e) = store.set(scope_key, scopes, Some(t.clone())) {
                         match delegate.token_storage_failure(true, &e) {
