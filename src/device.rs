@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -14,6 +15,9 @@ use crate::types::{ApplicationSecret, GetToken, JsonErrorOr, PollError, RequestE
 
 pub const GOOGLE_DEVICE_CODE_URL: &str = "https://accounts.google.com/o/oauth2/device/code";
 
+// https://developers.google.com/identity/protocols/OAuth2ForDevices#step-4:-poll-googles-authorization-server
+pub const GOOGLE_GRANT_TYPE: &str = "http://oauth.net/grant_type/device/1.0";
+
 /// Implements the [Oauth2 Device Flow](https://developers.google.com/youtube/v3/guides/authentication#devices)
 /// It operates in two steps:
 /// * obtain a code to show to the user
@@ -21,9 +25,10 @@ pub const GOOGLE_DEVICE_CODE_URL: &str = "https://accounts.google.com/o/oauth2/d
 #[derive(Clone)]
 pub struct DeviceFlow<FD> {
     application_secret: ApplicationSecret,
-    device_code_url: String,
+    device_code_url: Cow<'static, str>,
     flow_delegate: FD,
     wait: Duration,
+    grant_type: Cow<'static, str>,
 }
 
 impl DeviceFlow<DefaultFlowDelegate> {
@@ -32,9 +37,10 @@ impl DeviceFlow<DefaultFlowDelegate> {
     pub fn new(secret: ApplicationSecret) -> DeviceFlow<DefaultFlowDelegate> {
         DeviceFlow {
             application_secret: secret,
-            device_code_url: GOOGLE_DEVICE_CODE_URL.to_string(),
+            device_code_url: GOOGLE_DEVICE_CODE_URL.into(),
             flow_delegate: DefaultFlowDelegate,
             wait: Duration::from_secs(120),
+            grant_type: GOOGLE_GRANT_TYPE.into(),
         }
     }
 }
@@ -43,7 +49,7 @@ impl<FD> DeviceFlow<FD> {
     /// Use the provided device code url.
     pub fn device_code_url(self, url: String) -> Self {
         DeviceFlow {
-            device_code_url: url,
+            device_code_url: url.into(),
             ..self
         }
     }
@@ -55,6 +61,7 @@ impl<FD> DeviceFlow<FD> {
             device_code_url: self.device_code_url,
             flow_delegate: delegate,
             wait: self.wait,
+            grant_type: self.grant_type,
         }
     }
 
@@ -62,6 +69,13 @@ impl<FD> DeviceFlow<FD> {
     pub fn wait_duration(self, duration: Duration) -> Self {
         DeviceFlow {
             wait: duration,
+            ..self
+        }
+    }
+
+    pub fn grant_type(self, grant_type: String) -> Self {
+        DeviceFlow {
+            grant_type: grant_type.into(),
             ..self
         }
     }
@@ -81,6 +95,7 @@ where
             device_code_url: self.device_code_url,
             fd: self.flow_delegate,
             wait: Duration::from_secs(1200),
+            grant_type: self.grant_type,
         }
     }
 }
@@ -90,9 +105,10 @@ pub struct DeviceFlowImpl<FD, C> {
     client: hyper::Client<C, hyper::Body>,
     application_secret: ApplicationSecret,
     /// Usually GOOGLE_DEVICE_CODE_URL
-    device_code_url: String,
+    device_code_url: Cow<'static, str>,
     fd: FD,
     wait: Duration,
+    grant_type: Cow<'static, str>,
 }
 
 impl<FD, C> GetToken for DeviceFlowImpl<FD, C>
@@ -138,7 +154,7 @@ where
         .await?;
         self.fd.present_user_code(&pollinf);
         tokio::timer::Timeout::new(
-            self.wait_for_device_token(&pollinf, &device_code),
+            self.wait_for_device_token(&pollinf, &device_code, &self.grant_type),
             self.wait,
         )
         .await
@@ -149,6 +165,7 @@ where
         &self,
         pollinf: &PollInformation,
         device_code: &str,
+        grant_type: &str,
     ) -> Result<Token, RequestError> {
         let mut interval = pollinf.interval;
         loop {
@@ -157,6 +174,7 @@ where
                 &self.application_secret,
                 &self.client,
                 device_code,
+                grant_type,
                 pollinf.expires_at,
                 &self.fd,
             )
@@ -274,6 +292,7 @@ where
         application_secret: &ApplicationSecret,
         client: &hyper::Client<C>,
         device_code: &str,
+        grant_type: &str,
         expires_at: DateTime<Utc>,
         fd: &FD,
     ) -> Result<Option<Token>, PollError> {
@@ -288,7 +307,7 @@ where
                 ("client_id", application_secret.client_id.as_str()),
                 ("client_secret", application_secret.client_secret.as_str()),
                 ("code", device_code),
-                ("grant_type", "http://oauth.net/grant_type/device/1.0"),
+                ("grant_type", grant_type),
             ])
             .finish();
 
