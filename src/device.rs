@@ -20,6 +20,9 @@ use crate::types::{
 
 pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/oauth2/device/code";
 
+// https://developers.google.com/identity/protocols/OAuth2ForDevices#step-4:-poll-googles-authorization-server
+pub const GOOGLE_GRANT_TYPE: &'static str = "http://oauth.net/grant_type/device/1.0";
+
 /// Implements the [Oauth2 Device Flow](https://developers.google.com/youtube/v3/guides/authentication#devices)
 /// It operates in two steps:
 /// * obtain a code to show to the user
@@ -30,6 +33,7 @@ pub struct DeviceFlow<FD> {
     device_code_url: String,
     flow_delegate: FD,
     wait: Duration,
+    grant_type: String,
 }
 
 impl DeviceFlow<DefaultFlowDelegate> {
@@ -41,6 +45,7 @@ impl DeviceFlow<DefaultFlowDelegate> {
             device_code_url: GOOGLE_DEVICE_CODE_URL.to_string(),
             flow_delegate: DefaultFlowDelegate,
             wait: Duration::from_secs(120),
+            grant_type: GOOGLE_GRANT_TYPE.to_string(),
         }
     }
 }
@@ -54,6 +59,14 @@ impl<FD> DeviceFlow<FD> {
         }
     }
 
+    /// Use the provided grant type.
+    pub fn grant_type(self, grant_tp: String) -> Self {
+        DeviceFlow {
+            grant_type: grant_tp,
+            ..self
+        }
+    }
+
     /// Use the provided FlowDelegate.
     pub fn delegate<NewFD>(self, delegate: NewFD) -> DeviceFlow<NewFD> {
         DeviceFlow {
@@ -61,6 +74,7 @@ impl<FD> DeviceFlow<FD> {
             device_code_url: self.device_code_url,
             flow_delegate: delegate,
             wait: self.wait,
+            grant_type: self.grant_type,
         }
     }
 
@@ -87,6 +101,7 @@ where
             device_code_url: self.device_code_url,
             fd: self.flow_delegate,
             wait: Duration::from_secs(1200),
+            grant_type: self.grant_type,
         }
     }
 }
@@ -99,6 +114,7 @@ pub struct DeviceFlowImpl<FD, C> {
     device_code_url: String,
     fd: FD,
     wait: Duration,
+    grant_type: String,
 }
 
 impl<FD, C> Flow for DeviceFlowImpl<FD, C> {
@@ -147,6 +163,7 @@ where
         let client = self.client.clone();
         let wait = self.wait;
         let mut fd = self.fd.clone();
+        println!("device_code_url {:?}", self.device_code_url);
         let request_code = Self::request_code(
             application_secret.clone(),
             client.clone(),
@@ -158,6 +175,7 @@ where
             Ok((pollinf, device_code))
         });
         let fd = self.fd.clone();
+        let grant_type = self.grant_type.clone();
         Box::new(request_code.and_then(move |(pollinf, device_code)| {
             future::loop_fn(0, move |i| {
                 // Make a copy of everything every time, because the loop function needs to be
@@ -166,6 +184,7 @@ where
                     application_secret.clone(),
                     client.clone(),
                     device_code.clone(),
+                    grant_type.clone(),
                     pollinf.clone(),
                     fd.clone(),
                 );
@@ -332,6 +351,7 @@ where
         application_secret: ApplicationSecret,
         client: hyper::Client<C>,
         device_code: String,
+        grant_type: String,
         pi: PollInformation,
         mut fd: FD,
     ) -> impl Future<Item = Option<Token>, Error = PollError> {
@@ -348,7 +368,7 @@ where
                 ("client_id", &application_secret.client_id[..]),
                 ("client_secret", &application_secret.client_secret),
                 ("code", &device_code),
-                ("grant_type", "http://oauth.net/grant_type/device/1.0"),
+                ("grant_type", &grant_type),
             ])
             .finish();
 
