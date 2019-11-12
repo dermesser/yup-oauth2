@@ -61,6 +61,7 @@
 //!     )
 //!     .persist_tokens_to_disk("tokencache.json")
 //!     .build()
+//!     .await
 //!     .unwrap();
 //!
 //!     let scopes = &["https://www.googleapis.com/auth/drive.file"];
@@ -96,7 +97,6 @@ pub use crate::device::{DeviceFlow, GOOGLE_DEVICE_CODE_URL};
 pub use crate::helper::*;
 pub use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 pub use crate::service_account::*;
-pub use crate::storage::{DiskTokenStorage, MemoryStorage, NullStorage, TokenStorage};
 pub use crate::types::{
     ApplicationSecret, ConsoleApplicationSecret, GetToken, PollError, RefreshResult, RequestError,
     Scheme, Token, TokenType,

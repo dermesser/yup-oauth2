@@ -10,6 +10,7 @@ async fn main() {
     let auth = Authenticator::new(DeviceFlow::new(creds))
         .persist_tokens_to_disk("tokenstorage.json")
         .build()
+        .await
         .expect("authenticator");
 
     let scopes = &["https://www.googleapis.com/auth/youtube.readonly"];

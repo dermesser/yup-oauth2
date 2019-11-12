@@ -14,6 +14,7 @@ async fn main() {
     ))
     .persist_tokens_to_disk("tokencache.json")
     .build()
+    .await
     .unwrap();
     let scopes = &["https://www.googleapis.com/auth/drive.file"];
 

@@ -1,7 +1,7 @@
 use std::pin::Pin;
 use std::time::Duration;
 
-use ::log::{error, log};
+use ::log::error;
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
 use hyper;

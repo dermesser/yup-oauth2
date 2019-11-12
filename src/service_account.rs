@@ -11,12 +11,11 @@
 //! Copyright (c) 2016 Google Inc (lewinb@google.com).
 //!
 
-use std::default::Default;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use crate::authenticator::{DefaultHyperClient, HyperClientBuilder};
-use crate::storage::{hash_scopes, MemoryStorage, TokenStorage};
+use crate::storage::{self, Storage};
 use crate::types::{ApplicationSecret, GetToken, JsonErrorOr, RequestError, Token};
 
 use futures::prelude::*;
@@ -210,7 +209,7 @@ where
 struct ServiceAccountAccessImpl<C> {
     client: hyper::Client<C, hyper::Body>,
     key: ServiceAccountKey,
-    cache: Arc<Mutex<MemoryStorage>>,
+    cache: Storage,
     subject: Option<String>,
     signer: JWTSigner,
 }
@@ -228,7 +227,9 @@ where
         Ok(ServiceAccountAccessImpl {
             client,
             key,
-            cache: Arc::new(Mutex::new(MemoryStorage::default())),
+            cache: Storage::Memory {
+                tokens: Mutex::new(storage::JSONTokens::new()),
+            },
             subject,
             signer,
         })
@@ -309,10 +310,10 @@ where
     where
         T: AsRef<str>,
     {
-        let hash = hash_scopes(scopes);
+        let hash = storage::ScopeHash::new(scopes);
         let cache = &self.cache;
-        match cache.lock().unwrap().get(hash, scopes) {
-            Ok(Some(token)) if !token.expired() => return Ok(token),
+        match cache.get(hash, scopes) {
+            Some(token) if !token.expired() => return Ok(token),
             _ => {}
         }
         let token = Self::request_token(
@@ -323,7 +324,7 @@ where
             scopes,
         )
         .await?;
-        let _ = cache.lock().unwrap().set(hash, scopes, Some(token.clone()));
+        cache.set(hash, scopes, Some(token.clone())).await;
         Ok(token)
     }
 }
@@ -425,13 +426,12 @@ mod tests {
 
             assert!(acc
                 .cache
-                .lock()
-                .unwrap()
                 .get(
-                    3502164897243251857,
+                    dbg!(storage::ScopeHash::new(&[
+                        "https://www.googleapis.com/auth/pubsub"
+                    ])),
                     &["https://www.googleapis.com/auth/pubsub"],
                 )
-                .unwrap()
                 .is_some());
             // Test that token is in cache (otherwise mock will tell us)
             let fut = async {

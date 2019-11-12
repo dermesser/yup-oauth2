@@ -79,16 +79,6 @@ pub trait AuthenticatorDelegate: Send + Sync {
         Retry::Abort
     }
 
-    /// Called whenever we failed to retrieve a token or set a token due to a storage error.
-    /// You may use it to either ignore the incident or retry.
-    /// This can be useful if the underlying `TokenStorage` may fail occasionally.
-    /// if `is_set` is true, the failure resulted from `TokenStorage.set(...)`. Otherwise,
-    /// it was `TokenStorage.get(...)`
-    fn token_storage_failure(&self, is_set: bool, _: &(dyn Error + Send + Sync)) -> Retry {
-        let _ = is_set;
-        Retry::Abort
-    }
-
     /// The server denied the attempt to obtain a request code
     fn request_failure(&self, _: RequestError) {}
 
