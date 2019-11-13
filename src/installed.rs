@@ -17,7 +17,7 @@ use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate};
-use crate::types::{ApplicationSecret, GetToken, JsonErrorOr, RequestError, Token};
+use crate::types::{ApplicationSecret, JsonErrorOr, RequestError, Token};
 
 const OOB_REDIRECT_URI: &str = "urn:ietf:wg:oauth:2.0:oob";
 
@@ -51,40 +51,6 @@ where
     })
 }
 
-impl<FD, C> GetToken for InstalledFlowImpl<FD, C>
-where
-    FD: FlowDelegate,
-    C: hyper::client::connect::Connect + 'static,
-{
-    fn token<'a, T>(
-        &'a self,
-        scopes: &'a [T],
-    ) -> Pin<Box<dyn Future<Output = Result<Token, RequestError>> + Send + 'a>>
-    where
-        T: AsRef<str> + Sync,
-    {
-        Box::pin(self.obtain_token(scopes))
-    }
-    fn api_key(&self) -> Option<String> {
-        None
-    }
-    fn application_secret(&self) -> &ApplicationSecret {
-        &self.appsecret
-    }
-}
-
-/// The InstalledFlow implementation.
-pub struct InstalledFlowImpl<FD, C>
-where
-    FD: FlowDelegate,
-    C: hyper::client::connect::Connect,
-{
-    method: InstalledFlowReturnMethod,
-    client: hyper::client::Client<C, hyper::Body>,
-    fd: FD,
-    appsecret: ApplicationSecret,
-}
-
 /// cf. https://developers.google.com/identity/protocols/OAuth2InstalledApp#choosingredirecturi
 pub enum InstalledFlowReturnMethod {
     /// Involves showing a URL to the user and asking to copy a code from their browser
@@ -98,151 +64,133 @@ pub enum InstalledFlowReturnMethod {
 /// InstalledFlowImpl provides tokens for services that follow the "Installed" OAuth flow. (See
 /// https://www.oauth.com/oauth2-servers/authorization/,
 /// https://developers.google.com/identity/protocols/OAuth2InstalledApp).
-pub struct InstalledFlow<FD: FlowDelegate> {
-    method: InstalledFlowReturnMethod,
-    flow_delegate: FD,
-    appsecret: ApplicationSecret,
+pub struct InstalledFlow {
+    pub(crate) method: InstalledFlowReturnMethod,
+    pub(crate) flow_delegate: Box<dyn FlowDelegate>,
 }
 
-impl InstalledFlow<DefaultFlowDelegate> {
+impl InstalledFlow {
     /// Create a new InstalledFlow with the provided secret and method.
-    pub fn new(
-        secret: ApplicationSecret,
-        method: InstalledFlowReturnMethod,
-    ) -> InstalledFlow<DefaultFlowDelegate> {
+    pub(crate) fn new(method: InstalledFlowReturnMethod) -> InstalledFlow {
         InstalledFlow {
             method,
-            flow_delegate: DefaultFlowDelegate,
-            appsecret: secret,
+            flow_delegate: Box::new(DefaultFlowDelegate),
         }
     }
-}
 
-impl<FD> InstalledFlow<FD>
-where
-    FD: FlowDelegate,
-{
-    /// Use the provided FlowDelegate.
-    pub fn delegate<NewFD: FlowDelegate>(self, delegate: NewFD) -> InstalledFlow<NewFD> {
-        InstalledFlow {
-            method: self.method,
-            flow_delegate: delegate,
-            appsecret: self.appsecret,
-        }
-    }
-}
-
-impl<FD, C> crate::authenticator::AuthFlow<C> for InstalledFlow<FD>
-where
-    FD: FlowDelegate,
-    C: hyper::client::connect::Connect + 'static,
-{
-    type TokenGetter = InstalledFlowImpl<FD, C>;
-
-    fn build_token_getter(self, client: hyper::Client<C>) -> Self::TokenGetter {
-        InstalledFlowImpl {
-            method: self.method,
-            fd: self.flow_delegate,
-            appsecret: self.appsecret,
-            client,
-        }
-    }
-}
-
-impl<FD, C> InstalledFlowImpl<FD, C>
-where
-    FD: FlowDelegate,
-    C: hyper::client::connect::Connect + 'static,
-{
     /// Handles the token request flow; it consists of the following steps:
     /// . Obtain a authorization code with user cooperation or internal redirect.
     /// . Obtain a token and refresh token using that code.
     /// . Return that token
     ///
     /// It's recommended not to use the DefaultFlowDelegate, but a specialized one.
-    async fn obtain_token<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
+    pub(crate) async fn token<C, T>(
+        &self,
+        hyper_client: &hyper::Client<C>,
+        app_secret: &ApplicationSecret,
+        scopes: &[T],
+    ) -> Result<Token, RequestError>
     where
         T: AsRef<str>,
+        C: hyper::client::connect::Connect + 'static,
     {
         match self.method {
-            InstalledFlowReturnMethod::HTTPRedirect => self.ask_auth_code_via_http(scopes).await,
+            InstalledFlowReturnMethod::HTTPRedirect => {
+                self.ask_auth_code_via_http(hyper_client, app_secret, scopes)
+                    .await
+            }
             InstalledFlowReturnMethod::Interactive => {
-                self.ask_auth_code_interactively(scopes).await
+                self.ask_auth_code_interactively(hyper_client, app_secret, scopes)
+                    .await
             }
         }
     }
 
-    async fn ask_auth_code_interactively<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
+    async fn ask_auth_code_interactively<C, T>(
+        &self,
+        hyper_client: &hyper::Client<C>,
+        app_secret: &ApplicationSecret,
+        scopes: &[T],
+    ) -> Result<Token, RequestError>
     where
         T: AsRef<str>,
+        C: hyper::client::connect::Connect + 'static,
     {
-        let auth_delegate = &self.fd;
-        let appsecret = &self.appsecret;
         let url = build_authentication_request_url(
-            &appsecret.auth_uri,
-            &appsecret.client_id,
+            &app_secret.auth_uri,
+            &app_secret.client_id,
             scopes,
-            auth_delegate.redirect_uri(),
+            self.flow_delegate.redirect_uri(),
         );
-        let authcode = match auth_delegate
+        let authcode = match self
+            .flow_delegate
             .present_user_url(&url, true /* need code */)
             .await
         {
             Ok(mut code) => {
                 // Partial backwards compatibility in case an implementation adds a new line
                 // due to previous behaviour.
-                let ends_with_newline = code.chars().last().map(|c| c == '\n').unwrap_or(false);
-                if ends_with_newline {
+                if code.ends_with('\n') {
                     code.pop();
                 }
                 code
             }
             _ => return Err(RequestError::UserError("couldn't read code".to_string())),
         };
-        self.exchange_auth_code(&authcode, None).await
+        self.exchange_auth_code(&authcode, hyper_client, app_secret, None)
+            .await
     }
 
-    async fn ask_auth_code_via_http<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
+    async fn ask_auth_code_via_http<C, T>(
+        &self,
+        hyper_client: &hyper::Client<C>,
+        app_secret: &ApplicationSecret,
+        scopes: &[T],
+    ) -> Result<Token, RequestError>
     where
         T: AsRef<str>,
+        C: hyper::client::connect::Connect + 'static,
     {
         use std::borrow::Cow;
-        let auth_delegate = &self.fd;
-        let appsecret = &self.appsecret;
         let server = InstalledFlowServer::run()?;
         let server_addr = server.local_addr();
 
         // Present url to user.
         // The redirect URI must be this very localhost URL, otherwise authorization is refused
         // by certain providers.
-        let redirect_uri: Cow<str> = match auth_delegate.redirect_uri() {
+        let redirect_uri: Cow<str> = match self.flow_delegate.redirect_uri() {
             Some(uri) => uri.into(),
             None => format!("http://{}", server_addr).into(),
         };
         let url = build_authentication_request_url(
-            &appsecret.auth_uri,
-            &appsecret.client_id,
+            &app_secret.auth_uri,
+            &app_secret.client_id,
             scopes,
             Some(redirect_uri.as_ref()),
         );
-        let _ = auth_delegate
+        let _ = self
+            .flow_delegate
             .present_user_url(&url, false /* need code */)
             .await;
 
         let auth_code = server.wait_for_auth_code().await;
-        self.exchange_auth_code(&auth_code, Some(server_addr)).await
+        self.exchange_auth_code(&auth_code, hyper_client, app_secret, Some(server_addr))
+            .await
     }
 
-    async fn exchange_auth_code(
+    async fn exchange_auth_code<C>(
         &self,
         authcode: &str,
+        hyper_client: &hyper::Client<C>,
+        app_secret: &ApplicationSecret,
         server_addr: Option<SocketAddr>,
-    ) -> Result<Token, RequestError> {
-        let appsec = &self.appsecret;
-        let redirect_uri = self.fd.redirect_uri();
-        let request = Self::request_token(appsec, authcode, redirect_uri, server_addr);
-        let resp = self
-            .client
+    ) -> Result<Token, RequestError>
+    where
+        C: hyper::client::connect::Connect + 'static,
+    {
+        let redirect_uri = self.flow_delegate.redirect_uri();
+        let request = Self::request_token(app_secret, authcode, redirect_uri, server_addr);
+        let resp = hyper_client
             .request(request)
             .await
             .map_err(RequestError::ClientError)?;
@@ -283,7 +231,7 @@ where
 
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.
     fn request_token(
-        appsecret: &ApplicationSecret,
+        app_secret: &ApplicationSecret,
         authcode: &str,
         custom_redirect_uri: Option<&str>,
         server_addr: Option<SocketAddr>,
@@ -298,14 +246,14 @@ where
         let body = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(vec![
                 ("code", authcode),
-                ("client_id", appsecret.client_id.as_str()),
-                ("client_secret", appsecret.client_secret.as_str()),
+                ("client_id", app_secret.client_id.as_str()),
+                ("client_secret", app_secret.client_secret.as_str()),
                 ("redirect_uri", redirect_uri.as_ref()),
                 ("grant_type", "authorization_code"),
             ])
             .finish();
 
-        hyper::Request::post(&appsecret.token_uri)
+        hyper::Request::post(&app_secret.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(body))
             .unwrap() // TODO: error check
@@ -456,7 +404,6 @@ mod tests {
     use tokio;
 
     use super::*;
-    use crate::authenticator::AuthFlow;
     use crate::authenticator_delegate::FlowDelegate;
     use crate::helper::*;
     use crate::types::StringError;
@@ -523,9 +470,10 @@ mod tests {
             .build::<_, hyper::Body>(https);
 
         let fd = FD("authorizationcode".to_string(), client.clone());
-        let inf = InstalledFlow::new(app_secret.clone(), InstalledFlowReturnMethod::Interactive)
-            .delegate(fd)
-            .build_token_getter(client.clone());
+        let inf = InstalledFlow {
+            method: InstalledFlowReturnMethod::Interactive,
+            flow_delegate: Box::new(fd),
+        };
 
         let rt = tokio::runtime::Builder::new()
             .core_threads(1)
@@ -544,7 +492,7 @@ mod tests {
             let fut = || {
                 async {
                     let tok = inf
-                        .token(&["https://googleapis.com/some/scope"])
+                        .token(&client, &app_secret, &["https://googleapis.com/some/scope"])
                         .await
                         .map_err(|_| ())?;
                     assert_eq!("accesstoken", tok.access_token);
@@ -558,12 +506,13 @@ mod tests {
         }
         // Successful path with HTTP redirect.
         {
-            let inf = InstalledFlow::new(app_secret, InstalledFlowReturnMethod::HTTPRedirect)
-                .delegate(FD(
+            let inf = InstalledFlow {
+                method: InstalledFlowReturnMethod::HTTPRedirect,
+                flow_delegate: Box::new(FD(
                     "authorizationcodefromlocalserver".to_string(),
                     client.clone(),
-                ))
-                .build_token_getter(client.clone());
+                )),
+            };
             let _m = mock("POST", "/token")
             .match_body(mockito::Matcher::Regex(".*code=authorizationcodefromlocalserver.*client_id=9022167.*".to_string()))
             .with_body(r#"{"access_token": "accesstoken", "refresh_token": "refreshtoken", "token_type": "Bearer", "expires_in": 12345678}"#)
@@ -572,7 +521,7 @@ mod tests {
 
             let fut = async {
                 let tok = inf
-                    .token(&["https://googleapis.com/some/scope"])
+                    .token(&client, &app_secret, &["https://googleapis.com/some/scope"])
                     .await
                     .map_err(|_| ())?;
                 assert_eq!("accesstoken", tok.access_token);
@@ -595,7 +544,9 @@ mod tests {
                 .create();
 
             let fut = async {
-                let tokr = inf.token(&["https://googleapis.com/some/scope"]).await;
+                let tokr = inf
+                    .token(&client, &app_secret, &["https://googleapis.com/some/scope"])
+                    .await;
                 assert!(tokr.is_err());
                 assert!(format!("{}", tokr.unwrap_err()).contains("invalid_code"));
                 Ok(()) as Result<(), ()>

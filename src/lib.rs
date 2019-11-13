@@ -38,12 +38,7 @@
 //! `examples/test-installed/`, shows the basics of using this crate:
 //!
 //! ```test_harness,no_run
-//! use futures::prelude::*;
-//! use yup_oauth2::GetToken;
-//! use yup_oauth2::{Authenticator, InstalledFlow};
-//!
-//! use hyper::client::Client;
-//! use hyper_rustls::HttpsConnector;
+//! use yup_oauth2::{InstalledFlowAuthenticator, InstalledFlowReturnMethod};
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -53,12 +48,10 @@
 //!         .expect("clientsecret.json");
 //!
 //!     // Create an authenticator that uses an InstalledFlow to authenticate. The
-//!      // authentication tokens are persisted to a file named tokencache.json. The
-//!      // authenticator takes care of caching tokens to disk and refreshing tokens once
-//!      // they've expired.
-//!     let mut auth = Authenticator::new(
-//!         InstalledFlow::new(secret, yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect)
-//!     )
+//!     // authentication tokens are persisted to a file named tokencache.json. The
+//!     // authenticator takes care of caching tokens to disk and refreshing tokens once
+//!     // they've expired.
+//!     let mut auth = InstalledFlowAuthenticator::builder(secret, InstalledFlowReturnMethod::HTTPRedirect)
 //!     .persist_tokens_to_disk("tokencache.json")
 //!     .build()
 //!     .await
@@ -88,16 +81,18 @@ mod service_account;
 mod storage;
 mod types;
 
-pub use crate::authenticator::{AuthFlow, Authenticator};
+pub use crate::authenticator::{
+    Authenticator, AuthenticatorBuilder, DeviceFlowAuthenticator, InstalledFlowAuthenticator,
+};
 pub use crate::authenticator_delegate::{
     AuthenticatorDelegate, DefaultAuthenticatorDelegate, DefaultFlowDelegate, FlowDelegate,
     PollInformation,
 };
-pub use crate::device::{DeviceFlow, GOOGLE_DEVICE_CODE_URL};
+pub use crate::device::GOOGLE_DEVICE_CODE_URL;
 pub use crate::helper::*;
-pub use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
+pub use crate::installed::InstalledFlowReturnMethod;
 pub use crate::service_account::*;
 pub use crate::types::{
-    ApplicationSecret, ConsoleApplicationSecret, GetToken, PollError, RefreshResult, RequestError,
-    Scheme, Token, TokenType,
+    ApplicationSecret, ConsoleApplicationSecret, PollError, RefreshResult, RequestError, Scheme,
+    Token, TokenType,
 };

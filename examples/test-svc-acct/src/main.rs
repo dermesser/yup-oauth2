@@ -1,15 +1,10 @@
-use std::path;
 use tokio;
-use yup_oauth2;
-use yup_oauth2::GetToken;
+use yup_oauth2::ServiceAccountAuthenticator;
 
 #[tokio::main]
 async fn main() {
-    let creds =
-        yup_oauth2::service_account_key_from_file(path::Path::new("serviceaccount.json")).unwrap();
-    let sa = yup_oauth2::ServiceAccountAccess::new(creds)
-        .build()
-        .unwrap();
+    let creds = yup_oauth2::service_account_key_from_file("serviceaccount.json").unwrap();
+    let sa = ServiceAccountAuthenticator::builder(creds).build().unwrap();
     let scopes = &["https://www.googleapis.com/auth/pubsub"];
 
     let tok = sa.token(scopes).await.unwrap();

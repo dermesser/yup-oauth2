@@ -1,21 +1,18 @@
-use yup_oauth2::GetToken;
-use yup_oauth2::{Authenticator, InstalledFlow};
+use yup_oauth2::{InstalledFlowAuthenticator, InstalledFlowReturnMethod};
 
 use std::path::Path;
 
 #[tokio::main]
 async fn main() {
-    let secret = yup_oauth2::read_application_secret(Path::new("clientsecret.json"))
+    let app_secret = yup_oauth2::read_application_secret(Path::new("clientsecret.json"))
         .expect("clientsecret.json");
 
-    let auth = Authenticator::new(InstalledFlow::new(
-        secret,
-        yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect,
-    ))
-    .persist_tokens_to_disk("tokencache.json")
-    .build()
-    .await
-    .unwrap();
+    let auth =
+        InstalledFlowAuthenticator::builder(app_secret, InstalledFlowReturnMethod::HTTPRedirect)
+            .persist_tokens_to_disk("tokencache.json")
+            .build()
+            .await
+            .unwrap();
     let scopes = &["https://www.googleapis.com/auth/drive.file"];
 
     match auth.token(scopes).await {

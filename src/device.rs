@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::pin::Pin;
 use std::time::Duration;
 
 use ::log::error;
@@ -11,7 +10,7 @@ use serde_json as json;
 use url::form_urlencoded;
 
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate, PollInformation, Retry};
-use crate::types::{ApplicationSecret, GetToken, JsonErrorOr, PollError, RequestError, Token};
+use crate::types::{ApplicationSecret, JsonErrorOr, PollError, RequestError, Token};
 
 pub const GOOGLE_DEVICE_CODE_URL: &str = "https://accounts.google.com/o/oauth2/device/code";
 
@@ -22,165 +21,77 @@ pub const GOOGLE_GRANT_TYPE: &str = "http://oauth.net/grant_type/device/1.0";
 /// It operates in two steps:
 /// * obtain a code to show to the user
 // * (repeatedly) poll for the user to authenticate your application
-#[derive(Clone)]
-pub struct DeviceFlow<FD> {
-    application_secret: ApplicationSecret,
-    device_code_url: Cow<'static, str>,
-    flow_delegate: FD,
-    wait: Duration,
-    grant_type: Cow<'static, str>,
+pub struct DeviceFlow {
+    pub(crate) device_code_url: Cow<'static, str>,
+    pub(crate) flow_delegate: Box<dyn FlowDelegate>,
+    pub(crate) wait_duration: Duration,
+    pub(crate) grant_type: Cow<'static, str>,
 }
 
-impl DeviceFlow<DefaultFlowDelegate> {
+impl DeviceFlow {
     /// Create a new DeviceFlow. The default FlowDelegate will be used and the
     /// default wait time is 120 seconds.
-    pub fn new(secret: ApplicationSecret) -> DeviceFlow<DefaultFlowDelegate> {
+    pub(crate) fn new() -> Self {
         DeviceFlow {
-            application_secret: secret,
             device_code_url: GOOGLE_DEVICE_CODE_URL.into(),
-            flow_delegate: DefaultFlowDelegate,
-            wait: Duration::from_secs(120),
+            flow_delegate: Box::new(DefaultFlowDelegate),
+            wait_duration: Duration::from_secs(120),
             grant_type: GOOGLE_GRANT_TYPE.into(),
         }
     }
-}
 
-impl<FD> DeviceFlow<FD> {
-    /// Use the provided device code url.
-    pub fn device_code_url(self, url: String) -> Self {
-        DeviceFlow {
-            device_code_url: url.into(),
-            ..self
-        }
-    }
-
-    /// Use the provided FlowDelegate.
-    pub fn delegate<NewFD>(self, delegate: NewFD) -> DeviceFlow<NewFD> {
-        DeviceFlow {
-            application_secret: self.application_secret,
-            device_code_url: self.device_code_url,
-            flow_delegate: delegate,
-            wait: self.wait,
-            grant_type: self.grant_type,
-        }
-    }
-
-    /// Use the provided wait duration.
-    pub fn wait_duration(self, duration: Duration) -> Self {
-        DeviceFlow {
-            wait: duration,
-            ..self
-        }
-    }
-
-    pub fn grant_type(self, grant_type: String) -> Self {
-        DeviceFlow {
-            grant_type: grant_type.into(),
-            ..self
-        }
-    }
-}
-
-impl<FD, C> crate::authenticator::AuthFlow<C> for DeviceFlow<FD>
-where
-    FD: FlowDelegate,
-    C: hyper::client::connect::Connect + 'static,
-{
-    type TokenGetter = DeviceFlowImpl<FD, C>;
-
-    fn build_token_getter(self, client: hyper::Client<C>) -> Self::TokenGetter {
-        DeviceFlowImpl {
-            client,
-            application_secret: self.application_secret,
-            device_code_url: self.device_code_url,
-            fd: self.flow_delegate,
-            wait: Duration::from_secs(1200),
-            grant_type: self.grant_type,
-        }
-    }
-}
-
-/// The DeviceFlow implementation.
-pub struct DeviceFlowImpl<FD, C> {
-    client: hyper::Client<C, hyper::Body>,
-    application_secret: ApplicationSecret,
-    /// Usually GOOGLE_DEVICE_CODE_URL
-    device_code_url: Cow<'static, str>,
-    fd: FD,
-    wait: Duration,
-    grant_type: Cow<'static, str>,
-}
-
-impl<FD, C> GetToken for DeviceFlowImpl<FD, C>
-where
-    FD: FlowDelegate,
-    C: hyper::client::connect::Connect + 'static,
-{
-    fn token<'a, T>(
-        &'a self,
-        scopes: &'a [T],
-    ) -> Pin<Box<dyn Future<Output = Result<Token, RequestError>> + Send + 'a>>
-    where
-        T: AsRef<str> + Sync,
-    {
-        Box::pin(self.retrieve_device_token(scopes))
-    }
-    fn api_key(&self) -> Option<String> {
-        None
-    }
-    fn application_secret(&self) -> &ApplicationSecret {
-        &self.application_secret
-    }
-}
-
-impl<FD, C> DeviceFlowImpl<FD, C>
-where
-    C: hyper::client::connect::Connect + 'static,
-    FD: FlowDelegate,
-{
-    /// Essentially what `GetToken::token` does: Retrieve a token for the given scopes without
-    /// caching.
-    pub async fn retrieve_device_token<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
+    pub(crate) async fn token<C, T>(
+        &self,
+        hyper_client: &hyper::Client<C>,
+        app_secret: &ApplicationSecret,
+        scopes: &[T],
+    ) -> Result<Token, RequestError>
     where
         T: AsRef<str>,
+        C: hyper::client::connect::Connect + 'static,
     {
-        let application_secret = &self.application_secret;
-        let (pollinf, device_code) = Self::request_code(
-            application_secret,
-            &self.client,
-            &self.device_code_url,
-            scopes,
-        )
-        .await?;
-        self.fd.present_user_code(&pollinf);
+        let (pollinf, device_code) =
+            Self::request_code(app_secret, hyper_client, &self.device_code_url, scopes).await?;
+        self.flow_delegate.present_user_code(&pollinf);
         tokio::timer::Timeout::new(
-            self.wait_for_device_token(&pollinf, &device_code, &self.grant_type),
-            self.wait,
+            self.wait_for_device_token(
+                hyper_client,
+                app_secret,
+                &pollinf,
+                &device_code,
+                &self.grant_type,
+            ),
+            self.wait_duration,
         )
         .await
         .map_err(|_| RequestError::Poll(PollError::TimedOut))?
     }
 
-    async fn wait_for_device_token(
+    async fn wait_for_device_token<C>(
         &self,
+        hyper_client: &hyper::Client<C>,
+        app_secret: &ApplicationSecret,
         pollinf: &PollInformation,
         device_code: &str,
         grant_type: &str,
-    ) -> Result<Token, RequestError> {
+    ) -> Result<Token, RequestError>
+    where
+        C: hyper::client::connect::Connect + 'static,
+    {
         let mut interval = pollinf.interval;
         loop {
             tokio::timer::delay_for(interval).await;
-            let r = Self::poll_token(
-                &self.application_secret,
-                &self.client,
+            interval = match Self::poll_token(
+                &app_secret,
+                hyper_client,
                 device_code,
                 grant_type,
                 pollinf.expires_at,
-                &self.fd,
+                &*self.flow_delegate as &dyn FlowDelegate,
             )
-            .await;
-            interval = match r {
-                Ok(None) => match self.fd.pending(&pollinf) {
+            .await
+            {
+                Ok(None) => match self.flow_delegate.pending(&pollinf) {
                     Retry::Abort | Retry::Skip => {
                         return Err(RequestError::Poll(PollError::TimedOut))
                     }
@@ -213,7 +124,7 @@ where
     /// * If called after a successful result was returned at least once.
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    async fn request_code<T>(
+    async fn request_code<C, T>(
         application_secret: &ApplicationSecret,
         client: &hyper::Client<C>,
         device_code_url: &str,
@@ -221,6 +132,7 @@ where
     ) -> Result<(PollInformation, String), RequestError>
     where
         T: AsRef<str>,
+        C: hyper::client::connect::Connect + 'static,
     {
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
@@ -288,16 +200,19 @@ where
     ///
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    async fn poll_token<'a>(
+    async fn poll_token<'a, C>(
         application_secret: &ApplicationSecret,
         client: &hyper::Client<C>,
         device_code: &str,
         grant_type: &str,
         expires_at: DateTime<Utc>,
-        fd: &FD,
-    ) -> Result<Option<Token>, PollError> {
+        flow_delegate: &dyn FlowDelegate,
+    ) -> Result<Option<Token>, PollError>
+    where
+        C: hyper::client::connect::Connect + 'static,
+    {
         if expires_at <= Utc::now() {
-            fd.expired(expires_at);
+            flow_delegate.expired(expires_at);
             return Err(PollError::Expired(expires_at));
         }
 
@@ -334,7 +249,7 @@ where
             Ok(res) => {
                 match res.error.as_ref() {
                     "access_denied" => {
-                        fd.denied();
+                        flow_delegate.denied();
                         return Err(PollError::AccessDenied);
                     }
                     "authorization_pending" => return Ok(None),
@@ -364,7 +279,6 @@ mod tests {
     use tokio;
 
     use super::*;
-    use crate::authenticator::AuthFlow;
     use crate::helper::parse_application_secret;
 
     #[test]
@@ -388,10 +302,12 @@ mod tests {
             .keep_alive(false)
             .build::<_, hyper::Body>(https);
 
-        let flow = DeviceFlow::new(app_secret)
-            .delegate(FD)
-            .device_code_url(device_code_url)
-            .build_token_getter(client);
+        let flow = DeviceFlow {
+            device_code_url: device_code_url.into(),
+            flow_delegate: Box::new(FD),
+            wait_duration: Duration::from_secs(5),
+            grant_type: GOOGLE_GRANT_TYPE.into(),
+        };
 
         let rt = tokio::runtime::Builder::new()
             .core_threads(1)
@@ -420,7 +336,11 @@ mod tests {
 
             let fut = async {
                 let token = flow
-                    .token(&["https://www.googleapis.com/scope/1"])
+                    .token(
+                        &client,
+                        &app_secret,
+                        &["https://www.googleapis.com/scope/1"],
+                    )
                     .await
                     .unwrap();
                 assert_eq!("accesstoken", token.access_token);
@@ -452,7 +372,13 @@ mod tests {
                 .create();
 
             let fut = async {
-                let res = flow.token(&["https://www.googleapis.com/scope/1"]).await;
+                let res = flow
+                    .token(
+                        &client,
+                        &app_secret,
+                        &["https://www.googleapis.com/scope/1"],
+                    )
+                    .await;
                 assert!(res.is_err());
                 assert!(format!("{}", res.unwrap_err()).contains("invalid_client_id"));
                 Ok(()) as Result<(), ()>
@@ -482,7 +408,13 @@ mod tests {
                 .create();
 
             let fut = async {
-                let res = flow.token(&["https://www.googleapis.com/scope/1"]).await;
+                let res = flow
+                    .token(
+                        &client,
+                        &app_secret,
+                        &["https://www.googleapis.com/scope/1"],
+                    )
+                    .await;
                 assert!(res.is_err());
                 assert!(format!("{}", res.unwrap_err()).contains("Access denied by user"));
                 Ok(()) as Result<(), ()>

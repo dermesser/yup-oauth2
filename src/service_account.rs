@@ -11,12 +11,11 @@
 //! Copyright (c) 2016 Google Inc (lewinb@google.com).
 //!
 
-use std::pin::Pin;
 use std::sync::Mutex;
 
 use crate::authenticator::{DefaultHyperClient, HyperClientBuilder};
 use crate::storage::{self, Storage};
-use crate::types::{ApplicationSecret, GetToken, JsonErrorOr, RequestError, Token};
+use crate::types::{JsonErrorOr, RequestError, Token};
 
 use futures::prelude::*;
 use hyper::header;
@@ -155,20 +154,10 @@ impl JWTSigner {
     }
 }
 
-/// A token source (`GetToken`) yielding OAuth tokens for services that use ServiceAccount authorization.
-/// This token source caches token and automatically renews expired ones, meaning you do not need
-/// (and you also should not) use this with `Authenticator`. Just use it directly.
-#[derive(Clone)]
-pub struct ServiceAccountAccess<C> {
-    client: C,
-    key: ServiceAccountKey,
-    subject: Option<String>,
-}
-
-impl ServiceAccountAccess<DefaultHyperClient> {
-    /// Create a new ServiceAccountAccess with the provided key.
-    pub fn new(key: ServiceAccountKey) -> Self {
-        ServiceAccountAccess {
+pub struct ServiceAccountAuthenticator;
+impl ServiceAccountAuthenticator {
+    pub fn builder(key: ServiceAccountKey) -> Builder<DefaultHyperClient> {
+        Builder {
             client: DefaultHyperClient,
             key,
             subject: None,
@@ -176,16 +165,16 @@ impl ServiceAccountAccess<DefaultHyperClient> {
     }
 }
 
-impl<C> ServiceAccountAccess<C>
-where
-    C: HyperClientBuilder,
-{
+pub struct Builder<C> {
+    client: C,
+    key: ServiceAccountKey,
+    subject: Option<String>,
+}
+
+impl<C> Builder<C> {
     /// Use the provided hyper client.
-    pub fn hyper_client<NewC: HyperClientBuilder>(
-        self,
-        hyper_client: NewC,
-    ) -> ServiceAccountAccess<NewC> {
-        ServiceAccountAccess {
+    pub fn hyper_client<NewC: HyperClientBuilder>(self, hyper_client: NewC) -> Builder<NewC> {
+        Builder {
             client: hyper_client,
             key: self.key,
             subject: self.subject,
@@ -194,29 +183,32 @@ where
 
     /// Use the provided subject.
     pub fn subject(self, subject: String) -> Self {
-        ServiceAccountAccess {
+        Builder {
             subject: Some(subject),
             ..self
         }
     }
 
     /// Build the configured ServiceAccountAccess.
-    pub fn build(self) -> Result<impl GetToken, io::Error> {
-        ServiceAccountAccessImpl::new(self.client.build_hyper_client(), self.key, self.subject)
+    pub fn build(self) -> Result<ServiceAccountAccess<C::Connector>, io::Error>
+    where
+        C: HyperClientBuilder,
+    {
+        ServiceAccountAccess::new(self.client.build_hyper_client(), self.key, self.subject)
     }
 }
 
-struct ServiceAccountAccessImpl<C> {
-    client: hyper::Client<C, hyper::Body>,
+pub struct ServiceAccountAccess<C> {
+    client: hyper::Client<C>,
     key: ServiceAccountKey,
     cache: Storage,
     subject: Option<String>,
     signer: JWTSigner,
 }
 
-impl<C> ServiceAccountAccessImpl<C>
+impl<C> ServiceAccountAccess<C>
 where
-    C: hyper::client::connect::Connect,
+    C: hyper::client::connect::Connect + 'static,
 {
     fn new(
         client: hyper::Client<C>,
@@ -224,7 +216,7 @@ where
         subject: Option<String>,
     ) -> Result<Self, io::Error> {
         let signer = JWTSigner::new(&key.private_key)?;
-        Ok(ServiceAccountAccessImpl {
+        Ok(ServiceAccountAccess {
             client,
             key,
             cache: Storage::Memory {
@@ -234,20 +226,28 @@ where
             signer,
         })
     }
-}
 
-/// This is the schema of the server's response.
-#[derive(Deserialize, Debug)]
-struct TokenResponse {
-    access_token: Option<String>,
-    token_type: Option<String>,
-    expires_in: Option<i64>,
-}
-
-impl<C> ServiceAccountAccessImpl<C>
-where
-    C: hyper::client::connect::Connect + 'static,
-{
+    pub async fn token<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
+    where
+        T: AsRef<str>,
+    {
+        let hash = storage::ScopeHash::new(scopes);
+        let cache = &self.cache;
+        match cache.get(hash, scopes) {
+            Some(token) if !token.expired() => return Ok(token),
+            _ => {}
+        }
+        let token = Self::request_token(
+            &self.client,
+            &self.signer,
+            self.subject.as_ref().map(|x| x.as_str()),
+            &self.key,
+            scopes,
+        )
+        .await?;
+        cache.set(hash, scopes, Some(token.clone())).await;
+        Ok(token)
+    }
     /// Send a request for a new Bearer token to the OAuth provider.
     async fn request_token<T>(
         client: &hyper::client::Client<C>,
@@ -282,6 +282,15 @@ where
             .try_concat()
             .await
             .map_err(RequestError::ClientError)?;
+
+        /// This is the schema of the server's response.
+        #[derive(Deserialize, Debug)]
+        struct TokenResponse {
+            access_token: Option<String>,
+            token_type: Option<String>,
+            expires_in: Option<i64>,
+        }
+
         match serde_json::from_slice::<JsonErrorOr<TokenResponse>>(&body)? {
             JsonErrorOr::Err(err) => Err(err.into()),
             JsonErrorOr::Data(TokenResponse {
@@ -305,61 +314,12 @@ where
             ))),
         }
     }
-
-    async fn get_token<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
-    where
-        T: AsRef<str>,
-    {
-        let hash = storage::ScopeHash::new(scopes);
-        let cache = &self.cache;
-        match cache.get(hash, scopes) {
-            Some(token) if !token.expired() => return Ok(token),
-            _ => {}
-        }
-        let token = Self::request_token(
-            &self.client,
-            &self.signer,
-            self.subject.as_ref().map(|x| x.as_str()),
-            &self.key,
-            scopes,
-        )
-        .await?;
-        cache.set(hash, scopes, Some(token.clone())).await;
-        Ok(token)
-    }
-}
-
-impl<C> GetToken for ServiceAccountAccessImpl<C>
-where
-    C: hyper::client::connect::Connect + 'static,
-{
-    fn token<'a, T>(
-        &'a self,
-        scopes: &'a [T],
-    ) -> Pin<Box<dyn Future<Output = Result<Token, RequestError>> + Send + 'a>>
-    where
-        T: AsRef<str> + Sync,
-    {
-        Box::pin(self.get_token(scopes))
-    }
-
-    /// Returns an empty ApplicationSecret as tokens for service accounts don't need to be
-    /// refreshed (they are simply reissued).
-    fn application_secret(&self) -> &ApplicationSecret {
-        static APP_SECRET: ApplicationSecret = ApplicationSecret::empty();
-        &APP_SECRET
-    }
-
-    fn api_key(&self) -> Option<String> {
-        None
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::helper::service_account_key_from_file;
-    use crate::types::GetToken;
 
     use hyper;
     use hyper_rustls::HttpsConnector;
@@ -413,7 +373,7 @@ mod tests {
                 .with_body(json_response)
                 .expect(1)
                 .create();
-            let acc = ServiceAccountAccessImpl::new(client.clone(), key.clone(), None).unwrap();
+            let acc = ServiceAccountAccess::new(client.clone(), key.clone(), None).unwrap();
             let fut = async {
                 let tok = acc
                     .token(&["https://www.googleapis.com/auth/pubsub"])
@@ -453,7 +413,7 @@ mod tests {
                 .with_header("content-type", "text/json")
                 .with_body(bad_json_response)
                 .create();
-            let acc = ServiceAccountAccess::new(key.clone())
+            let acc = ServiceAccountAuthenticator::builder(key.clone())
                 .hyper_client(client.clone())
                 .build()
                 .unwrap();
@@ -478,7 +438,7 @@ mod tests {
         let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
         let https = HttpsConnector::new();
         let client = hyper::Client::builder().build(https);
-        let acc = ServiceAccountAccess::new(key)
+        let acc = ServiceAccountAuthenticator::builder(key)
             .hyper_client(client)
             .build()
             .unwrap();
