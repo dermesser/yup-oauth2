@@ -71,28 +71,26 @@
 #[macro_use]
 extern crate serde_derive;
 
-mod authenticator;
-mod authenticator_delegate;
+pub mod authenticator;
+pub mod authenticator_delegate;
 mod device;
+pub mod error;
 mod helper;
 mod installed;
 mod refresh;
-mod service_account;
+pub mod service_account;
 mod storage;
 mod types;
 
-pub use crate::authenticator::{
-    Authenticator, AuthenticatorBuilder, DeviceFlowAuthenticator, InstalledFlowAuthenticator,
-};
-pub use crate::authenticator_delegate::{
-    AuthenticatorDelegate, DefaultAuthenticatorDelegate, DefaultFlowDelegate, FlowDelegate,
-    PollInformation,
-};
-pub use crate::device::GOOGLE_DEVICE_CODE_URL;
+#[doc(inline)]
+pub use crate::authenticator::{DeviceFlowAuthenticator, InstalledFlowAuthenticator};
+
 pub use crate::helper::*;
 pub use crate::installed::InstalledFlowReturnMethod;
-pub use crate::service_account::*;
-pub use crate::types::{
-    ApplicationSecret, ConsoleApplicationSecret, PollError, RefreshResult, RequestError, Scheme,
-    Token, TokenType,
-};
+
+#[doc(inline)]
+pub use crate::service_account::{ServiceAccountAuthenticator, ServiceAccountKey};
+
+#[doc(inline)]
+pub use crate::error::RequestError;
+pub use crate::types::{ApplicationSecret, ConsoleApplicationSecret, Token};

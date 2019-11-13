@@ -10,7 +10,8 @@ use serde_json as json;
 use url::form_urlencoded;
 
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate, PollInformation, Retry};
-use crate::types::{ApplicationSecret, JsonErrorOr, PollError, RequestError, Token};
+use crate::error::{JsonErrorOr, PollError, RequestError};
+use crate::types::{ApplicationSecret, Token};
 
 pub const GOOGLE_DEVICE_CODE_URL: &str = "https://accounts.google.com/o/oauth2/device/code";
 
@@ -166,20 +167,15 @@ impl DeviceFlow {
         }
 
         let json_bytes = resp.into_body().try_concat().await?;
-        match json::from_slice::<JsonErrorOr<JsonData>>(&json_bytes)? {
-            JsonErrorOr::Err(e) => Err(e.into()),
-            JsonErrorOr::Data(decoded) => {
-                let expires_in = decoded.expires_in.unwrap_or(60 * 60);
-
-                let pi = PollInformation {
-                    user_code: decoded.user_code,
-                    verification_url: decoded.verification_uri,
-                    expires_at: Utc::now() + chrono::Duration::seconds(expires_in),
-                    interval: Duration::from_secs(i64::abs(decoded.interval) as u64),
-                };
-                Ok((pi, decoded.device_code))
-            }
-        }
+        let decoded: JsonData = json::from_slice::<JsonErrorOr<_>>(&json_bytes)?.into_result()?;
+        let expires_in = decoded.expires_in.unwrap_or(60 * 60);
+        let pi = PollInformation {
+            user_code: decoded.user_code,
+            verification_url: decoded.verification_uri,
+            expires_at: Utc::now() + chrono::Duration::seconds(expires_in),
+            interval: Duration::from_secs(i64::abs(decoded.interval) as u64),
+        };
+        Ok((pi, decoded.device_code))
     }
 
     /// If the first call is successful, this method may be called.

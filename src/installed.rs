@@ -17,7 +17,8 @@ use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate};
-use crate::types::{ApplicationSecret, JsonErrorOr, RequestError, Token};
+use crate::error::{JsonErrorOr, RequestError};
+use crate::types::{ApplicationSecret, Token};
 
 const OOB_REDIRECT_URI: &str = "urn:ietf:wg:oauth:2.0:oob";
 
@@ -208,25 +209,21 @@ impl InstalledFlow {
             expires_in: Option<i64>,
         }
 
-        match serde_json::from_slice::<JsonErrorOr<JSONTokenResponse>>(&body)? {
-            JsonErrorOr::Err(err) => Err(err.into()),
-            JsonErrorOr::Data(JSONTokenResponse {
-                access_token,
-                refresh_token,
-                token_type,
-                expires_in,
-            }) => {
-                let mut token = Token {
-                    access_token,
-                    refresh_token,
-                    token_type,
-                    expires_in,
-                    expires_in_timestamp: None,
-                };
-                token.set_expiry_absolute();
-                Ok(token)
-            }
-        }
+        let JSONTokenResponse {
+            access_token,
+            refresh_token,
+            token_type,
+            expires_in,
+        } = serde_json::from_slice::<JsonErrorOr<_>>(&body)?.into_result()?;
+        let mut token = Token {
+            access_token,
+            refresh_token,
+            token_type,
+            expires_in,
+            expires_in_timestamp: None,
+        };
+        token.set_expiry_absolute();
+        Ok(token)
     }
 
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.
@@ -406,7 +403,6 @@ mod tests {
     use super::*;
     use crate::authenticator_delegate::FlowDelegate;
     use crate::helper::*;
-    use crate::types::StringError;
 
     #[test]
     fn test_end2end() {
@@ -442,8 +438,7 @@ mod tests {
                             }
                         }
                         if rduri.is_none() {
-                            return Err(Box::new(StringError::new("no redirect uri!", None))
-                                as Box<dyn Error + Send + Sync>);
+                            return Err("no redirect_uri!".into());
                         }
                         let mut rduri = rduri.unwrap();
                         rduri.push_str(&format!("?code={}", self.0));

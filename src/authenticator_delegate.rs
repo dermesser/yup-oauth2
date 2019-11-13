@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 use std::pin::Pin;
 
-use crate::types::{PollError, RequestError};
+use crate::error::{PollError, RefreshError, RequestError};
 
 use chrono::{DateTime, Local, Utc};
 use std::time::Duration;
@@ -85,14 +85,7 @@ pub trait AuthenticatorDelegate: Send + Sync {
     /// Called if we could not acquire a refresh token for a reason possibly specified
     /// by the server.
     /// This call is made for the delegate's information only.
-    fn token_refresh_failed(&self, error: &str, error_description: Option<&str>) {
-        {
-            let _ = error;
-        }
-        {
-            let _ = error_description;
-        }
-    }
+    fn token_refresh_failed(&self, _: &RefreshError) {}
 }
 
 /// FlowDelegate methods are called when an OAuth flow needs to ask the application what to do in

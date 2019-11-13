@@ -14,8 +14,9 @@
 use std::sync::Mutex;
 
 use crate::authenticator::{DefaultHyperClient, HyperClientBuilder};
+use crate::error::{JsonErrorOr, RequestError};
 use crate::storage::{self, Storage};
-use crate::types::{JsonErrorOr, RequestError, Token};
+use crate::types::Token;
 
 use futures::prelude::*;
 use hyper::header;
@@ -291,14 +292,13 @@ where
             expires_in: Option<i64>,
         }
 
-        match serde_json::from_slice::<JsonErrorOr<TokenResponse>>(&body)? {
-            JsonErrorOr::Err(err) => Err(err.into()),
-            JsonErrorOr::Data(TokenResponse {
+        match serde_json::from_slice::<JsonErrorOr<_>>(&body)?.into_result()? {
+            TokenResponse {
                 access_token: Some(access_token),
                 token_type: Some(token_type),
                 expires_in: Some(expires_in),
                 ..
-            }) => {
+            } => {
                 let expires_ts = chrono::Utc::now().timestamp() + expires_in;
                 Ok(Token {
                     access_token,
@@ -308,7 +308,7 @@ where
                     expires_in_timestamp: Some(expires_ts),
                 })
             }
-            JsonErrorOr::Data(token) => Err(RequestError::BadServerResponse(format!(
+            token => Err(RequestError::BadServerResponse(format!(
                 "Token response lacks fields: {:?}",
                 token
             ))),

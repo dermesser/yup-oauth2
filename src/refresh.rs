@@ -1,4 +1,5 @@
-use crate::types::{ApplicationSecret, JsonErrorOr, RefreshResult, RequestError};
+use crate::error::{JsonErrorOr, RefreshError};
+use crate::types::ApplicationSecret;
 
 use super::Token;
 use chrono::Utc;
@@ -33,7 +34,7 @@ impl RefreshFlow {
         client: &hyper::Client<C>,
         client_secret: &ApplicationSecret,
         refresh_token: &str,
-    ) -> Result<RefreshResult, RequestError> {
+    ) -> Result<Token, RefreshError> {
         // TODO: Does this function ever return RequestError? Maybe have it just return RefreshResult.
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
@@ -49,14 +50,8 @@ impl RefreshFlow {
             .body(hyper::Body::from(req))
             .unwrap(); // TODO: error handling
 
-        let resp = match client.request(request).await {
-            Ok(resp) => resp,
-            Err(err) => return Ok(RefreshResult::Error(err)),
-        };
-        let body = match resp.into_body().try_concat().await {
-            Ok(body) => body,
-            Err(err) => return Ok(RefreshResult::Error(err)),
-        };
+        let resp = client.request(request).await?;
+        let body = resp.into_body().try_concat().await?;
 
         #[derive(Deserialize)]
         struct JsonToken {
@@ -65,27 +60,18 @@ impl RefreshFlow {
             expires_in: i64,
         }
 
-        match serde_json::from_slice::<JsonErrorOr<JsonToken>>(&body) {
-            Err(_) => Ok(RefreshResult::RefreshError(
-                "failed to deserialized json token from refresh response".to_owned(),
-                None,
-            )),
-            Ok(JsonErrorOr::Err(json_err)) => Ok(RefreshResult::RefreshError(
-                json_err.error,
-                json_err.error_description,
-            )),
-            Ok(JsonErrorOr::Data(JsonToken {
-                access_token,
-                token_type,
-                expires_in,
-            })) => Ok(RefreshResult::Success(Token {
-                access_token,
-                token_type,
-                refresh_token: Some(refresh_token.to_string()),
-                expires_in: None,
-                expires_in_timestamp: Some(Utc::now().timestamp() + expires_in),
-            })),
-        }
+        let JsonToken {
+            access_token,
+            token_type,
+            expires_in,
+        } = serde_json::from_slice::<JsonErrorOr<_>>(&body)?.into_result()?;
+        Ok(Token {
+            access_token,
+            token_type,
+            refresh_token: Some(refresh_token.to_string()),
+            expires_in: None,
+            expires_in_timestamp: Some(Utc::now().timestamp() + expires_in),
+        })
     }
 }
 
@@ -128,16 +114,11 @@ mod tests {
                 .with_body(r#"{"access_token": "new-access-token", "token_type": "Bearer", "expires_in": 1234567}"#)
                 .create();
             let fut = async {
-                let rr = RefreshFlow::refresh_token(&client, &app_secret, refresh_token)
+                let token = RefreshFlow::refresh_token(&client, &app_secret, refresh_token)
                     .await
                     .unwrap();
-                match rr {
-                    RefreshResult::Success(tok) => {
-                        assert_eq!("new-access-token", tok.access_token);
-                        assert_eq!("Bearer", tok.token_type);
-                    }
-                    _ => panic!(format!("unexpected RefreshResult {:?}", rr)),
-                }
+                assert_eq!("new-access-token", token.access_token);
+                assert_eq!("Bearer", token.token_type);
                 Ok(()) as Result<(), ()>
             };
 
@@ -154,11 +135,9 @@ mod tests {
                 .create();
 
             let fut = async {
-                let rr = RefreshFlow::refresh_token(&client, &app_secret, refresh_token)
-                    .await
-                    .unwrap();
+                let rr = RefreshFlow::refresh_token(&client, &app_secret, refresh_token).await;
                 match rr {
-                    RefreshResult::RefreshError(e, None) => {
+                    Err(RefreshError::ServerError(e, None)) => {
                         assert_eq!(e, "invalid_token");
                     }
                     _ => panic!(format!("unexpected RefreshResult {:?}", rr)),

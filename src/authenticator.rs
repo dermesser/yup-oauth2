@@ -2,14 +2,14 @@ use crate::authenticator_delegate::{
     AuthenticatorDelegate, DefaultAuthenticatorDelegate, FlowDelegate,
 };
 use crate::device::DeviceFlow;
+use crate::error::RequestError;
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 use crate::refresh::RefreshFlow;
 use crate::storage::{self, Storage};
-use crate::types::{ApplicationSecret, RefreshResult, RequestError, Token};
+use crate::types::{ApplicationSecret, Token};
 use private::AuthFlow;
 
 use std::borrow::Cow;
-use std::error::Error;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -42,32 +42,23 @@ where
                 ..
             }) => {
                 // token is expired but has a refresh token.
-                let rr = RefreshFlow::refresh_token(
+                let token = match RefreshFlow::refresh_token(
                     &self.hyper_client,
                     &self.app_secret,
                     &refresh_token,
                 )
-                .await?;
-                match rr {
-                    RefreshResult::Error(ref e) => {
-                        self.auth_delegate.token_refresh_failed(
-                            e.description(),
-                            Some("the request has likely timed out"),
-                        );
-                        Err(RequestError::Refresh(rr))
+                .await
+                {
+                    Err(err) => {
+                        self.auth_delegate.token_refresh_failed(&err);
+                        return Err(err.into());
                     }
-                    RefreshResult::RefreshError(ref s, ref ss) => {
-                        self.auth_delegate.token_refresh_failed(
-                            &format!("{}{}", s, ss.as_ref().map(|s| format!(" ({})", s)).unwrap_or_else(String::new)),
-                            Some("the refresh token is likely invalid and your authorization has been revoked"),
-                            );
-                        Err(RequestError::Refresh(rr))
-                    }
-                    RefreshResult::Success(t) => {
-                        self.storage.set(scope_key, scopes, Some(t.clone())).await;
-                        Ok(t)
-                    }
-                }
+                    Ok(token) => token,
+                };
+                self.storage
+                    .set(scope_key, scopes, Some(token.clone()))
+                    .await;
+                Ok(token)
             }
             None
             | Some(Token {
@@ -248,8 +239,10 @@ impl<C> AuthenticatorBuilder<C, InstalledFlow> {
 
 mod private {
     use crate::device::DeviceFlow;
+    use crate::error::RequestError;
     use crate::installed::InstalledFlow;
-    use crate::types::{ApplicationSecret, RequestError, Token};
+    use crate::types::{ApplicationSecret, Token};
+
     pub enum AuthFlow {
         DeviceFlow(DeviceFlow),
         InstalledFlow(InstalledFlow),
