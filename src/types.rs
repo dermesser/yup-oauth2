@@ -80,8 +80,8 @@ pub struct ApplicationSecret {
     pub token_uri: String,
     /// The authorization server endpoint URI.
     pub auth_uri: String,
+    /// The redirect uris.
     pub redirect_uris: Vec<String>,
-
     /// Name of the google project the credentials are associated with
     pub project_id: Option<String>,
     /// The service account email associated with the client.
@@ -93,27 +93,13 @@ pub struct ApplicationSecret {
     pub client_x509_cert_url: Option<String>,
 }
 
-impl ApplicationSecret {
-    pub const fn empty() -> Self {
-        ApplicationSecret {
-            client_id: String::new(),
-            client_secret: String::new(),
-            token_uri: String::new(),
-            auth_uri: String::new(),
-            redirect_uris: Vec::new(),
-            project_id: None,
-            client_email: None,
-            auth_provider_x509_cert_url: None,
-            client_x509_cert_url: None,
-        }
-    }
-}
-
 /// A type to facilitate reading and writing the json secret file
 /// as returned by the [google developer console](https://code.google.com/apis/console)
 #[derive(Deserialize, Serialize, Default)]
 pub struct ConsoleApplicationSecret {
+    /// web app secret
     pub web: Option<ApplicationSecret>,
+    /// installed app secret
     pub installed: Option<ApplicationSecret>,
 }
 

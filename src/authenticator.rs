@@ -1,3 +1,4 @@
+//! Module contianing the core functionality for OAuth2 Authentication.
 use crate::authenticator_delegate::{
     AuthenticatorDelegate, DefaultAuthenticatorDelegate, FlowDelegate,
 };
@@ -15,6 +16,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 
+/// Authenticator is responsible for fetching tokens, handling refreshing tokens,
+/// and optionally persisting tokens to disk.
 pub struct Authenticator<C> {
     hyper_client: hyper::Client<C>,
     app_secret: ApplicationSecret,
@@ -27,6 +30,7 @@ impl<C> Authenticator<C>
 where
     C: hyper::client::connect::Connect + 'static,
 {
+    /// Return the current token for the provided scopes.
     pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<Token, Error>
     where
         T: AsRef<str>,
@@ -77,6 +81,7 @@ where
     }
 }
 
+/// Configure an Authenticator using the builder pattern.
 pub struct AuthenticatorBuilder<C, F> {
     hyper_client_builder: C,
     app_secret: ApplicationSecret,
@@ -85,8 +90,24 @@ pub struct AuthenticatorBuilder<C, F> {
     auth_flow: F,
 }
 
+/// Create an authenticator that uses the installed flow.
+/// ```
+/// # async fn foo() {
+/// # use yup_oauth2::InstalledFlowReturnMethod;
+/// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultFlowDelegate;
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").unwrap();
+///     let authenticator = yup_oauth2::InstalledFlowAuthenticator::builder(
+///         app_secret,
+///         InstalledFlowReturnMethod::HTTPRedirect,
+///     )
+///     .build()
+///     .await
+///     .expect("failed to create authenticator");
+/// # }
+/// ```
 pub struct InstalledFlowAuthenticator;
 impl InstalledFlowAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses the installed flow.
     pub fn builder(
         app_secret: ApplicationSecret,
         method: InstalledFlowReturnMethod,
@@ -98,8 +119,19 @@ impl InstalledFlowAuthenticator {
     }
 }
 
+/// Create an authenticator that uses the device flow.
+/// ```
+/// # async fn foo() {
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").unwrap();
+///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
 pub struct DeviceFlowAuthenticator;
 impl DeviceFlowAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses the device flow.
     pub fn builder(
         app_secret: ApplicationSecret,
     ) -> AuthenticatorBuilder<DefaultHyperClient, DeviceFlow> {
@@ -107,7 +139,45 @@ impl DeviceFlowAuthenticator {
     }
 }
 
+/// Methods available when building any Authenticator.
+/// ```
+/// # async fn foo() {
+/// # let custom_hyper_client = hyper::Client::new();
+/// # let custom_auth_delegate = yup_oauth2::authenticator_delegate::DefaultAuthenticatorDelegate;
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").unwrap();
+///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
+///         .hyper_client(custom_hyper_client)
+///         .persist_tokens_to_disk("/tmp/tokenfile.json")
+///         .auth_delegate(Box::new(custom_auth_delegate))
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
 impl<C, F> AuthenticatorBuilder<C, F> {
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+        F: Into<AuthFlow>,
+    {
+        let hyper_client = self.hyper_client_builder.build_hyper_client();
+        let storage = match self.storage_type {
+            StorageType::Memory => Storage::Memory {
+                tokens: Mutex::new(storage::JSONTokens::new()),
+            },
+            StorageType::Disk(path) => Storage::Disk(storage::DiskStorage::new(path).await?),
+        };
+
+        Ok(Authenticator {
+            hyper_client,
+            app_secret: self.app_secret,
+            storage,
+            auth_delegate: self.auth_delegate,
+            auth_flow: self.auth_flow.into(),
+        })
+    }
+
     fn with_auth_flow(
         app_secret: ApplicationSecret,
         auth_flow: F,
@@ -153,31 +223,23 @@ impl<C, F> AuthenticatorBuilder<C, F> {
             ..self
         }
     }
-
-    /// Create the authenticator.
-    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
-    where
-        C: HyperClientBuilder,
-        F: Into<AuthFlow>,
-    {
-        let hyper_client = self.hyper_client_builder.build_hyper_client();
-        let storage = match self.storage_type {
-            StorageType::Memory => Storage::Memory {
-                tokens: Mutex::new(storage::JSONTokens::new()),
-            },
-            StorageType::Disk(path) => Storage::Disk(storage::DiskStorage::new(path).await?),
-        };
-
-        Ok(Authenticator {
-            hyper_client,
-            app_secret: self.app_secret,
-            storage,
-            auth_delegate: self.auth_delegate,
-            auth_flow: self.auth_flow.into(),
-        })
-    }
 }
 
+/// Methods available when building a device flow Authenticator.
+/// ```
+/// # async fn foo() {
+/// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultFlowDelegate;
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").unwrap();
+///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
+///         .device_code_url("foo")
+///         .flow_delegate(Box::new(custom_flow_delegate))
+///         .wait_duration(std::time::Duration::from_secs(120))
+///         .grant_type("foo")
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
 impl<C> AuthenticatorBuilder<C, DeviceFlow> {
     /// Use the provided device code url.
     pub fn device_code_url(self, url: impl Into<Cow<'static, str>>) -> Self {
@@ -224,6 +286,22 @@ impl<C> AuthenticatorBuilder<C, DeviceFlow> {
     }
 }
 
+/// Methods available when building an installed flow Authenticator.
+/// ```
+/// # async fn foo() {
+/// # use yup_oauth2::InstalledFlowReturnMethod;
+/// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultFlowDelegate;
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").unwrap();
+///     let authenticator = yup_oauth2::InstalledFlowAuthenticator::builder(
+///         app_secret,
+///         InstalledFlowReturnMethod::HTTPRedirect,
+///     )
+///     .flow_delegate(Box::new(custom_flow_delegate))
+///     .build()
+///     .await
+///     .expect("failed to create authenticator");
+/// # }
+/// ```
 impl<C> AuthenticatorBuilder<C, InstalledFlow> {
     /// Use the provided FlowDelegate.
     pub fn flow_delegate(self, flow_delegate: Box<dyn FlowDelegate>) -> Self {
@@ -285,8 +363,10 @@ mod private {
 
 /// A trait implemented for any hyper::Client as well as teh DefaultHyperClient.
 pub trait HyperClientBuilder {
+    /// The hyper connector that the resulting hyper client will use.
     type Connector: hyper::client::connect::Connect + 'static;
 
+    /// Create a hyper::Client
     fn build_hyper_client(self) -> hyper::Client<Self::Connector>;
 }
 

@@ -20,19 +20,19 @@
 //! based on the Google APIs; it may or may not work with other providers.
 //!
 //! # Installed Flow Usage
-//! The `InstalledFlow` involves showing a URL to the user (or opening it in a browser)
+//! The installed flow involves showing a URL to the user (or opening it in a browser)
 //! and then either prompting the user to enter a displayed code, or make the authorizing
 //! website redirect to a web server spun up by this library and running on localhost.
 //!
-//! In order to use the interactive method, use the `InstalledInteractive` `FlowType`;
-//! for the redirect method, use `InstalledRedirect`, with the port number to let the
-//! server listen on.
+//! In order to use the interactive method, use the `Interactive` `InstalledFlowReturnMethod`;
+//! for the redirect method, use `HTTPRedirect`.
 //!
 //! You can implement your own `AuthenticatorDelegate` in order to customize the flow;
-//! the `InstalledFlow` uses the `present_user_url` method.
+//! the installed flow uses the `present_user_url` method.
 //!
-//! The returned `Token` is stored permanently in the given token storage in order to
-//! authorize future API requests to the same scopes.
+//! The returned `Token` will be stored in memory in order to authorize future
+//! API requests to the same scopes. The tokens can optionally be persisted to
+//! disk by using `persist_tokens_to_disk` when creating the authenticator.
 //!
 //! The following example, which is derived from the (actual and runnable) example in
 //! `examples/test-installed/`, shows the basics of using this crate:
@@ -68,6 +68,7 @@
 //! }
 //! ```
 //!
+#![deny(missing_docs)]
 pub mod authenticator;
 pub mod authenticator_delegate;
 mod device;

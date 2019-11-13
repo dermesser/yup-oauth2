@@ -1,3 +1,5 @@
+//! Module containing various error types.
+
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;

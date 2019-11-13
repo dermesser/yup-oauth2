@@ -69,15 +69,25 @@ fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, io::Error> {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServiceAccountKey {
     #[serde(rename = "type")]
+    /// key_type
     pub key_type: Option<String>,
+    /// project_id
     pub project_id: Option<String>,
+    /// private_key_id
     pub private_key_id: Option<String>,
+    /// private_key
     pub private_key: String,
+    /// client_email
     pub client_email: String,
+    /// client_id
     pub client_id: Option<String>,
+    /// auth_uri
     pub auth_uri: Option<String>,
+    /// token_uri
     pub token_uri: String,
+    /// auth_provider_x509_cert_url
     pub auth_provider_x509_cert_url: Option<String>,
+    /// client_x509_cert_url
     pub client_x509_cert_url: Option<String>,
 }
 
@@ -150,8 +160,19 @@ impl JWTSigner {
     }
 }
 
+/// Create an authenticator that uses a service account.
+/// ```
+/// # async fn foo() {
+/// # let service_key =  yup_oauth2::service_account_key_from_file("/tmp/foo").unwrap();
+///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(service_key)
+///         .build()
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
 pub struct ServiceAccountAuthenticator;
 impl ServiceAccountAuthenticator {
+    /// Use the builder pattern to create an authenticator that uses a service
+    /// account.
     pub fn builder(key: ServiceAccountKey) -> Builder<DefaultHyperClient> {
         Builder {
             client: DefaultHyperClient,
@@ -161,12 +182,25 @@ impl ServiceAccountAuthenticator {
     }
 }
 
+/// Configure a service account authenticator using the builder pattern.
 pub struct Builder<C> {
     client: C,
     key: ServiceAccountKey,
     subject: Option<String>,
 }
 
+/// Methods available when building a service account authenticator.
+/// ```
+/// # async fn foo() {
+/// # let custom_hyper_client = hyper::Client::new();
+/// # let service_key =  yup_oauth2::service_account_key_from_file("/tmp/foo").unwrap();
+///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(service_key)
+///         .hyper_client(custom_hyper_client)
+///         .subject("foo")
+///         .build()
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
 impl<C> Builder<C> {
     /// Use the provided hyper client.
     pub fn hyper_client<NewC: HyperClientBuilder>(self, hyper_client: NewC) -> Builder<NewC> {
@@ -178,9 +212,9 @@ impl<C> Builder<C> {
     }
 
     /// Use the provided subject.
-    pub fn subject(self, subject: String) -> Self {
+    pub fn subject(self, subject: impl Into<String>) -> Self {
         Builder {
-            subject: Some(subject),
+            subject: Some(subject.into()),
             ..self
         }
     }
@@ -194,6 +228,7 @@ impl<C> Builder<C> {
     }
 }
 
+/// ServiceAccountAccess can fetch oauth tokens using a service account.
 pub struct ServiceAccountAccess<C> {
     client: hyper::Client<C>,
     key: ServiceAccountKey,
@@ -223,6 +258,7 @@ where
         })
     }
 
+    /// Return the current token for the provided scopes.
     pub async fn token<T>(&self, scopes: &[T]) -> Result<Token, Error>
     where
         T: AsRef<str>,

@@ -1,3 +1,5 @@
+//! Module containing types related to delegates.
+
 use crate::error::{Error, PollError, RefreshError};
 
 use std::error::Error as StdError;
