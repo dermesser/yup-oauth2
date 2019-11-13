@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
@@ -45,7 +45,7 @@ pub enum PollError {
 
 /// Encapsulates all possible results of the `token(...)` operation
 #[derive(Debug)]
-pub enum RequestError {
+pub enum Error {
     /// Indicates connection failure
     ClientError(hyper::Error),
     /// The OAuth client was not found
@@ -69,75 +69,75 @@ pub enum RequestError {
     /// An error occurred while refreshing tokens.
     Refresh(RefreshError),
     /// Error in token cache layer
-    Cache(Box<dyn Error + Send + Sync>),
+    Cache(Box<dyn StdError + Send + Sync>),
 }
 
-impl From<hyper::Error> for RequestError {
-    fn from(error: hyper::Error) -> RequestError {
-        RequestError::ClientError(error)
+impl From<hyper::Error> for Error {
+    fn from(error: hyper::Error) -> Error {
+        Error::ClientError(error)
     }
 }
 
-impl From<JsonError> for RequestError {
-    fn from(value: JsonError) -> RequestError {
+impl From<JsonError> for Error {
+    fn from(value: JsonError) -> Error {
         match &*value.error {
-            "invalid_client" => RequestError::InvalidClient,
-            "invalid_scope" => RequestError::InvalidScope(
+            "invalid_client" => Error::InvalidClient,
+            "invalid_scope" => Error::InvalidScope(
                 value
                     .error_description
                     .unwrap_or_else(|| "no description provided".to_string()),
             ),
-            _ => RequestError::NegativeServerResponse(value.error, value.error_description),
+            _ => Error::NegativeServerResponse(value.error, value.error_description),
         }
     }
 }
 
-impl From<serde_json::Error> for RequestError {
-    fn from(value: serde_json::Error) -> RequestError {
-        RequestError::JSONError(value)
+impl From<serde_json::Error> for Error {
+    fn from(value: serde_json::Error) -> Error {
+        Error::JSONError(value)
     }
 }
 
-impl From<RefreshError> for RequestError {
-    fn from(value: RefreshError) -> RequestError {
-        RequestError::Refresh(value)
+impl From<RefreshError> for Error {
+    fn from(value: RefreshError) -> Error {
+        Error::Refresh(value)
     }
 }
 
-impl fmt::Display for RequestError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
-            RequestError::ClientError(ref err) => err.fmt(f),
-            RequestError::InvalidClient => "Invalid Client".fmt(f),
-            RequestError::InvalidScope(ref scope) => writeln!(f, "Invalid Scope: '{}'", scope),
-            RequestError::NegativeServerResponse(ref error, ref desc) => {
+            Error::ClientError(ref err) => err.fmt(f),
+            Error::InvalidClient => "Invalid Client".fmt(f),
+            Error::InvalidScope(ref scope) => writeln!(f, "Invalid Scope: '{}'", scope),
+            Error::NegativeServerResponse(ref error, ref desc) => {
                 error.fmt(f)?;
                 if let Some(ref desc) = *desc {
                     write!(f, ": {}", desc)?;
                 }
                 "\n".fmt(f)
             }
-            RequestError::BadServerResponse(ref s) => s.fmt(f),
-            RequestError::JSONError(ref e) => format!(
+            Error::BadServerResponse(ref s) => s.fmt(f),
+            Error::JSONError(ref e) => format!(
                 "JSON Error; this might be a bug with unexpected server responses! {}",
                 e
             )
             .fmt(f),
-            RequestError::UserError(ref s) => s.fmt(f),
-            RequestError::LowLevelError(ref e) => e.fmt(f),
-            RequestError::Poll(ref pe) => pe.fmt(f),
-            RequestError::Refresh(ref rr) => format!("{:?}", rr).fmt(f),
-            RequestError::Cache(ref e) => e.fmt(f),
+            Error::UserError(ref s) => s.fmt(f),
+            Error::LowLevelError(ref e) => e.fmt(f),
+            Error::Poll(ref pe) => pe.fmt(f),
+            Error::Refresh(ref rr) => format!("{:?}", rr).fmt(f),
+            Error::Cache(ref e) => e.fmt(f),
         }
     }
 }
 
-impl Error for RequestError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl StdError for Error {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
-            RequestError::ClientError(ref err) => Some(err),
-            RequestError::LowLevelError(ref err) => Some(err),
-            RequestError::JSONError(ref err) => Some(err),
+            Error::ClientError(ref err) => Some(err),
+            Error::LowLevelError(ref err) => Some(err),
+            Error::JSONError(ref err) => Some(err),
             _ => None,
         }
     }

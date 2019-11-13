@@ -17,7 +17,7 @@ use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
 
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate};
-use crate::error::{JsonErrorOr, RequestError};
+use crate::error::{Error, JsonErrorOr};
 use crate::types::{ApplicationSecret, Token};
 
 const OOB_REDIRECT_URI: &str = "urn:ietf:wg:oauth:2.0:oob";
@@ -90,7 +90,7 @@ impl InstalledFlow {
         hyper_client: &hyper::Client<C>,
         app_secret: &ApplicationSecret,
         scopes: &[T],
-    ) -> Result<Token, RequestError>
+    ) -> Result<Token, Error>
     where
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
@@ -112,7 +112,7 @@ impl InstalledFlow {
         hyper_client: &hyper::Client<C>,
         app_secret: &ApplicationSecret,
         scopes: &[T],
-    ) -> Result<Token, RequestError>
+    ) -> Result<Token, Error>
     where
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
@@ -136,7 +136,7 @@ impl InstalledFlow {
                 }
                 code
             }
-            _ => return Err(RequestError::UserError("couldn't read code".to_string())),
+            _ => return Err(Error::UserError("couldn't read code".to_string())),
         };
         self.exchange_auth_code(&authcode, hyper_client, app_secret, None)
             .await
@@ -147,7 +147,7 @@ impl InstalledFlow {
         hyper_client: &hyper::Client<C>,
         app_secret: &ApplicationSecret,
         scopes: &[T],
-    ) -> Result<Token, RequestError>
+    ) -> Result<Token, Error>
     where
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
@@ -185,7 +185,7 @@ impl InstalledFlow {
         hyper_client: &hyper::Client<C>,
         app_secret: &ApplicationSecret,
         server_addr: Option<SocketAddr>,
-    ) -> Result<Token, RequestError>
+    ) -> Result<Token, Error>
     where
         C: hyper::client::connect::Connect + 'static,
     {
@@ -194,12 +194,12 @@ impl InstalledFlow {
         let resp = hyper_client
             .request(request)
             .await
-            .map_err(RequestError::ClientError)?;
+            .map_err(Error::ClientError)?;
         let body = resp
             .into_body()
             .try_concat()
             .await
-            .map_err(RequestError::ClientError)?;
+            .map_err(Error::ClientError)?;
 
         #[derive(Deserialize)]
         struct JSONTokenResponse {
@@ -276,7 +276,7 @@ struct InstalledFlowServer {
 }
 
 impl InstalledFlowServer {
-    fn run() -> Result<Self, RequestError> {
+    fn run() -> Result<Self, Error> {
         use hyper::service::{make_service_fn, service_fn};
         let (auth_code_tx, auth_code_rx) = oneshot::channel::<String>();
         let (trigger_shutdown_tx, trigger_shutdown_rx) = oneshot::channel::<()>();

@@ -14,7 +14,7 @@
 use std::sync::Mutex;
 
 use crate::authenticator::{DefaultHyperClient, HyperClientBuilder};
-use crate::error::{JsonErrorOr, RequestError};
+use crate::error::{Error, JsonErrorOr};
 use crate::storage::{self, Storage};
 use crate::types::Token;
 
@@ -228,7 +228,7 @@ where
         })
     }
 
-    pub async fn token<T>(&self, scopes: &[T]) -> Result<Token, RequestError>
+    pub async fn token<T>(&self, scopes: &[T]) -> Result<Token, Error>
     where
         T: AsRef<str>,
     {
@@ -256,13 +256,13 @@ where
         subject: Option<&str>,
         key: &ServiceAccountKey,
         scopes: &[T],
-    ) -> Result<Token, RequestError>
+    ) -> Result<Token, Error>
     where
         T: AsRef<str>,
     {
         let claims = Claims::new(key, scopes, subject);
         let signed = signer.sign_claims(&claims).map_err(|_| {
-            RequestError::LowLevelError(io::Error::new(
+            Error::LowLevelError(io::Error::new(
                 io::ErrorKind::Other,
                 "unable to sign claims",
             ))
@@ -274,15 +274,12 @@ where
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(rqbody))
             .unwrap();
-        let response = client
-            .request(request)
-            .await
-            .map_err(RequestError::ClientError)?;
+        let response = client.request(request).await.map_err(Error::ClientError)?;
         let body = response
             .into_body()
             .try_concat()
             .await
-            .map_err(RequestError::ClientError)?;
+            .map_err(Error::ClientError)?;
 
         /// This is the schema of the server's response.
         #[derive(Deserialize, Debug)]
@@ -308,7 +305,7 @@ where
                     expires_in_timestamp: Some(expires_ts),
                 })
             }
-            token => Err(RequestError::BadServerResponse(format!(
+            token => Err(Error::BadServerResponse(format!(
                 "Token response lacks fields: {:?}",
                 token
             ))),
@@ -380,7 +377,7 @@ mod tests {
                     .await?;
                 assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
                 assert_eq!(Some(3600), tok.expires_in);
-                Ok(()) as Result<(), RequestError>
+                Ok(()) as Result<(), Error>
             };
             rt.block_on(fut).expect("block_on");
 
@@ -400,7 +397,7 @@ mod tests {
                     .await?;
                 assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
                 assert_eq!(Some(3600), tok.expires_in);
-                Ok(()) as Result<(), RequestError>
+                Ok(()) as Result<(), Error>
             };
             rt.block_on(fut).expect("block_on 2");
 

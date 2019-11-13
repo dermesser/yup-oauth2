@@ -10,7 +10,7 @@ use serde_json as json;
 use url::form_urlencoded;
 
 use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate, PollInformation, Retry};
-use crate::error::{JsonErrorOr, PollError, RequestError};
+use crate::error::{Error, JsonErrorOr, PollError};
 use crate::types::{ApplicationSecret, Token};
 
 pub const GOOGLE_DEVICE_CODE_URL: &str = "https://accounts.google.com/o/oauth2/device/code";
@@ -46,7 +46,7 @@ impl DeviceFlow {
         hyper_client: &hyper::Client<C>,
         app_secret: &ApplicationSecret,
         scopes: &[T],
-    ) -> Result<Token, RequestError>
+    ) -> Result<Token, Error>
     where
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
@@ -65,7 +65,7 @@ impl DeviceFlow {
             self.wait_duration,
         )
         .await
-        .map_err(|_| RequestError::Poll(PollError::TimedOut))?
+        .map_err(|_| Error::Poll(PollError::TimedOut))?
     }
 
     async fn wait_for_device_token<C>(
@@ -75,7 +75,7 @@ impl DeviceFlow {
         pollinf: &PollInformation,
         device_code: &str,
         grant_type: &str,
-    ) -> Result<Token, RequestError>
+    ) -> Result<Token, Error>
     where
         C: hyper::client::connect::Connect + 'static,
     {
@@ -93,15 +93,13 @@ impl DeviceFlow {
             .await
             {
                 Ok(None) => match self.flow_delegate.pending(&pollinf) {
-                    Retry::Abort | Retry::Skip => {
-                        return Err(RequestError::Poll(PollError::TimedOut))
-                    }
+                    Retry::Abort | Retry::Skip => return Err(Error::Poll(PollError::TimedOut)),
                     Retry::After(d) => d,
                 },
                 Ok(Some(tok)) => return Ok(tok),
                 Err(e @ PollError::AccessDenied)
                 | Err(e @ PollError::TimedOut)
-                | Err(e @ PollError::Expired(_)) => return Err(RequestError::Poll(e)),
+                | Err(e @ PollError::Expired(_)) => return Err(Error::Poll(e)),
                 Err(ref e) => {
                     error!("Unknown error from poll token api: {}", e);
                     pollinf.interval
@@ -130,7 +128,7 @@ impl DeviceFlow {
         client: &hyper::Client<C>,
         device_code_url: &str,
         scopes: &[T],
-    ) -> Result<(PollInformation, String), RequestError>
+    ) -> Result<(PollInformation, String), Error>
     where
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
@@ -148,10 +146,7 @@ impl DeviceFlow {
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(req))
             .unwrap();
-        let resp = client
-            .request(req)
-            .await
-            .map_err(RequestError::ClientError)?;
+        let resp = client.request(req).await.map_err(Error::ClientError)?;
         // This return type is defined in https://tools.ietf.org/html/draft-ietf-oauth-device-flow-15#section-3.2
         // The alias is present as Google use a non-standard name for verification_uri.
         // According to the standard interval is optional, however, all tested implementations provide it.

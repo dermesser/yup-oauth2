@@ -92,5 +92,5 @@ pub use crate::installed::InstalledFlowReturnMethod;
 pub use crate::service_account::{ServiceAccountAuthenticator, ServiceAccountKey};
 
 #[doc(inline)]
-pub use crate::error::RequestError;
+pub use crate::error::Error;
 pub use crate::types::{ApplicationSecret, ConsoleApplicationSecret, Token};

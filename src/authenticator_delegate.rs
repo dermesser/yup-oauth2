@@ -1,10 +1,10 @@
 use hyper;
 
-use std::error::Error;
+use std::error::Error as StdError;
 use std::fmt;
 use std::pin::Pin;
 
-use crate::error::{PollError, RefreshError, RequestError};
+use crate::error::{Error, PollError, RefreshError};
 
 use chrono::{DateTime, Local, Utc};
 use std::time::Duration;
@@ -58,8 +58,8 @@ impl fmt::Display for PollError {
     }
 }
 
-impl Error for PollError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl StdError for PollError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
             PollError::HttpError(ref e) => Some(e),
             _ => None,
@@ -80,7 +80,7 @@ pub trait AuthenticatorDelegate: Send + Sync {
     }
 
     /// The server denied the attempt to obtain a request code
-    fn request_failure(&self, _: RequestError) {}
+    fn request_failure(&self, _: Error) {}
 
     /// Called if we could not acquire a refresh token for a reason possibly specified
     /// by the server.
@@ -140,7 +140,7 @@ pub trait FlowDelegate: Send + Sync {
         &'a self,
         url: &'a str,
         need_code: bool,
-    ) -> Pin<Box<dyn Future<Output = Result<String, Box<dyn Error + Send + Sync>>> + Send + 'a>>
+    ) -> Pin<Box<dyn Future<Output = Result<String, Box<dyn StdError + Send + Sync>>> + Send + 'a>>
     {
         Box::pin(present_user_url(url, need_code))
     }
@@ -149,7 +149,7 @@ pub trait FlowDelegate: Send + Sync {
 async fn present_user_url(
     url: &str,
     need_code: bool,
-) -> Result<String, Box<dyn Error + Send + Sync>> {
+) -> Result<String, Box<dyn StdError + Send + Sync>> {
     if need_code {
         println!(
             "Please direct your browser to {}, follow the instructions and enter the \
@@ -163,7 +163,7 @@ async fn present_user_url(
         {
             Err(err) => {
                 println!("{:?}", err);
-                Err(Box::new(err) as Box<dyn Error + Send + Sync>)
+                Err(Box::new(err) as Box<dyn StdError + Send + Sync>)
             }
             Ok(_) => Ok(user_input),
         }

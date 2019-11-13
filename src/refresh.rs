@@ -35,7 +35,7 @@ impl RefreshFlow {
         client_secret: &ApplicationSecret,
         refresh_token: &str,
     ) -> Result<Token, RefreshError> {
-        // TODO: Does this function ever return RequestError? Maybe have it just return RefreshResult.
+        // TODO: Does this function ever return Error? Maybe have it just return RefreshResult.
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
                 ("client_id", client_secret.client_id.as_str()),

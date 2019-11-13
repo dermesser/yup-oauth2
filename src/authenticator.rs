@@ -2,7 +2,7 @@ use crate::authenticator_delegate::{
     AuthenticatorDelegate, DefaultAuthenticatorDelegate, FlowDelegate,
 };
 use crate::device::DeviceFlow;
-use crate::error::RequestError;
+use crate::error::Error;
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 use crate::refresh::RefreshFlow;
 use crate::storage::{self, Storage};
@@ -27,7 +27,7 @@ impl<C> Authenticator<C>
 where
     C: hyper::client::connect::Connect + 'static,
 {
-    pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<Token, RequestError>
+    pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<Token, Error>
     where
         T: AsRef<str>,
     {
@@ -239,7 +239,7 @@ impl<C> AuthenticatorBuilder<C, InstalledFlow> {
 
 mod private {
     use crate::device::DeviceFlow;
-    use crate::error::RequestError;
+    use crate::error::Error;
     use crate::installed::InstalledFlow;
     use crate::types::{ApplicationSecret, Token};
 
@@ -266,7 +266,7 @@ mod private {
             hyper_client: &'a hyper::Client<C>,
             app_secret: &'a ApplicationSecret,
             scopes: &'a [T],
-        ) -> Result<Token, RequestError>
+        ) -> Result<Token, Error>
         where
             T: AsRef<str>,
             C: hyper::client::connect::Connect + 'static,
