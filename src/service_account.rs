@@ -11,29 +11,24 @@
 //! Copyright (c) 2016 Google Inc (lewinb@google.com).
 //!
 
-use std::sync::Mutex;
-
 use crate::authenticator::{DefaultHyperClient, HyperClientBuilder};
 use crate::error::{Error, JsonErrorOr};
 use crate::storage::{self, Storage};
 use crate::types::Token;
 
+use std::io;
+use std::sync::Mutex;
+
 use futures::prelude::*;
 use hyper::header;
-use url::form_urlencoded;
-
 use rustls::{
     self,
     internal::pemfile,
     sign::{self, SigningKey},
     PrivateKey,
 };
-use std::io;
-
-use base64;
-use chrono;
-use hyper;
-use serde_json;
+use serde::{Deserialize, Serialize};
+use url::form_urlencoded;
 
 const GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 const GOOGLE_RS256_HEAD: &str = r#"{"alg":"RS256","typ":"JWT"}"#;

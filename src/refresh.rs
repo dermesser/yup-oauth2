@@ -1,11 +1,10 @@
 use crate::error::{JsonErrorOr, RefreshError};
-use crate::types::ApplicationSecret;
+use crate::types::{ApplicationSecret, Token};
 
-use super::Token;
 use chrono::Utc;
 use futures_util::try_stream::TryStreamExt;
-use hyper;
 use hyper::header;
+use serde::Deserialize;
 use url::form_urlencoded;
 
 /// Implements the [OAuth2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).

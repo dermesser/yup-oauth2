@@ -1,19 +1,14 @@
-#![allow(dead_code)]
-
 //! Helper functions allowing you to avoid writing boilerplate code for common operations, such as
 //! parsing JSON or reading files.
 
 // Copyright (c) 2016 Google Inc (lewinb@google.com).
 //
 // Refer to the project root for licensing information.
-
-use serde_json;
+use crate::service_account::ServiceAccountKey;
+use crate::types::{ApplicationSecret, ConsoleApplicationSecret};
 
 use std::io;
 use std::path::Path;
-
-use crate::service_account::ServiceAccountKey;
-use crate::types::{ApplicationSecret, ConsoleApplicationSecret};
 
 /// Read an application secret from a file.
 pub fn read_application_secret<P: AsRef<Path>>(path: P) -> io::Result<ApplicationSecret> {

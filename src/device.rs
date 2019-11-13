@@ -1,17 +1,16 @@
+use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate, PollInformation, Retry};
+use crate::error::{Error, JsonErrorOr, PollError};
+use crate::types::{ApplicationSecret, Token};
+
 use std::borrow::Cow;
 use std::time::Duration;
 
 use ::log::error;
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
-use hyper;
 use hyper::header;
-use serde_json as json;
+use serde::Deserialize;
 use url::form_urlencoded;
-
-use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate, PollInformation, Retry};
-use crate::error::{Error, JsonErrorOr, PollError};
-use crate::types::{ApplicationSecret, Token};
 
 pub const GOOGLE_DEVICE_CODE_URL: &str = "https://accounts.google.com/o/oauth2/device/code";
 
@@ -162,7 +161,8 @@ impl DeviceFlow {
         }
 
         let json_bytes = resp.into_body().try_concat().await?;
-        let decoded: JsonData = json::from_slice::<JsonErrorOr<_>>(&json_bytes)?.into_result()?;
+        let decoded: JsonData =
+            serde_json::from_slice::<JsonErrorOr<_>>(&json_bytes)?.into_result()?;
         let expires_in = decoded.expires_in.unwrap_or(60 * 60);
         let pi = PollInformation {
             user_code: decoded.user_code,
@@ -235,7 +235,7 @@ impl DeviceFlow {
             error: String,
         }
 
-        match json::from_slice::<JsonError>(&body) {
+        match serde_json::from_slice::<JsonError>(&body) {
             Err(_) => {} // ignore, move on, it's not an error
             Ok(res) => {
                 match res.error.as_ref() {
@@ -255,7 +255,7 @@ impl DeviceFlow {
         }
 
         // yes, we expect that !
-        let mut t: Token = json::from_slice(&body).unwrap();
+        let mut t: Token = serde_json::from_slice(&body).unwrap();
         t.set_expiry_absolute();
 
         Ok(Some(t))

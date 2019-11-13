@@ -3,6 +3,7 @@ use std::fmt;
 use std::io;
 
 use chrono::{DateTime, Utc};
+use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct JsonError {

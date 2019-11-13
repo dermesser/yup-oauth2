@@ -1,4 +1,5 @@
 use chrono::{DateTime, TimeZone, Utc};
+use serde::{Deserialize, Serialize};
 
 /// Represents a token as returned by OAuth2 servers.
 ///

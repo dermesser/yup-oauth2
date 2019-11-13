@@ -2,6 +2,10 @@
 //
 // Refer to the project root for licensing information.
 //
+use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate};
+use crate::error::{Error, JsonErrorOr};
+use crate::types::{ApplicationSecret, Token};
+
 use std::convert::AsRef;
 use std::future::Future;
 use std::net::SocketAddr;
@@ -10,15 +14,11 @@ use std::sync::{Arc, Mutex};
 
 use futures::future::FutureExt;
 use futures_util::try_stream::TryStreamExt;
-use hyper;
 use hyper::header;
+use serde::Deserialize;
 use tokio::sync::oneshot;
 use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
-
-use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate};
-use crate::error::{Error, JsonErrorOr};
-use crate::types::{ApplicationSecret, Token};
 
 const OOB_REDIRECT_URI: &str = "urn:ietf:wg:oauth:2.0:oob";
 

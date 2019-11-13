@@ -1,17 +1,12 @@
-use hyper;
+use crate::error::{Error, PollError, RefreshError};
 
 use std::error::Error as StdError;
 use std::fmt;
 use std::pin::Pin;
-
-use crate::error::{Error, PollError, RefreshError};
-
-use chrono::{DateTime, Local, Utc};
 use std::time::Duration;
 
+use chrono::{DateTime, Local, Utc};
 use futures::prelude::*;
-use tio::AsyncBufReadExt;
-use tokio::io as tio;
 
 /// A utility type to indicate how operations DeviceFlowHelper operations should be retried
 pub enum Retry {
@@ -150,6 +145,7 @@ async fn present_user_url(
     url: &str,
     need_code: bool,
 ) -> Result<String, Box<dyn StdError + Send + Sync>> {
+    use tokio::io::AsyncBufReadExt;
     if need_code {
         println!(
             "Please direct your browser to {}, follow the instructions and enter the \
@@ -157,7 +153,7 @@ async fn present_user_url(
             url
         );
         let mut user_input = String::new();
-        match tio::BufReader::new(tio::stdin())
+        match tokio::io::BufReader::new(tokio::io::stdin())
             .read_line(&mut user_input)
             .await
         {

@@ -68,9 +68,6 @@
 //! }
 //! ```
 //!
-#[macro_use]
-extern crate serde_derive;
-
 pub mod authenticator;
 pub mod authenticator_delegate;
 mod device;
