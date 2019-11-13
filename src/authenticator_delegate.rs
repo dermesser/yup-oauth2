@@ -143,9 +143,9 @@ pub trait FlowDelegate: Send + Sync {
     /// We need the user to navigate to a URL using their browser and potentially paste back a code
     /// (or maybe not). Whether they have to enter a code depends on the InstalledFlowReturnMethod
     /// used.
-    fn present_user_url<'a, S: AsRef<str> + fmt::Display + Send + Sync + 'a>(
+    fn present_user_url<'a>(
         &'a self,
-        url: S,
+        url: &'a str,
         need_code: bool,
     ) -> Pin<Box<dyn Future<Output = Result<String, Box<dyn Error + Send + Sync>>> + Send + 'a>>
     {
@@ -153,8 +153,8 @@ pub trait FlowDelegate: Send + Sync {
     }
 }
 
-async fn present_user_url<S: AsRef<str> + fmt::Display>(
-    url: S,
+async fn present_user_url(
+    url: &str,
     need_code: bool,
 ) -> Result<String, Box<dyn Error + Send + Sync>> {
     if need_code {

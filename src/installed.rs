@@ -447,7 +447,6 @@ mod installed_flow_server {
 #[cfg(test)]
 mod tests {
     use std::error::Error;
-    use std::fmt;
     use std::str::FromStr;
 
     use hyper::client::connect::HttpConnector;
@@ -472,9 +471,9 @@ mod tests {
         impl FlowDelegate for FD {
             /// Depending on need_code, return the pre-set code or send the code to the server at
             /// the redirect_uri given in the url.
-            fn present_user_url<'a, S: AsRef<str> + fmt::Display + Send + Sync + 'a>(
+            fn present_user_url<'a>(
                 &'a self,
-                url: S,
+                url: &'a str,
                 need_code: bool,
             ) -> Pin<
                 Box<dyn Future<Output = Result<String, Box<dyn Error + Send + Sync>>> + Send + 'a>,
