@@ -348,69 +348,54 @@ where
 mod tests {
     use super::*;
     use crate::helper::service_account_key_from_file;
+    use crate::parse_json;
 
-    use hyper;
-    use hyper_rustls::HttpsConnector;
-    use mockito::{self, mock};
-    use tokio;
+    use mockito::mock;
 
-    #[test]
-    fn test_mocked_http() {
+    #[tokio::test]
+    async fn test_mocked_http() {
         env_logger::try_init().unwrap();
         let server_url = &mockito::server_url();
-        let client_secret = r#"{
-  "type": "service_account",
-  "project_id": "yup-test-243420",
-  "private_key_id": "26de294916614a5ebdf7a065307ed3ea9941902b",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDemmylrvp1KcOn\n9yTAVVKPpnpYznvBvcAU8Qjwr2fSKylpn7FQI54wCk5VJVom0jHpAmhxDmNiP8yv\nHaqsef+87Oc0n1yZ71/IbeRcHZc2OBB33/LCFqf272kThyJo3qspEqhuAw0e8neg\nLQb4jpm9PsqR8IjOoAtXQSu3j0zkXemMYFy93PWHjVpPEUX16NGfsWH7oxspBHOk\n9JPGJL8VJdbiAoDSDgF0y9RjJY5I52UeHNhMsAkTYs6mIG4kKXt2+T9tAyHw8aho\nwmuytQAfydTflTfTG8abRtliF3nil2taAc5VB07dP1b4dVYy/9r6M8Z0z4XM7aP+\nNdn2TKm3AgMBAAECggEAWi54nqTlXcr2M5l535uRb5Xz0f+Q/pv3ceR2iT+ekXQf\n+mUSShOr9e1u76rKu5iDVNE/a7H3DGopa7ZamzZvp2PYhSacttZV2RbAIZtxU6th\n7JajPAM+t9klGh6wj4jKEcE30B3XVnbHhPJI9TCcUyFZoscuPXt0LLy/z8Uz0v4B\nd5JARwyxDMb53VXwukQ8nNY2jP7WtUig6zwE5lWBPFMbi8GwGkeGZOruAK5sPPwY\nGBAlfofKANI7xKx9UXhRwisB4+/XI1L0Q6xJySv9P+IAhDUI6z6kxR+WkyT/YpG3\nX9gSZJc7qEaxTIuDjtep9GTaoEqiGntjaFBRKoe+VQKBgQDzM1+Ii+REQqrGlUJo\nx7KiVNAIY/zggu866VyziU6h5wjpsoW+2Npv6Dv7nWvsvFodrwe50Y3IzKtquIal\nVd8aa50E72JNImtK/o5Nx6xK0VySjHX6cyKENxHRDnBmNfbALRM+vbD9zMD0lz2q\nmns/RwRGq3/98EqxP+nHgHSr9QKBgQDqUYsFAAfvfT4I75Glc9svRv8IsaemOm07\nW1LCwPnj1MWOhsTxpNF23YmCBupZGZPSBFQobgmHVjQ3AIo6I2ioV6A+G2Xq/JCF\nmzfbvZfqtbbd+nVgF9Jr1Ic5T4thQhAvDHGUN77BpjEqZCQLAnUWJx9x7e2xvuBl\n1A6XDwH/ewKBgQDv4hVyNyIR3nxaYjFd7tQZYHTOQenVffEAd9wzTtVbxuo4sRlR\nNM7JIRXBSvaATQzKSLHjLHqgvJi8LITLIlds1QbNLl4U3UVddJbiy3f7WGTqPFfG\nkLhUF4mgXpCpkMLxrcRU14Bz5vnQiDmQRM4ajS7/kfwue00BZpxuZxst3QKBgQCI\nRI3FhaQXyc0m4zPfdYYVc4NjqfVmfXoC1/REYHey4I1XetbT9Nb/+ow6ew0UbgSC\nUZQjwwJ1m1NYXU8FyovVwsfk9ogJ5YGiwYb1msfbbnv/keVq0c/Ed9+AG9th30qM\nIf93hAfClITpMz2mzXIMRQpLdmQSR4A2l+E4RjkSOwKBgQCB78AyIdIHSkDAnCxz\nupJjhxEhtQ88uoADxRoEga7H/2OFmmPsqfytU4+TWIdal4K+nBCBWRvAX1cU47vH\nJOlSOZI0gRKe0O4bRBQc8GXJn/ubhYSxI02IgkdGrIKpOb5GG10m85ZvqsXw3bKn\nRVHMD0ObF5iORjZUqD0yRitAdg==\n-----END PRIVATE KEY-----\n",
-  "client_email": "yup-test-sa-1@yup-test-243420.iam.gserviceaccount.com",
-  "client_id": "102851967901799660408",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/yup-test-sa-1%40yup-test-243420.iam.gserviceaccount.com"
-}"#;
-        let mut key: ServiceAccountKey = serde_json::from_str(client_secret).unwrap();
-        key.token_uri = format!("{}/token", server_url);
+        let key: ServiceAccountKey = parse_json!({
+          "type": "service_account",
+          "project_id": "yup-test-243420",
+          "private_key_id": "26de294916614a5ebdf7a065307ed3ea9941902b",
+          "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDemmylrvp1KcOn\n9yTAVVKPpnpYznvBvcAU8Qjwr2fSKylpn7FQI54wCk5VJVom0jHpAmhxDmNiP8yv\nHaqsef+87Oc0n1yZ71/IbeRcHZc2OBB33/LCFqf272kThyJo3qspEqhuAw0e8neg\nLQb4jpm9PsqR8IjOoAtXQSu3j0zkXemMYFy93PWHjVpPEUX16NGfsWH7oxspBHOk\n9JPGJL8VJdbiAoDSDgF0y9RjJY5I52UeHNhMsAkTYs6mIG4kKXt2+T9tAyHw8aho\nwmuytQAfydTflTfTG8abRtliF3nil2taAc5VB07dP1b4dVYy/9r6M8Z0z4XM7aP+\nNdn2TKm3AgMBAAECggEAWi54nqTlXcr2M5l535uRb5Xz0f+Q/pv3ceR2iT+ekXQf\n+mUSShOr9e1u76rKu5iDVNE/a7H3DGopa7ZamzZvp2PYhSacttZV2RbAIZtxU6th\n7JajPAM+t9klGh6wj4jKEcE30B3XVnbHhPJI9TCcUyFZoscuPXt0LLy/z8Uz0v4B\nd5JARwyxDMb53VXwukQ8nNY2jP7WtUig6zwE5lWBPFMbi8GwGkeGZOruAK5sPPwY\nGBAlfofKANI7xKx9UXhRwisB4+/XI1L0Q6xJySv9P+IAhDUI6z6kxR+WkyT/YpG3\nX9gSZJc7qEaxTIuDjtep9GTaoEqiGntjaFBRKoe+VQKBgQDzM1+Ii+REQqrGlUJo\nx7KiVNAIY/zggu866VyziU6h5wjpsoW+2Npv6Dv7nWvsvFodrwe50Y3IzKtquIal\nVd8aa50E72JNImtK/o5Nx6xK0VySjHX6cyKENxHRDnBmNfbALRM+vbD9zMD0lz2q\nmns/RwRGq3/98EqxP+nHgHSr9QKBgQDqUYsFAAfvfT4I75Glc9svRv8IsaemOm07\nW1LCwPnj1MWOhsTxpNF23YmCBupZGZPSBFQobgmHVjQ3AIo6I2ioV6A+G2Xq/JCF\nmzfbvZfqtbbd+nVgF9Jr1Ic5T4thQhAvDHGUN77BpjEqZCQLAnUWJx9x7e2xvuBl\n1A6XDwH/ewKBgQDv4hVyNyIR3nxaYjFd7tQZYHTOQenVffEAd9wzTtVbxuo4sRlR\nNM7JIRXBSvaATQzKSLHjLHqgvJi8LITLIlds1QbNLl4U3UVddJbiy3f7WGTqPFfG\nkLhUF4mgXpCpkMLxrcRU14Bz5vnQiDmQRM4ajS7/kfwue00BZpxuZxst3QKBgQCI\nRI3FhaQXyc0m4zPfdYYVc4NjqfVmfXoC1/REYHey4I1XetbT9Nb/+ow6ew0UbgSC\nUZQjwwJ1m1NYXU8FyovVwsfk9ogJ5YGiwYb1msfbbnv/keVq0c/Ed9+AG9th30qM\nIf93hAfClITpMz2mzXIMRQpLdmQSR4A2l+E4RjkSOwKBgQCB78AyIdIHSkDAnCxz\nupJjhxEhtQ88uoADxRoEga7H/2OFmmPsqfytU4+TWIdal4K+nBCBWRvAX1cU47vH\nJOlSOZI0gRKe0O4bRBQc8GXJn/ubhYSxI02IgkdGrIKpOb5GG10m85ZvqsXw3bKn\nRVHMD0ObF5iORjZUqD0yRitAdg==\n-----END PRIVATE KEY-----\n",
+          "client_email": "yup-test-sa-1@yup-test-243420.iam.gserviceaccount.com",
+          "client_id": "102851967901799660408",
+          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+          "token_uri": format!("{}/token", server_url),
+          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+          "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/yup-test-sa-1%40yup-test-243420.iam.gserviceaccount.com"
+        });
 
-        let json_response = r#"{
-  "access_token": "ya29.c.ElouBywiys0LyNaZoLPJcp1Fdi2KjFMxzvYKLXkTdvM-rDfqKlvEq6PiMhGoGHx97t5FAvz3eb_ahdwlBjSStxHtDVQB4ZPRJQ_EOi-iS7PnayahU2S9Jp8S6rk",
-  "expires_in": 3600,
-  "token_type": "Bearer"
-}"#;
-        let bad_json_response = r#"{
-  "access_token": "ya29.c.ElouBywiys0LyNaZoLPJcp1Fdi2KjFMxzvYKLXkTdvM-rDfqKlvEq6PiMhGoGHx97t5FAvz3eb_ahdwlBjSStxHtDVQB4ZPRJQ_EOi-iS7PnayahU2S9Jp8S6rk",
-  "token_type": "Bearer"
-}"#;
-
-        let https = HttpsConnector::new();
-        let client = hyper::Client::builder()
-            .keep_alive(false)
-            .build::<_, hyper::Body>(https);
-        let rt = tokio::runtime::Builder::new()
-            .core_threads(1)
-            .panic_handler(|e| std::panic::resume_unwind(e))
-            .build()
-            .unwrap();
+        let json_response = serde_json::json!({
+          "access_token": "ya29.c.ElouBywiys0LyNaZoLPJcp1Fdi2KjFMxzvYKLXkTdvM-rDfqKlvEq6PiMhGoGHx97t5FAvz3eb_ahdwlBjSStxHtDVQB4ZPRJQ_EOi-iS7PnayahU2S9Jp8S6rk",
+          "expires_in": 3600,
+          "token_type": "Bearer"
+        });
+        let bad_json_response = serde_json::json!({
+          "access_token": "ya29.c.ElouBywiys0LyNaZoLPJcp1Fdi2KjFMxzvYKLXkTdvM-rDfqKlvEq6PiMhGoGHx97t5FAvz3eb_ahdwlBjSStxHtDVQB4ZPRJQ_EOi-iS7PnayahU2S9Jp8S6rk",
+          "token_type": "Bearer"
+        });
 
         // Successful path.
         {
             let _m = mock("POST", "/token")
                 .with_status(200)
                 .with_header("content-type", "text/json")
-                .with_body(json_response)
+                .with_body(json_response.to_string())
                 .expect(1)
                 .create();
-            let acc = ServiceAccountAccess::new(client.clone(), key.clone(), None).unwrap();
-            let fut = async {
-                let tok = acc
-                    .token(&["https://www.googleapis.com/auth/pubsub"])
-                    .await?;
-                assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
-                assert_eq!(Some(3600), tok.expires_in);
-                Ok(()) as Result<(), Error>
-            };
-            rt.block_on(fut).expect("block_on");
+            let acc = ServiceAccountAuthenticator::builder(key.clone())
+                .build()
+                .unwrap();
+            let tok = acc
+                .token(&["https://www.googleapis.com/auth/pubsub"])
+                .await
+                .expect("token failed");
+            assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
+            assert_eq!(Some(3600), tok.expires_in);
 
             assert!(acc
                 .cache
@@ -422,16 +407,12 @@ mod tests {
                 )
                 .is_some());
             // Test that token is in cache (otherwise mock will tell us)
-            let fut = async {
-                let tok = acc
-                    .token(&["https://www.googleapis.com/auth/pubsub"])
-                    .await?;
-                assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
-                assert_eq!(Some(3600), tok.expires_in);
-                Ok(()) as Result<(), Error>
-            };
-            rt.block_on(fut).expect("block_on 2");
-
+            let tok = acc
+                .token(&["https://www.googleapis.com/auth/pubsub"])
+                .await
+                .expect("token failed");
+            assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
+            assert_eq!(Some(3600), tok.expires_in);
             _m.assert();
         }
         // Malformed response.
@@ -439,48 +420,30 @@ mod tests {
             let _m = mock("POST", "/token")
                 .with_status(200)
                 .with_header("content-type", "text/json")
-                .with_body(bad_json_response)
+                .with_body(bad_json_response.to_string())
                 .create();
             let acc = ServiceAccountAuthenticator::builder(key.clone())
-                .hyper_client(client.clone())
                 .build()
                 .unwrap();
-            let fut = async {
-                let result = acc.token(&["https://www.googleapis.com/auth/pubsub"]).await;
-                assert!(result.is_err());
-                Ok(()) as Result<(), ()>
-            };
-            rt.block_on(fut).expect("block_on");
+            let result = acc.token(&["https://www.googleapis.com/auth/pubsub"]).await;
+            assert!(result.is_err());
             _m.assert();
         }
-        rt.shutdown_on_idle();
     }
 
     // Valid but deactivated key.
     const TEST_PRIVATE_KEY_PATH: &'static str = "examples/Sanguine-69411a0c0eea.json";
 
     // Uncomment this test to verify that we can successfully obtain tokens.
-    //#[test]
+    //#[tokio::test]
     #[allow(dead_code)]
-    fn test_service_account_e2e() {
+    async fn test_service_account_e2e() {
         let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
-        let https = HttpsConnector::new();
-        let client = hyper::Client::builder().build(https);
-        let acc = ServiceAccountAuthenticator::builder(key)
-            .hyper_client(client)
-            .build()
-            .unwrap();
-        let rt = tokio::runtime::Builder::new()
-            .core_threads(1)
-            .panic_handler(|e| std::panic::resume_unwind(e))
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            println!(
-                "{:?}",
-                acc.token(&["https://www.googleapis.com/auth/pubsub"]).await
-            );
-        });
+        let acc = ServiceAccountAuthenticator::builder(key).build().unwrap();
+        println!(
+            "{:?}",
+            acc.token(&["https://www.googleapis.com/auth/pubsub"]).await
+        );
     }
 
     #[test]

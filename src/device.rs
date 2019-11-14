@@ -264,16 +264,12 @@ impl DeviceFlow {
 
 #[cfg(test)]
 mod tests {
-    use hyper;
     use hyper_rustls::HttpsConnector;
-    use mockito;
-    use tokio;
 
     use super::*;
-    use crate::helper::parse_application_secret;
 
-    #[test]
-    fn test_device_end2end() {
+    #[tokio::test]
+    async fn test_device_end2end() {
         #[derive(Clone)]
         struct FD;
         impl FlowDelegate for FD {
@@ -283,9 +279,15 @@ mod tests {
         }
 
         let server_url = mockito::server_url();
-        let app_secret = r#"{"installed":{"client_id":"902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com","project_id":"yup-test-243420","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"iuMPN6Ne1PD7cos29Tk9rlqH","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"#;
-        let mut app_secret = parse_application_secret(app_secret).unwrap();
-        app_secret.token_uri = format!("{}/token", server_url);
+        let app_secret: ApplicationSecret = crate::parse_json!({
+            "client_id": "902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com",
+            "project_id": "yup-test-243420",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": format!("{}/token", server_url),
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_secret": "iuMPN6Ne1PD7cos29Tk9rlqH",
+            "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob","http://localhost"],
+        });
         let device_code_url = format!("{}/code", server_url);
 
         let https = HttpsConnector::new();
@@ -300,118 +302,123 @@ mod tests {
             grant_type: GOOGLE_GRANT_TYPE.into(),
         };
 
-        let rt = tokio::runtime::Builder::new()
-            .core_threads(1)
-            .panic_handler(|e| std::panic::resume_unwind(e))
-            .build()
-            .unwrap();
-
         // Successful path
         {
-            let code_response = r#"{"device_code": "devicecode", "user_code": "usercode", "verification_url": "https://example.com/verify", "expires_in": 1234567, "interval": 1}"#;
+            let code_response = serde_json::json!({
+                "device_code": "devicecode",
+                "user_code": "usercode",
+                "verification_url": "https://example.com/verify",
+                "expires_in": 1234567,
+                "interval": 1
+            });
             let _m = mockito::mock("POST", "/code")
                 .match_body(mockito::Matcher::Regex(
                     ".*client_id=902216714886.*".to_string(),
                 ))
                 .with_status(200)
-                .with_body(code_response)
+                .with_body(code_response.to_string())
                 .create();
-            let token_response = r#"{"access_token": "accesstoken", "refresh_token": "refreshtoken", "token_type": "Bearer", "expires_in": 1234567}"#;
+            let token_response = serde_json::json!({
+                "access_token": "accesstoken",
+                "refresh_token": "refreshtoken",
+                "token_type": "Bearer",
+                "expires_in": 1234567
+            });
             let _m = mockito::mock("POST", "/token")
                 .match_body(mockito::Matcher::Regex(
                     ".*client_secret=iuMPN6Ne1PD7cos29Tk9rlqH&code=devicecode.*".to_string(),
                 ))
                 .with_status(200)
-                .with_body(token_response)
+                .with_body(token_response.to_string())
                 .create();
 
-            let fut = async {
-                let token = flow
-                    .token(
-                        &client,
-                        &app_secret,
-                        &["https://www.googleapis.com/scope/1"],
-                    )
-                    .await
-                    .unwrap();
-                assert_eq!("accesstoken", token.access_token);
-                Ok(()) as Result<(), ()>
-            };
-            rt.block_on(fut).expect("block_on");
-
+            let token = flow
+                .token(
+                    &client,
+                    &app_secret,
+                    &["https://www.googleapis.com/scope/1"],
+                )
+                .await
+                .expect("token failed");
+            assert_eq!("accesstoken", token.access_token);
             _m.assert();
         }
+
         // Code is not delivered.
         {
-            let code_response =
-                r#"{"error": "invalid_client_id", "error_description": "description"}"#;
+            let code_response = serde_json::json!({
+                "error": "invalid_client_id",
+                "error_description": "description"
+            });
             let _m = mockito::mock("POST", "/code")
                 .match_body(mockito::Matcher::Regex(
                     ".*client_id=902216714886.*".to_string(),
                 ))
                 .with_status(400)
-                .with_body(code_response)
+                .with_body(code_response.to_string())
                 .create();
-            let token_response = r#"{"access_token": "accesstoken", "refresh_token": "refreshtoken", "token_type": "Bearer", "expires_in": 1234567}"#;
+            let token_response = serde_json::json!({
+                "access_token": "accesstoken",
+                "refresh_token": "refreshtoken",
+                "token_type": "Bearer",
+                "expires_in": 1234567
+            });
             let _m = mockito::mock("POST", "/token")
                 .match_body(mockito::Matcher::Regex(
                     ".*client_secret=iuMPN6Ne1PD7cos29Tk9rlqH&code=devicecode.*".to_string(),
                 ))
                 .with_status(200)
-                .with_body(token_response)
+                .with_body(token_response.to_string())
                 .expect(0) // Never called!
                 .create();
 
-            let fut = async {
-                let res = flow
-                    .token(
-                        &client,
-                        &app_secret,
-                        &["https://www.googleapis.com/scope/1"],
-                    )
-                    .await;
-                assert!(res.is_err());
-                assert!(format!("{}", res.unwrap_err()).contains("invalid_client_id"));
-                Ok(()) as Result<(), ()>
-            };
-            rt.block_on(fut).expect("block_on");
-
+            let res = flow
+                .token(
+                    &client,
+                    &app_secret,
+                    &["https://www.googleapis.com/scope/1"],
+                )
+                .await;
+            assert!(res.is_err());
+            assert!(format!("{}", res.unwrap_err()).contains("invalid_client_id"));
             _m.assert();
         }
+
         // Token is not delivered.
         {
-            let code_response = r#"{"device_code": "devicecode", "user_code": "usercode", "verification_url": "https://example.com/verify", "expires_in": 1234567, "interval": 1}"#;
+            let code_response = serde_json::json!({
+                "device_code": "devicecode",
+                "user_code": "usercode",
+                "verification_url": "https://example.com/verify",
+                "expires_in": 1234567,
+                "interval": 1
+            });
             let _m = mockito::mock("POST", "/code")
                 .match_body(mockito::Matcher::Regex(
                     ".*client_id=902216714886.*".to_string(),
                 ))
                 .with_status(200)
-                .with_body(code_response)
+                .with_body(code_response.to_string())
                 .create();
-            let token_response = r#"{"error": "access_denied"}"#;
+            let token_response = serde_json::json!({"error": "access_denied"});
             let _m = mockito::mock("POST", "/token")
                 .match_body(mockito::Matcher::Regex(
                     ".*client_secret=iuMPN6Ne1PD7cos29Tk9rlqH&code=devicecode.*".to_string(),
                 ))
                 .with_status(400)
-                .with_body(token_response)
+                .with_body(token_response.to_string())
                 .expect(1)
                 .create();
 
-            let fut = async {
-                let res = flow
-                    .token(
-                        &client,
-                        &app_secret,
-                        &["https://www.googleapis.com/scope/1"],
-                    )
-                    .await;
-                assert!(res.is_err());
-                assert!(format!("{}", res.unwrap_err()).contains("Access denied by user"));
-                Ok(()) as Result<(), ()>
-            };
-            rt.block_on(fut).expect("block_on");
-
+            let res = flow
+                .token(
+                    &client,
+                    &app_secret,
+                    &["https://www.googleapis.com/scope/1"],
+                )
+                .await;
+            assert!(res.is_err());
+            assert!(format!("{}", res.unwrap_err()).contains("Access denied by user"));
             _m.assert();
         }
     }

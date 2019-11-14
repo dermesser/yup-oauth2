@@ -79,13 +79,10 @@ mod tests {
     use super::*;
     use crate::helper;
 
-    use hyper;
     use hyper_rustls::HttpsConnector;
-    use mockito;
-    use tokio;
 
-    #[test]
-    fn test_refresh_end2end() {
+    #[tokio::test]
+    async fn test_refresh_end2end() {
         let server_url = mockito::server_url();
 
         let app_secret = r#"{"installed":{"client_id":"902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com","project_id":"yup-test-243420","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"iuMPN6Ne1PD7cos29Tk9rlqH","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"#;
@@ -98,12 +95,6 @@ mod tests {
             .keep_alive(false)
             .build::<_, hyper::Body>(https);
 
-        let rt = tokio::runtime::Builder::new()
-            .core_threads(1)
-            .panic_handler(|e| std::panic::resume_unwind(e))
-            .build()
-            .unwrap();
-
         // Success
         {
             let _m = mockito::mock("POST", "/token")
@@ -112,18 +103,14 @@ mod tests {
                 .with_status(200)
                 .with_body(r#"{"access_token": "new-access-token", "token_type": "Bearer", "expires_in": 1234567}"#)
                 .create();
-            let fut = async {
-                let token = RefreshFlow::refresh_token(&client, &app_secret, refresh_token)
-                    .await
-                    .unwrap();
-                assert_eq!("new-access-token", token.access_token);
-                assert_eq!("Bearer", token.token_type);
-                Ok(()) as Result<(), ()>
-            };
-
-            rt.block_on(fut).expect("block_on");
+            let token = RefreshFlow::refresh_token(&client, &app_secret, refresh_token)
+                .await
+                .expect("token failed");
+            assert_eq!("new-access-token", token.access_token);
+            assert_eq!("Bearer", token.token_type);
             _m.assert();
         }
+
         // Refresh error.
         {
             let _m = mockito::mock("POST", "/token")
@@ -133,18 +120,13 @@ mod tests {
                 .with_body(r#"{"error": "invalid_token"}"#)
                 .create();
 
-            let fut = async {
-                let rr = RefreshFlow::refresh_token(&client, &app_secret, refresh_token).await;
-                match rr {
-                    Err(RefreshError::ServerError(e, None)) => {
-                        assert_eq!(e, "invalid_token");
-                    }
-                    _ => panic!(format!("unexpected RefreshResult {:?}", rr)),
+            let rr = RefreshFlow::refresh_token(&client, &app_secret, refresh_token).await;
+            match rr {
+                Err(RefreshError::ServerError(e, None)) => {
+                    assert_eq!(e, "invalid_token");
                 }
-                Ok(()) as Result<(), ()>
-            };
-
-            rt.block_on(fut).expect("block_on");
+                _ => panic!(format!("unexpected RefreshResult {:?}", rr)),
+            }
             _m.assert();
         }
     }

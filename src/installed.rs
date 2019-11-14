@@ -397,15 +397,13 @@ mod tests {
     use hyper::client::connect::HttpConnector;
     use hyper::Uri;
     use hyper_rustls::HttpsConnector;
-    use mockito::{self, mock};
-    use tokio;
+    use mockito::mock;
 
     use super::*;
     use crate::authenticator_delegate::FlowDelegate;
-    use crate::helper::*;
 
-    #[test]
-    fn test_end2end() {
+    #[tokio::test]
+    async fn test_end2end() {
         #[derive(Clone)]
         struct FD(
             String,
@@ -455,9 +453,15 @@ mod tests {
         }
 
         let server_url = mockito::server_url();
-        let app_secret = r#"{"installed":{"client_id":"902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com","project_id":"yup-test-243420","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"iuMPN6Ne1PD7cos29Tk9rlqH","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"#;
-        let mut app_secret = parse_application_secret(app_secret).unwrap();
-        app_secret.token_uri = format!("{}/token", server_url);
+        let app_secret: ApplicationSecret = crate::parse_json!({
+            "client_id": "902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com",
+            "project_id": "yup-test-243420",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": format!("{}/token", server_url),
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_secret": "iuMPN6Ne1PD7cos29Tk9rlqH",
+            "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob","http://localhost"]
+        });
 
         let https = HttpsConnector::new();
         let client = hyper::Client::builder()
@@ -470,35 +474,34 @@ mod tests {
             flow_delegate: Box::new(fd),
         };
 
-        let rt = tokio::runtime::Builder::new()
-            .core_threads(1)
-            .panic_handler(|e| std::panic::resume_unwind(e))
-            .build()
-            .unwrap();
-
         // Successful path.
         {
             let _m = mock("POST", "/token")
-            .match_body(mockito::Matcher::Regex(".*code=authorizationcode.*client_id=9022167.*".to_string()))
-            .with_body(r#"{"access_token": "accesstoken", "refresh_token": "refreshtoken", "token_type": "Bearer", "expires_in": 12345678}"#)
-            .expect(1)
-            .create();
+                .match_body(mockito::Matcher::Regex(
+                    ".*code=authorizationcode.*client_id=9022167.*".to_string(),
+                ))
+                .with_body(
+                    serde_json::json!({
+                        "access_token": "accesstoken",
+                        "refresh_token": "refreshtoken",
+                        "token_type": "Bearer",
+                        "expires_in": 12345678
+                    })
+                    .to_string(),
+                )
+                .expect(1)
+                .create();
 
-            let fut = || {
-                async {
-                    let tok = inf
-                        .token(&client, &app_secret, &["https://googleapis.com/some/scope"])
-                        .await
-                        .map_err(|_| ())?;
-                    assert_eq!("accesstoken", tok.access_token);
-                    assert_eq!("refreshtoken", tok.refresh_token.unwrap());
-                    assert_eq!("Bearer", tok.token_type);
-                    Ok(()) as Result<(), ()>
-                }
-            };
-            rt.block_on(fut()).expect("block on");
+            let tok = inf
+                .token(&client, &app_secret, &["https://googleapis.com/some/scope"])
+                .await
+                .expect("failed to get token");
+            assert_eq!("accesstoken", tok.access_token);
+            assert_eq!("refreshtoken", tok.refresh_token.unwrap());
+            assert_eq!("Bearer", tok.token_type);
             _m.assert();
         }
+
         // Successful path with HTTP redirect.
         {
             let inf = InstalledFlow {
@@ -509,24 +512,31 @@ mod tests {
                 )),
             };
             let _m = mock("POST", "/token")
-            .match_body(mockito::Matcher::Regex(".*code=authorizationcodefromlocalserver.*client_id=9022167.*".to_string()))
-            .with_body(r#"{"access_token": "accesstoken", "refresh_token": "refreshtoken", "token_type": "Bearer", "expires_in": 12345678}"#)
-            .expect(1)
-            .create();
+                .match_body(mockito::Matcher::Regex(
+                    ".*code=authorizationcodefromlocalserver.*client_id=9022167.*".to_string(),
+                ))
+                .with_body(
+                    serde_json::json!({
+                        "access_token": "accesstoken",
+                        "refresh_token": "refreshtoken",
+                        "token_type": "Bearer",
+                        "expires_in": 12345678
+                    })
+                    .to_string(),
+                )
+                .expect(1)
+                .create();
 
-            let fut = async {
-                let tok = inf
-                    .token(&client, &app_secret, &["https://googleapis.com/some/scope"])
-                    .await
-                    .map_err(|_| ())?;
-                assert_eq!("accesstoken", tok.access_token);
-                assert_eq!("refreshtoken", tok.refresh_token.unwrap());
-                assert_eq!("Bearer", tok.token_type);
-                Ok(()) as Result<(), ()>
-            };
-            rt.block_on(fut).expect("block on");
+            let tok = inf
+                .token(&client, &app_secret, &["https://googleapis.com/some/scope"])
+                .await
+                .expect("failed to get token");
+            assert_eq!("accesstoken", tok.access_token);
+            assert_eq!("refreshtoken", tok.refresh_token.unwrap());
+            assert_eq!("Bearer", tok.token_type);
             _m.assert();
         }
+
         // Error from server.
         {
             let _m = mock("POST", "/token")
@@ -534,22 +544,17 @@ mod tests {
                     ".*code=authorizationcode.*client_id=9022167.*".to_string(),
                 ))
                 .with_status(400)
-                .with_body(r#"{"error": "invalid_code"}"#)
+                .with_body(serde_json::json!({"error": "invalid_code"}).to_string())
                 .expect(1)
                 .create();
 
-            let fut = async {
-                let tokr = inf
-                    .token(&client, &app_secret, &["https://googleapis.com/some/scope"])
-                    .await;
-                assert!(tokr.is_err());
-                assert!(format!("{}", tokr.unwrap_err()).contains("invalid_code"));
-                Ok(()) as Result<(), ()>
-            };
-            rt.block_on(fut).expect("block on");
+            let tokr = inf
+                .token(&client, &app_secret, &["https://googleapis.com/some/scope"])
+                .await;
+            assert!(tokr.is_err());
+            assert!(format!("{}", tokr.unwrap_err()).contains("invalid_code"));
             _m.assert();
         }
-        rt.shutdown_on_idle();
     }
 
     #[test]
