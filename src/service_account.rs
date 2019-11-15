@@ -263,9 +263,9 @@ where
     where
         T: AsRef<str>,
     {
-        let hash = storage::ScopeHash::new(scopes);
+        let hashed_scopes = storage::HashedScopes::from(scopes);
         let cache = &self.cache;
-        match cache.get(hash, scopes) {
+        match cache.get(hashed_scopes) {
             Some(token) if !token.expired() => return Ok(token),
             _ => {}
         }
@@ -277,7 +277,7 @@ where
             scopes,
         )
         .await?;
-        cache.set(hash, scopes, Some(token.clone())).await;
+        cache.set(hashed_scopes, Some(token.clone())).await;
         Ok(token)
     }
     /// Send a request for a new Bearer token to the OAuth provider.
@@ -399,12 +399,9 @@ mod tests {
 
             assert!(acc
                 .cache
-                .get(
-                    dbg!(storage::ScopeHash::new(&[
-                        "https://www.googleapis.com/auth/pubsub"
-                    ])),
-                    &["https://www.googleapis.com/auth/pubsub"],
-                )
+                .get(storage::HashedScopes::from(&[
+                    "https://www.googleapis.com/auth/pubsub"
+                ]))
                 .is_some());
             // Test that token is in cache (otherwise mock will tell us)
             let tok = acc

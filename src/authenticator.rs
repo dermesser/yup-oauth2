@@ -35,8 +35,8 @@ where
     where
         T: AsRef<str>,
     {
-        let scope_key = storage::ScopeHash::new(scopes);
-        match self.storage.get(scope_key, scopes) {
+        let hashed_scopes = storage::HashedScopes::from(scopes);
+        match self.storage.get(hashed_scopes) {
             Some(t) if !t.expired() => {
                 // unexpired token found
                 Ok(t)
@@ -59,9 +59,7 @@ where
                     }
                     Ok(token) => token,
                 };
-                self.storage
-                    .set(scope_key, scopes, Some(token.clone()))
-                    .await;
+                self.storage.set(hashed_scopes, Some(token.clone())).await;
                 Ok(token)
             }
             None
@@ -74,7 +72,7 @@ where
                     .auth_flow
                     .token(&self.hyper_client, &self.app_secret, scopes)
                     .await?;
-                self.storage.set(scope_key, scopes, Some(t.clone())).await;
+                self.storage.set(hashed_scopes, Some(t.clone())).await;
                 Ok(t)
             }
         }
