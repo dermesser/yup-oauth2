@@ -277,7 +277,7 @@ where
             scopes,
         )
         .await?;
-        cache.set(hashed_scopes, Some(token.clone())).await;
+        cache.set(hashed_scopes, token.clone()).await;
         Ok(token)
     }
     /// Send a request for a new Bearer token to the OAuth provider.

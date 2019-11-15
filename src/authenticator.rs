@@ -59,7 +59,7 @@ where
                     }
                     Ok(token) => token,
                 };
-                self.storage.set(hashed_scopes, Some(token.clone())).await;
+                self.storage.set(hashed_scopes, token.clone()).await;
                 Ok(token)
             }
             None
@@ -72,7 +72,7 @@ where
                     .auth_flow
                     .token(&self.hyper_client, &self.app_secret, scopes)
                     .await?;
-                self.storage.set(hashed_scopes, Some(t.clone())).await;
+                self.storage.set(hashed_scopes, t.clone()).await;
                 Ok(t)
             }
         }

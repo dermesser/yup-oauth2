@@ -69,7 +69,7 @@ pub(crate) enum Storage {
 }
 
 impl Storage {
-    pub(crate) async fn set<T>(&self, scopes: HashedScopes<'_, T>, token: Option<Token>)
+    pub(crate) async fn set<T>(&self, scopes: HashedScopes<'_, T>, token: Token)
     where
         T: AsRef<str>,
     {
@@ -156,29 +156,24 @@ impl JSONTokens {
         None
     }
 
-    fn set<T>(&mut self, scopes: HashedScopes<T>, token: Option<Token>)
+    fn set<T>(&mut self, scopes: HashedScopes<T>, token: Token)
     where
         T: AsRef<str>,
     {
         eprintln!("setting: {:?}, {:?}", scopes.hash, token);
         self.tokens.retain(|x| x.hash != scopes.hash);
 
-        match token {
-            None => (),
-            Some(t) => {
-                self.tokens.push(JSONToken {
-                    hash: scopes.hash,
-                    scopes: Some(
-                        scopes
-                            .scopes
-                            .iter()
-                            .map(|x| x.as_ref().to_string())
-                            .collect(),
-                    ),
-                    token: t,
-                });
-            }
-        }
+        self.tokens.push(JSONToken {
+            hash: scopes.hash,
+            scopes: Some(
+                scopes
+                    .scopes
+                    .iter()
+                    .map(|x| x.as_ref().to_string())
+                    .collect(),
+            ),
+            token,
+        });
     }
 
     // TODO: ideally this function would accept &Path, but tokio requires the
@@ -219,7 +214,7 @@ impl DiskStorage {
         })
     }
 
-    async fn set<T>(&self, scopes: HashedScopes<'_, T>, token: Option<Token>)
+    async fn set<T>(&self, scopes: HashedScopes<'_, T>, token: Token)
     where
         T: AsRef<str>,
     {
