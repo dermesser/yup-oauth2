@@ -4,6 +4,7 @@
 //
 use crate::types::Token;
 
+use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -89,7 +90,6 @@ impl Storage {
 /// A single stored token.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct JSONToken {
-    pub hash: u64,
     pub scopes: Vec<String>,
     pub token: Token,
 }
@@ -97,12 +97,14 @@ struct JSONToken {
 /// List of tokens in a JSON object
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct JSONTokens {
-    tokens: Vec<JSONToken>,
+    token_map: BTreeMap<u64, JSONToken>,
 }
 
 impl JSONTokens {
     pub(crate) fn new() -> Self {
-        JSONTokens { tokens: Vec::new() }
+        JSONTokens {
+            token_map: BTreeMap::new(),
+        }
     }
 
     pub(crate) async fn load_from_file(filename: &Path) -> Result<Self, io::Error> {
@@ -112,13 +114,20 @@ impl JSONTokens {
         Ok(container)
     }
 
-    fn get<T>(&self, scopes: HashedScopes<T>) -> Option<Token>
+    fn get<T>(&self, HashedScopes { hash, scopes }: HashedScopes<T>) -> Option<Token>
     where
         T: AsRef<str>,
     {
-        for t in self.tokens.iter() {
+        // Check for existing hash first. This will match if we already have a
+        // token for the exact set of scopes requested.
+        if let Some(json_token) = self.token_map.get(&hash) {
+            return Some(json_token.token.clone());
+        }
+
+        // No exact match for the scopes provided. Search for any tokens that
+        // exist for a superset of the scopes requested.
+        for t in self.token_map.values() {
             if scopes
-                .scopes
                 .iter()
                 .all(|s| t.scopes.iter().any(|t| t == s.as_ref()))
             {
@@ -128,22 +137,17 @@ impl JSONTokens {
         None
     }
 
-    fn set<T>(&mut self, scopes: HashedScopes<T>, token: Token)
+    fn set<T>(&mut self, HashedScopes { hash, scopes }: HashedScopes<T>, token: Token)
     where
         T: AsRef<str>,
     {
-        eprintln!("setting: {:?}, {:?}", scopes.hash, token);
-        self.tokens.retain(|x| x.hash != scopes.hash);
-
-        self.tokens.push(JSONToken {
-            hash: scopes.hash,
-            scopes: scopes
-                .scopes
-                .iter()
-                .map(|x| x.as_ref().to_string())
-                .collect(),
-            token,
-        });
+        self.token_map.insert(
+            hash,
+            JSONToken {
+                scopes: scopes.iter().map(|x| x.as_ref().to_string()).collect(),
+                token,
+            },
+        );
     }
 
     // TODO: ideally this function would accept &Path, but tokio requires the
