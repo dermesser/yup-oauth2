@@ -139,7 +139,7 @@ impl DeviceFlowAuthenticator {
     }
 }
 
-/// Methods available when building any Authenticator.
+/// ## Methods available when building any Authenticator.
 /// ```
 /// # async fn foo() {
 /// # let custom_hyper_client = hyper::Client::new();
@@ -225,7 +225,7 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     }
 }
 
-/// Methods available when building a device flow Authenticator.
+/// ## Methods available when building a device flow Authenticator.
 /// ```
 /// # async fn foo() {
 /// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultFlowDelegate;
@@ -286,7 +286,7 @@ impl<C> AuthenticatorBuilder<C, DeviceFlow> {
     }
 }
 
-/// Methods available when building an installed flow Authenticator.
+/// ## Methods available when building an installed flow Authenticator.
 /// ```
 /// # async fn foo() {
 /// # use yup_oauth2::InstalledFlowReturnMethod;
