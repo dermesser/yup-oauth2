@@ -24,6 +24,7 @@ url = "1"
 futures-preview = "=0.3.0-alpha.19"
 tokio = "=0.2.0-alpha.6"
 futures-util-preview = "=0.3.0-alpha.19"
+seahash = "3.0.6"
 
 [dev-dependencies]
 mockito = "0.17"

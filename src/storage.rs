@@ -4,9 +4,6 @@
 //
 use crate::types::Token;
 
-use std::cmp::Ordering;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -39,12 +36,11 @@ where
         // Calculate a hash value describing the scopes. The order of the scopes in the
         // list does not change the hash value. i.e. two lists that contains the exact
         // same scopes, but in different order will return the same hash value.
-        let mut hash = DefaultHasher::new().finish();
-        for scope in scopes {
-            let mut hasher = DefaultHasher::new();
-            scope.as_ref().hash(&mut hasher);
-            hash ^= hasher.finish();
-        }
+        // Use seahash because it's fast and guaranteed to remain consistent,
+        // even across different executions and versions.
+        let hash = scopes.iter().fold(0u64, |h, scope| {
+            h ^ seahash::hash(scope.as_ref().as_bytes())
+        });
         HashedScopes { hash, scopes }
     }
 }
@@ -96,26 +92,6 @@ struct JSONToken {
     pub hash: u64,
     pub scopes: Vec<String>,
     pub token: Token,
-}
-
-impl PartialEq for JSONToken {
-    fn eq(&self, other: &Self) -> bool {
-        self.hash == other.hash
-    }
-}
-
-impl Eq for JSONToken {}
-
-impl PartialOrd for JSONToken {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for JSONToken {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.hash.cmp(&other.hash)
-    }
 }
 
 /// List of tokens in a JSON object
