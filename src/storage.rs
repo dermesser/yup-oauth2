@@ -94,7 +94,7 @@ impl Storage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct JSONToken {
     pub hash: u64,
-    pub scopes: Option<Vec<String>>,
+    pub scopes: Vec<String>,
     pub token: Token,
 }
 
@@ -141,15 +141,11 @@ impl JSONTokens {
         T: AsRef<str>,
     {
         for t in self.tokens.iter() {
-            if let Some(token_scopes) = &t.scopes {
-                if scopes
-                    .scopes
-                    .iter()
-                    .all(|s| token_scopes.iter().any(|t| t == s.as_ref()))
-                {
-                    return Some(t.token.clone());
-                }
-            } else if scopes.hash == t.hash {
+            if scopes
+                .scopes
+                .iter()
+                .all(|s| t.scopes.iter().any(|t| t == s.as_ref()))
+            {
                 return Some(t.token.clone());
             }
         }
@@ -165,13 +161,11 @@ impl JSONTokens {
 
         self.tokens.push(JSONToken {
             hash: scopes.hash,
-            scopes: Some(
-                scopes
-                    .scopes
-                    .iter()
-                    .map(|x| x.as_ref().to_string())
-                    .collect(),
-            ),
+            scopes: scopes
+                .scopes
+                .iter()
+                .map(|x| x.as_ref().to_string())
+                .collect(),
             token,
         });
     }
