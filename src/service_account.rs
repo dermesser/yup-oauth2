@@ -263,7 +263,7 @@ where
     where
         T: AsRef<str>,
     {
-        let hashed_scopes = storage::HashedScopes::from(scopes);
+        let hashed_scopes = storage::ScopesAndFilter::from(scopes);
         let cache = &self.cache;
         match cache.get(hashed_scopes) {
             Some(token) if !token.expired() => return Ok(token),
@@ -399,7 +399,7 @@ mod tests {
 
             assert!(acc
                 .cache
-                .get(storage::HashedScopes::from(&[
+                .get(storage::ScopesAndFilter::from(&[
                     "https://www.googleapis.com/auth/pubsub"
                 ]))
                 .is_some());

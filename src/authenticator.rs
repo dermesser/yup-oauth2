@@ -35,7 +35,7 @@ where
     where
         T: AsRef<str>,
     {
-        let hashed_scopes = storage::HashedScopes::from(scopes);
+        let hashed_scopes = storage::ScopesAndFilter::from(scopes);
         match self.storage.get(hashed_scopes) {
             Some(t) if !t.expired() => {
                 // unexpired token found
