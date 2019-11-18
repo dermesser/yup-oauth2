@@ -109,9 +109,16 @@ impl JSONTokens {
 
     pub(crate) async fn load_from_file(filename: &Path) -> Result<Self, io::Error> {
         let contents = tokio::fs::read(filename).await?;
-        let container: JSONTokens = serde_json::from_slice(&contents)
+        let token_vec: Vec<JSONToken> = serde_json::from_slice(&contents)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        Ok(container)
+        let token_map: BTreeMap<u64, JSONToken> = token_vec
+            .into_iter()
+            .map(|json_token| {
+                let hash = HashedScopes::from(&json_token.scopes).hash;
+                (hash, json_token)
+            })
+            .collect();
+        Ok(JSONTokens { token_map })
     }
 
     fn get<T>(&self, HashedScopes { hash, scopes }: HashedScopes<T>) -> Option<Token>
@@ -150,19 +157,14 @@ impl JSONTokens {
         );
     }
 
-    // TODO: ideally this function would accept &Path, but tokio requires the
-    // path be 'static. Revisit this and ask why tokio::fs::write has that
-    // limitation.
-    async fn dump_to_file(&self, path: PathBuf) -> Result<(), io::Error> {
-        let serialized = serde_json::to_string(self)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        tokio::fs::write(path, &serialized).await
+    fn all_tokens(&self) -> Vec<JSONToken> {
+        self.token_map.values().cloned().collect()
     }
 }
 
 pub(crate) struct DiskStorage {
     tokens: Mutex<JSONTokens>,
-    write_tx: tokio::sync::mpsc::Sender<JSONTokens>,
+    write_tx: tokio::sync::mpsc::Sender<Vec<JSONToken>>,
 }
 
 impl DiskStorage {
@@ -174,11 +176,16 @@ impl DiskStorage {
         // buffered channel. This ensures that the writes happen in the order
         // received, and if writes fall too far behind we will block GetToken
         // requests until disk i/o completes.
-        let (write_tx, mut write_rx) = tokio::sync::mpsc::channel::<JSONTokens>(2);
+        let (write_tx, mut write_rx) = tokio::sync::mpsc::channel::<Vec<JSONToken>>(2);
         tokio::spawn(async move {
             while let Some(tokens) = write_rx.recv().await {
-                if let Err(e) = tokens.dump_to_file(path.to_path_buf()).await {
-                    log::error!("Failed to write token storage to disk: {}", e);
+                match serde_json::to_string(&tokens) {
+                    Err(e) => log::error!("Failed to serialize tokens: {}", e),
+                    Ok(ser) => {
+                        if let Err(e) = tokio::fs::write(path.clone(), &ser).await {
+                            log::error!("Failed to write tokens to disk: {}", e);
+                        }
+                    }
                 }
             }
         });
@@ -195,7 +202,7 @@ impl DiskStorage {
         let cloned_tokens = {
             let mut tokens = self.tokens.lock().unwrap();
             tokens.set(scopes, token);
-            tokens.clone()
+            tokens.all_tokens()
         };
         self.write_tx
             .clone()
