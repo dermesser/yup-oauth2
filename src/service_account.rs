@@ -37,8 +37,7 @@ fn append_base64<T: AsRef<[u8]> + ?Sized>(s: &T, out: &mut String) {
 
 /// Decode a PKCS8 formatted RSA key.
 fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, io::Error> {
-    let private = pem_pkcs8.replace("\\n", "\n");
-    let private_keys = pemfile::pkcs8_private_keys(&mut private.as_bytes());
+    let private_keys = pemfile::pkcs8_private_keys(&mut pem_pkcs8.as_bytes());
 
     match private_keys {
         Ok(mut keys) if !keys.is_empty() => {
