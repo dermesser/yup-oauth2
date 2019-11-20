@@ -22,6 +22,7 @@ pub const GOOGLE_GRANT_TYPE: &str = "http://oauth.net/grant_type/device/1.0";
 /// * obtain a code to show to the user
 // * (repeatedly) poll for the user to authenticate your application
 pub struct DeviceFlow {
+    pub(crate) app_secret: ApplicationSecret,
     pub(crate) device_code_url: Cow<'static, str>,
     pub(crate) flow_delegate: Box<dyn FlowDelegate>,
     pub(crate) wait_duration: Duration,
@@ -31,8 +32,9 @@ pub struct DeviceFlow {
 impl DeviceFlow {
     /// Create a new DeviceFlow. The default FlowDelegate will be used and the
     /// default wait time is 120 seconds.
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(app_secret: ApplicationSecret) -> Self {
         DeviceFlow {
+            app_secret,
             device_code_url: GOOGLE_DEVICE_CODE_URL.into(),
             flow_delegate: Box::new(DefaultFlowDelegate),
             wait_duration: Duration::from_secs(120),
@@ -43,20 +45,24 @@ impl DeviceFlow {
     pub(crate) async fn token<C, T>(
         &self,
         hyper_client: &hyper::Client<C>,
-        app_secret: &ApplicationSecret,
         scopes: &[T],
     ) -> Result<Token, Error>
     where
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
     {
-        let (pollinf, device_code) =
-            Self::request_code(app_secret, hyper_client, &self.device_code_url, scopes).await?;
+        let (pollinf, device_code) = Self::request_code(
+            &self.app_secret,
+            hyper_client,
+            &self.device_code_url,
+            scopes,
+        )
+        .await?;
         self.flow_delegate.present_user_code(&pollinf);
         tokio::timer::Timeout::new(
             self.wait_for_device_token(
                 hyper_client,
-                app_secret,
+                &self.app_secret,
                 &pollinf,
                 &device_code,
                 &self.grant_type,
@@ -296,6 +302,7 @@ mod tests {
             .build::<_, hyper::Body>(https);
 
         let flow = DeviceFlow {
+            app_secret,
             device_code_url: device_code_url.into(),
             flow_delegate: Box::new(FD),
             wait_duration: Duration::from_secs(5),
@@ -333,11 +340,7 @@ mod tests {
                 .create();
 
             let token = flow
-                .token(
-                    &client,
-                    &app_secret,
-                    &["https://www.googleapis.com/scope/1"],
-                )
+                .token(&client, &["https://www.googleapis.com/scope/1"])
                 .await
                 .expect("token failed");
             assert_eq!("accesstoken", token.access_token);
@@ -373,11 +376,7 @@ mod tests {
                 .create();
 
             let res = flow
-                .token(
-                    &client,
-                    &app_secret,
-                    &["https://www.googleapis.com/scope/1"],
-                )
+                .token(&client, &["https://www.googleapis.com/scope/1"])
                 .await;
             assert!(res.is_err());
             assert!(format!("{}", res.unwrap_err()).contains("invalid_client_id"));
@@ -411,11 +410,7 @@ mod tests {
                 .create();
 
             let res = flow
-                .token(
-                    &client,
-                    &app_secret,
-                    &["https://www.googleapis.com/scope/1"],
-                )
+                .token(&client, &["https://www.googleapis.com/scope/1"])
                 .await;
             assert!(res.is_err());
             assert!(format!("{}", res.unwrap_err()).contains("Access denied by user"));

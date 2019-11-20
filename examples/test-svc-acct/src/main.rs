@@ -4,7 +4,7 @@ use yup_oauth2::ServiceAccountAuthenticator;
 #[tokio::main]
 async fn main() {
     let creds = yup_oauth2::service_account_key_from_file("serviceaccount.json").unwrap();
-    let sa = ServiceAccountAuthenticator::builder(creds).build().unwrap();
+    let sa = ServiceAccountAuthenticator::builder(creds).build().await.unwrap();
     let scopes = &["https://www.googleapis.com/auth/pubsub"];
 
     let tok = sa.token(scopes).await.unwrap();

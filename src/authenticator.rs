@@ -6,6 +6,7 @@ use crate::device::DeviceFlow;
 use crate::error::Error;
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 use crate::refresh::RefreshFlow;
+use crate::service_account::{ServiceAccountFlow, ServiceAccountFlowOpts, ServiceAccountKey};
 use crate::storage::{self, Storage};
 use crate::types::{ApplicationSecret, Token};
 use private::AuthFlow;
@@ -20,7 +21,6 @@ use std::time::Duration;
 /// and optionally persisting tokens to disk.
 pub struct Authenticator<C> {
     hyper_client: hyper::Client<C>,
-    app_secret: ApplicationSecret,
     auth_delegate: Box<dyn AuthenticatorDelegate>,
     storage: Storage,
     auth_flow: AuthFlow,
@@ -36,19 +36,22 @@ where
         T: AsRef<str>,
     {
         let hashed_scopes = storage::ScopesAndFilter::from(scopes);
-        match self.storage.get(hashed_scopes) {
-            Some(t) if !t.expired() => {
+        match (self.storage.get(hashed_scopes), self.auth_flow.app_secret()) {
+            (Some(t), _) if !t.expired() => {
                 // unexpired token found
                 Ok(t)
             }
-            Some(Token {
-                refresh_token: Some(refresh_token),
-                ..
-            }) => {
+            (
+                Some(Token {
+                    refresh_token: Some(refresh_token),
+                    ..
+                }),
+                Some(app_secret),
+            ) => {
                 // token is expired but has a refresh token.
                 let token = match RefreshFlow::refresh_token(
                     &self.hyper_client,
-                    &self.app_secret,
+                    app_secret,
                     &refresh_token,
                 )
                 .await
@@ -62,16 +65,9 @@ where
                 self.storage.set(hashed_scopes, token.clone()).await;
                 Ok(token)
             }
-            None
-            | Some(Token {
-                refresh_token: None,
-                ..
-            }) => {
-                // no token in the cache or the token returned does not contain a refresh token.
-                let t = self
-                    .auth_flow
-                    .token(&self.hyper_client, &self.app_secret, scopes)
-                    .await?;
+            _ => {
+                // no token in the cache or the token returned can't be refreshed.
+                let t = self.auth_flow.token(&self.hyper_client, scopes).await?;
                 self.storage.set(hashed_scopes, t.clone()).await;
                 Ok(t)
             }
@@ -82,7 +78,6 @@ where
 /// Configure an Authenticator using the builder pattern.
 pub struct AuthenticatorBuilder<C, F> {
     hyper_client_builder: C,
-    app_secret: ApplicationSecret,
     auth_delegate: Box<dyn AuthenticatorDelegate>,
     storage_type: StorageType,
     auth_flow: F,
@@ -110,10 +105,9 @@ impl InstalledFlowAuthenticator {
         app_secret: ApplicationSecret,
         method: InstalledFlowReturnMethod,
     ) -> AuthenticatorBuilder<DefaultHyperClient, InstalledFlow> {
-        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(
-            app_secret,
-            InstalledFlow::new(method),
-        )
+        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(InstalledFlow::new(
+            app_secret, method,
+        ))
     }
 }
 
@@ -133,7 +127,30 @@ impl DeviceFlowAuthenticator {
     pub fn builder(
         app_secret: ApplicationSecret,
     ) -> AuthenticatorBuilder<DefaultHyperClient, DeviceFlow> {
-        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(app_secret, DeviceFlow::new())
+        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(DeviceFlow::new(app_secret))
+    }
+}
+
+/// Create an authenticator that uses a service account.
+/// ```
+/// # async fn foo() {
+/// # let service_account_key = yup_oauth2::service_account_key_from_file("/tmp/foo").unwrap();
+///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(service_account_key)
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
+pub struct ServiceAccountAuthenticator;
+impl ServiceAccountAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses a service account.
+    pub fn builder(
+        service_account_key: ServiceAccountKey,
+    ) -> AuthenticatorBuilder<DefaultHyperClient, ServiceAccountFlowOpts> {
+        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(ServiceAccountFlowOpts {
+            key: service_account_key,
+            subject: None,
+        })
     }
 }
 
@@ -153,14 +170,17 @@ impl DeviceFlowAuthenticator {
 /// # }
 /// ```
 impl<C, F> AuthenticatorBuilder<C, F> {
-    /// Create the authenticator.
-    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    async fn common_build(
+        hyper_client_builder: C,
+        storage_type: StorageType,
+        auth_delegate: Box<dyn AuthenticatorDelegate>,
+        auth_flow: AuthFlow,
+    ) -> io::Result<Authenticator<C::Connector>>
     where
         C: HyperClientBuilder,
-        F: Into<AuthFlow>,
     {
-        let hyper_client = self.hyper_client_builder.build_hyper_client();
-        let storage = match self.storage_type {
+        let hyper_client = hyper_client_builder.build_hyper_client();
+        let storage = match storage_type {
             StorageType::Memory => Storage::Memory {
                 tokens: Mutex::new(storage::JSONTokens::new()),
             },
@@ -169,20 +189,15 @@ impl<C, F> AuthenticatorBuilder<C, F> {
 
         Ok(Authenticator {
             hyper_client,
-            app_secret: self.app_secret,
             storage,
-            auth_delegate: self.auth_delegate,
-            auth_flow: self.auth_flow.into(),
+            auth_delegate,
+            auth_flow,
         })
     }
 
-    fn with_auth_flow(
-        app_secret: ApplicationSecret,
-        auth_flow: F,
-    ) -> AuthenticatorBuilder<DefaultHyperClient, F> {
+    fn with_auth_flow(auth_flow: F) -> AuthenticatorBuilder<DefaultHyperClient, F> {
         AuthenticatorBuilder {
             hyper_client_builder: DefaultHyperClient,
-            app_secret,
             auth_delegate: Box::new(DefaultAuthenticatorDelegate),
             storage_type: StorageType::Memory,
             auth_flow,
@@ -196,7 +211,6 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     ) -> AuthenticatorBuilder<hyper::Client<NewC>, F> {
         AuthenticatorBuilder {
             hyper_client_builder: hyper_client,
-            app_secret: self.app_secret,
             auth_delegate: self.auth_delegate,
             storage_type: self.storage_type,
             auth_flow: self.auth_flow,
@@ -282,6 +296,20 @@ impl<C> AuthenticatorBuilder<C, DeviceFlow> {
             ..self
         }
     }
+
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            self.auth_delegate,
+            AuthFlow::DeviceFlow(self.auth_flow),
+        )
+        .await
+    }
 }
 
 /// ## Methods available when building an installed flow Authenticator.
@@ -311,36 +339,88 @@ impl<C> AuthenticatorBuilder<C, InstalledFlow> {
             ..self
         }
     }
+
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            self.auth_delegate,
+            AuthFlow::InstalledFlow(self.auth_flow),
+        )
+        .await
+    }
+}
+
+/// ## Methods available when building a service account authenticator.
+/// ```
+/// # async fn foo() {
+/// # let service_account_key = yup_oauth2::service_account_key_from_file("/tmp/foo").unwrap();
+///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(
+///         service_account_key,
+///     )
+///     .subject("mysubject")
+///     .build()
+///     .await
+///     .expect("failed to create authenticator");
+/// # }
+/// ```
+impl<C> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
+    /// Use the provided subject.
+    pub fn subject(self, subject: impl Into<String>) -> Self {
+        AuthenticatorBuilder {
+            auth_flow: ServiceAccountFlowOpts {
+                subject: Some(subject.into()),
+                ..self.auth_flow
+            },
+            ..self
+        }
+    }
+
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        let service_account_auth_flow = ServiceAccountFlow::new(self.auth_flow)?;
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            self.auth_delegate,
+            AuthFlow::ServiceAccountFlow(service_account_auth_flow),
+        )
+        .await
+    }
 }
 
 mod private {
     use crate::device::DeviceFlow;
     use crate::error::Error;
     use crate::installed::InstalledFlow;
+    use crate::service_account::ServiceAccountFlow;
     use crate::types::{ApplicationSecret, Token};
 
     pub enum AuthFlow {
         DeviceFlow(DeviceFlow),
         InstalledFlow(InstalledFlow),
-    }
-
-    impl From<DeviceFlow> for AuthFlow {
-        fn from(device_flow: DeviceFlow) -> AuthFlow {
-            AuthFlow::DeviceFlow(device_flow)
-        }
-    }
-
-    impl From<InstalledFlow> for AuthFlow {
-        fn from(installed_flow: InstalledFlow) -> AuthFlow {
-            AuthFlow::InstalledFlow(installed_flow)
-        }
+        ServiceAccountFlow(ServiceAccountFlow),
     }
 
     impl AuthFlow {
+        pub(crate) fn app_secret(&self) -> Option<&ApplicationSecret> {
+            match self {
+                AuthFlow::DeviceFlow(device_flow) => Some(&device_flow.app_secret),
+                AuthFlow::InstalledFlow(installed_flow) => Some(&installed_flow.app_secret),
+                AuthFlow::ServiceAccountFlow(_) => None,
+            }
+        }
+
         pub(crate) async fn token<'a, C, T>(
             &'a self,
             hyper_client: &'a hyper::Client<C>,
-            app_secret: &'a ApplicationSecret,
             scopes: &'a [T],
         ) -> Result<Token, Error>
         where
@@ -348,18 +428,19 @@ mod private {
             C: hyper::client::connect::Connect + 'static,
         {
             match self {
-                AuthFlow::DeviceFlow(device_flow) => {
-                    device_flow.token(hyper_client, app_secret, scopes).await
-                }
+                AuthFlow::DeviceFlow(device_flow) => device_flow.token(hyper_client, scopes).await,
                 AuthFlow::InstalledFlow(installed_flow) => {
-                    installed_flow.token(hyper_client, app_secret, scopes).await
+                    installed_flow.token(hyper_client, scopes).await
+                }
+                AuthFlow::ServiceAccountFlow(service_account_flow) => {
+                    service_account_flow.token(hyper_client, scopes).await
                 }
             }
         }
     }
 }
 
-/// A trait implemented for any hyper::Client as well as teh DefaultHyperClient.
+/// A trait implemented for any hyper::Client as well as the DefaultHyperClient.
 pub trait HyperClientBuilder {
     /// The hyper connector that the resulting hyper client will use.
     type Connector: hyper::client::connect::Connect + 'static;

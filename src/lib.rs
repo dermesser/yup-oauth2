@@ -76,18 +76,19 @@ pub mod error;
 mod helper;
 mod installed;
 mod refresh;
-pub mod service_account;
+mod service_account;
 mod storage;
 mod types;
 
 #[doc(inline)]
-pub use crate::authenticator::{DeviceFlowAuthenticator, InstalledFlowAuthenticator};
+pub use crate::authenticator::{
+    DeviceFlowAuthenticator, InstalledFlowAuthenticator, ServiceAccountAuthenticator,
+};
 
 pub use crate::helper::*;
 pub use crate::installed::InstalledFlowReturnMethod;
 
-#[doc(inline)]
-pub use crate::service_account::{ServiceAccountAuthenticator, ServiceAccountKey};
+pub use crate::service_account::ServiceAccountKey;
 
 #[doc(inline)]
 pub use crate::error::Error;

@@ -66,14 +66,19 @@ pub enum InstalledFlowReturnMethod {
 /// https://www.oauth.com/oauth2-servers/authorization/,
 /// https://developers.google.com/identity/protocols/OAuth2InstalledApp).
 pub struct InstalledFlow {
+    pub(crate) app_secret: ApplicationSecret,
     pub(crate) method: InstalledFlowReturnMethod,
     pub(crate) flow_delegate: Box<dyn FlowDelegate>,
 }
 
 impl InstalledFlow {
     /// Create a new InstalledFlow with the provided secret and method.
-    pub(crate) fn new(method: InstalledFlowReturnMethod) -> InstalledFlow {
+    pub(crate) fn new(
+        app_secret: ApplicationSecret,
+        method: InstalledFlowReturnMethod,
+    ) -> InstalledFlow {
         InstalledFlow {
+            app_secret,
             method,
             flow_delegate: Box::new(DefaultFlowDelegate),
         }
@@ -88,7 +93,6 @@ impl InstalledFlow {
     pub(crate) async fn token<C, T>(
         &self,
         hyper_client: &hyper::Client<C>,
-        app_secret: &ApplicationSecret,
         scopes: &[T],
     ) -> Result<Token, Error>
     where
@@ -97,11 +101,11 @@ impl InstalledFlow {
     {
         match self.method {
             InstalledFlowReturnMethod::HTTPRedirect => {
-                self.ask_auth_code_via_http(hyper_client, app_secret, scopes)
+                self.ask_auth_code_via_http(hyper_client, &self.app_secret, scopes)
                     .await
             }
             InstalledFlowReturnMethod::Interactive => {
-                self.ask_auth_code_interactively(hyper_client, app_secret, scopes)
+                self.ask_auth_code_interactively(hyper_client, &self.app_secret, scopes)
                     .await
             }
         }
@@ -470,6 +474,7 @@ mod tests {
 
         let fd = FD("authorizationcode".to_string(), client.clone());
         let inf = InstalledFlow {
+            app_secret: app_secret.clone(),
             method: InstalledFlowReturnMethod::Interactive,
             flow_delegate: Box::new(fd),
         };
@@ -493,7 +498,7 @@ mod tests {
                 .create();
 
             let tok = inf
-                .token(&client, &app_secret, &["https://googleapis.com/some/scope"])
+                .token(&client, &["https://googleapis.com/some/scope"])
                 .await
                 .expect("failed to get token");
             assert_eq!("accesstoken", tok.access_token);
@@ -505,6 +510,7 @@ mod tests {
         // Successful path with HTTP redirect.
         {
             let inf = InstalledFlow {
+                app_secret: app_secret.clone(),
                 method: InstalledFlowReturnMethod::HTTPRedirect,
                 flow_delegate: Box::new(FD(
                     "authorizationcodefromlocalserver".to_string(),
@@ -528,7 +534,7 @@ mod tests {
                 .create();
 
             let tok = inf
-                .token(&client, &app_secret, &["https://googleapis.com/some/scope"])
+                .token(&client, &["https://googleapis.com/some/scope"])
                 .await
                 .expect("failed to get token");
             assert_eq!("accesstoken", tok.access_token);
@@ -549,7 +555,7 @@ mod tests {
                 .create();
 
             let tokr = inf
-                .token(&client, &app_secret, &["https://googleapis.com/some/scope"])
+                .token(&client, &["https://googleapis.com/some/scope"])
                 .await;
             assert!(tokr.is_err());
             assert!(format!("{}", tokr.unwrap_err()).contains("invalid_code"));

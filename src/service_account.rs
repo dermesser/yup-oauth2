@@ -11,13 +11,10 @@
 //! Copyright (c) 2016 Google Inc (lewinb@google.com).
 //!
 
-use crate::authenticator::{DefaultHyperClient, HyperClientBuilder};
 use crate::error::{Error, JsonErrorOr};
-use crate::storage::{self, Storage};
 use crate::types::Token;
 
 use std::io;
-use std::sync::Mutex;
 
 use futures::prelude::*;
 use hyper::header;
@@ -124,7 +121,7 @@ impl<'a> Claims<'a> {
 }
 
 /// A JSON Web Token ready for signing.
-struct JWTSigner {
+pub(crate) struct JWTSigner {
     signer: Box<dyn rustls::sign::Signer>,
 }
 
@@ -160,139 +157,40 @@ impl JWTSigner {
     }
 }
 
-/// Create an authenticator that uses a service account.
-/// ```
-/// # async fn foo() {
-/// # let service_key =  yup_oauth2::service_account_key_from_file("/tmp/foo").unwrap();
-///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(service_key)
-///         .build()
-///         .expect("failed to create authenticator");
-/// # }
-/// ```
-pub struct ServiceAccountAuthenticator;
-impl ServiceAccountAuthenticator {
-    /// Use the builder pattern to create an authenticator that uses a service
-    /// account.
-    pub fn builder(key: ServiceAccountKey) -> Builder<DefaultHyperClient> {
-        Builder {
-            client: DefaultHyperClient,
-            key,
-            subject: None,
-        }
-    }
+pub struct ServiceAccountFlowOpts {
+    pub(crate) key: ServiceAccountKey,
+    pub(crate) subject: Option<String>,
 }
 
-/// Configure a service account authenticator using the builder pattern.
-pub struct Builder<C> {
-    client: C,
+/// ServiceAccountFlow can fetch oauth tokens using a service account.
+pub struct ServiceAccountFlow {
     key: ServiceAccountKey,
-    subject: Option<String>,
-}
-
-/// Methods available when building a service account authenticator.
-/// ```
-/// # async fn foo() {
-/// # let custom_hyper_client = hyper::Client::new();
-/// # let service_key =  yup_oauth2::service_account_key_from_file("/tmp/foo").unwrap();
-///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(service_key)
-///         .hyper_client(custom_hyper_client)
-///         .subject("foo")
-///         .build()
-///         .expect("failed to create authenticator");
-/// # }
-/// ```
-impl<C> Builder<C> {
-    /// Use the provided hyper client.
-    pub fn hyper_client<NewC: HyperClientBuilder>(self, hyper_client: NewC) -> Builder<NewC> {
-        Builder {
-            client: hyper_client,
-            key: self.key,
-            subject: self.subject,
-        }
-    }
-
-    /// Use the provided subject.
-    pub fn subject(self, subject: impl Into<String>) -> Self {
-        Builder {
-            subject: Some(subject.into()),
-            ..self
-        }
-    }
-
-    /// Build the configured ServiceAccountAccess.
-    pub fn build(self) -> Result<ServiceAccountAccess<C::Connector>, io::Error>
-    where
-        C: HyperClientBuilder,
-    {
-        ServiceAccountAccess::new(self.client.build_hyper_client(), self.key, self.subject)
-    }
-}
-
-/// ServiceAccountAccess can fetch oauth tokens using a service account.
-pub struct ServiceAccountAccess<C> {
-    client: hyper::Client<C>,
-    key: ServiceAccountKey,
-    cache: Storage,
     subject: Option<String>,
     signer: JWTSigner,
 }
 
-impl<C> ServiceAccountAccess<C>
-where
-    C: hyper::client::connect::Connect + 'static,
-{
-    fn new(
-        client: hyper::Client<C>,
-        key: ServiceAccountKey,
-        subject: Option<String>,
-    ) -> Result<Self, io::Error> {
-        let signer = JWTSigner::new(&key.private_key)?;
-        Ok(ServiceAccountAccess {
-            client,
-            key,
-            cache: Storage::Memory {
-                tokens: Mutex::new(storage::JSONTokens::new()),
-            },
-            subject,
+impl ServiceAccountFlow {
+    pub(crate) fn new(opts: ServiceAccountFlowOpts) -> Result<Self, io::Error> {
+        let signer = JWTSigner::new(&opts.key.private_key)?;
+        Ok(ServiceAccountFlow {
+            key: opts.key,
+            subject: opts.subject,
             signer,
         })
     }
 
-    /// Return the current token for the provided scopes.
-    pub async fn token<T>(&self, scopes: &[T]) -> Result<Token, Error>
-    where
-        T: AsRef<str>,
-    {
-        let hashed_scopes = storage::ScopesAndFilter::from(scopes);
-        let cache = &self.cache;
-        match cache.get(hashed_scopes) {
-            Some(token) if !token.expired() => return Ok(token),
-            _ => {}
-        }
-        let token = Self::request_token(
-            &self.client,
-            &self.signer,
-            self.subject.as_ref().map(|x| x.as_str()),
-            &self.key,
-            scopes,
-        )
-        .await?;
-        cache.set(hashed_scopes, token.clone()).await;
-        Ok(token)
-    }
     /// Send a request for a new Bearer token to the OAuth provider.
-    async fn request_token<T>(
-        client: &hyper::client::Client<C>,
-        signer: &JWTSigner,
-        subject: Option<&str>,
-        key: &ServiceAccountKey,
+    pub(crate) async fn token<C, T>(
+        &self,
+        hyper_client: &hyper::Client<C>,
         scopes: &[T],
     ) -> Result<Token, Error>
     where
         T: AsRef<str>,
+        C: hyper::client::connect::Connect + 'static,
     {
-        let claims = Claims::new(key, scopes, subject);
-        let signed = signer.sign_claims(&claims).map_err(|_| {
+        let claims = Claims::new(&self.key, scopes, self.subject.as_ref().map(|x| x.as_str()));
+        let signed = self.signer.sign_claims(&claims).map_err(|_| {
             Error::LowLevelError(io::Error::new(
                 io::ErrorKind::Other,
                 "unable to sign claims",
@@ -301,11 +199,14 @@ where
         let rqbody = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[("grant_type", GRANT_TYPE), ("assertion", signed.as_str())])
             .finish();
-        let request = hyper::Request::post(&key.token_uri)
+        let request = hyper::Request::post(&self.key.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(rqbody))
             .unwrap();
-        let response = client.request(request).await.map_err(Error::ClientError)?;
+        let response = hyper_client
+            .request(request)
+            .await
+            .map_err(Error::ClientError)?;
         let body = response
             .into_body()
             .try_concat()
@@ -349,12 +250,17 @@ mod tests {
     use super::*;
     use crate::helper::service_account_key_from_file;
     use crate::parse_json;
+    use hyper_rustls::HttpsConnector;
 
     use mockito::mock;
 
     #[tokio::test]
     async fn test_mocked_http() {
         env_logger::try_init().unwrap();
+        let https = HttpsConnector::new();
+        let client = hyper::Client::builder()
+            .keep_alive(false)
+            .build::<_, hyper::Body>(https);
         let server_url = &mockito::server_url();
         let key: ServiceAccountKey = parse_json!({
           "type": "service_account",
@@ -387,25 +293,13 @@ mod tests {
                 .with_body(json_response.to_string())
                 .expect(1)
                 .create();
-            let acc = ServiceAccountAuthenticator::builder(key.clone())
-                .build()
-                .unwrap();
+            let acc = ServiceAccountFlow::new(ServiceAccountFlowOpts {
+                key: key.clone(),
+                subject: None,
+            })
+            .unwrap();
             let tok = acc
-                .token(&["https://www.googleapis.com/auth/pubsub"])
-                .await
-                .expect("token failed");
-            assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
-            assert_eq!(Some(3600), tok.expires_in);
-
-            assert!(acc
-                .cache
-                .get(storage::ScopesAndFilter::from(&[
-                    "https://www.googleapis.com/auth/pubsub"
-                ]))
-                .is_some());
-            // Test that token is in cache (otherwise mock will tell us)
-            let tok = acc
-                .token(&["https://www.googleapis.com/auth/pubsub"])
+                .token(&client, &["https://www.googleapis.com/auth/pubsub"])
                 .await
                 .expect("token failed");
             assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
@@ -419,10 +313,14 @@ mod tests {
                 .with_header("content-type", "text/json")
                 .with_body(bad_json_response.to_string())
                 .create();
-            let acc = ServiceAccountAuthenticator::builder(key.clone())
-                .build()
-                .unwrap();
-            let result = acc.token(&["https://www.googleapis.com/auth/pubsub"]).await;
+            let acc = ServiceAccountFlow::new(ServiceAccountFlowOpts {
+                key: key.clone(),
+                subject: None,
+            })
+            .unwrap();
+            let result = acc
+                .token(&client, &["https://www.googleapis.com/auth/pubsub"])
+                .await;
             assert!(result.is_err());
             _m.assert();
         }
@@ -436,10 +334,15 @@ mod tests {
     #[allow(dead_code)]
     async fn test_service_account_e2e() {
         let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
-        let acc = ServiceAccountAuthenticator::builder(key).build().unwrap();
+        let acc = ServiceAccountFlow::new(ServiceAccountFlowOpts { key, subject: None }).unwrap();
+        let https = HttpsConnector::new();
+        let client = hyper::Client::builder()
+            .keep_alive(false)
+            .build::<_, hyper::Body>(https);
         println!(
             "{:?}",
-            acc.token(&["https://www.googleapis.com/auth/pubsub"]).await
+            acc.token(&client, &["https://www.googleapis.com/auth/pubsub"])
+                .await
         );
     }
 

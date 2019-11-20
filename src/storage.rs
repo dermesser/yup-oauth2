@@ -178,27 +178,24 @@ impl JSONTokens {
         // application will provide the same set of scopes repeatedly. If a
         // token exists for the exact scope list requested a lookup of the
         // ScopeFilter will return a list that would contain it.
-        if let Some(tokens) = self.token_map.get(&filter) {
-            for t in tokens {
-                if requested_scopes_are_subset_of(t.scopes.as_slice()) {
-                    return Some(t.token.clone());
-                }
-            }
+        if let Some(t) = self
+            .token_map
+            .get(&filter)
+            .into_iter()
+            .flat_map(|tokens_matching_filter| tokens_matching_filter.iter())
+            .find(|js_token: &&JSONToken| requested_scopes_are_subset_of(&js_token.scopes))
+        {
+            return Some(t.token.clone());
         }
 
         // No exact match for the scopes provided. Search for any tokens that
         // exist for a superset of the scopes requested.
-        for t in self
-            .token_map
+        self.token_map
             .iter()
-            .filter(|(k, _v)| filter.is_subset_of(**k) == FilterResponse::Maybe)
-            .flat_map(|(_, v)| v.iter())
-        {
-            if requested_scopes_are_subset_of(&t.scopes) {
-                return Some(t.token.clone());
-            }
-        }
-        None
+            .filter(|(k, _)| filter.is_subset_of(**k) == FilterResponse::Maybe)
+            .flat_map(|(_, tokens_matching_filter)| tokens_matching_filter.iter())
+            .find(|v: &&JSONToken| requested_scopes_are_subset_of(&v.scopes))
+            .map(|t: &JSONToken| t.token.clone())
     }
 
     fn set<T>(&mut self, ScopesAndFilter { filter, scopes }: ScopesAndFilter<T>, token: Token)
