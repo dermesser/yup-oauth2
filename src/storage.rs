@@ -227,7 +227,12 @@ pub(crate) struct DiskStorage {
 
 impl DiskStorage {
     pub(crate) async fn new(path: PathBuf) -> Result<Self, io::Error> {
-        let tokens = JSONTokens::load_from_file(&path).await?;
+        let tokens = match JSONTokens::load_from_file(&path).await {
+            Ok(tokens) => tokens,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => JSONTokens::new(),
+            Err(e) => return Err(e),
+        };
+
         // Writing to disk will happen in a separate task. This means in the
         // common case returning a token to the user will not be required to
         // wait for disk i/o. We communicate with a dedicated writer task via a
