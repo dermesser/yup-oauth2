@@ -37,31 +37,29 @@ fn append_base64<T: AsRef<[u8]> + ?Sized>(s: &T, out: &mut String) {
 
 /// Decode a PKCS8 formatted RSA key.
 fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, io::Error> {
-    let private = pem_pkcs8.to_string().replace("\\n", "\n").into_bytes();
-    let mut private_reader: &[u8] = private.as_ref();
-    let private_keys = pemfile::pkcs8_private_keys(&mut private_reader);
+    let private = pem_pkcs8.replace("\\n", "\n");
+    let private_keys = pemfile::pkcs8_private_keys(&mut private.as_bytes());
 
-    if let Ok(pk) = private_keys {
-        if !pk.is_empty() {
-            Ok(pk[0].clone())
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Not enough private keys in PEM",
-            ))
+    match private_keys {
+        Ok(mut keys) if !keys.is_empty() => {
+            keys.truncate(1);
+            Ok(keys.remove(0))
         }
-    } else {
-        Err(io::Error::new(
+        Ok(_) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Not enough private keys in PEM",
+        )),
+        Err(_) => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "Error reading key from PEM",
-        ))
+        )),
     }
 }
 
 /// JSON schema of secret service account key. You can obtain the key from
 /// the Cloud Console at https://console.cloud.google.com/.
 ///
-/// You can use `helpers::service_account_key_from_file()` as a quick way to read a JSON client
+/// You can use `helpers::read_service_account_key()` as a quick way to read a JSON client
 /// secret into a ServiceAccountKey.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServiceAccountKey {
@@ -248,7 +246,7 @@ impl ServiceAccountFlow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::helper::service_account_key_from_file;
+    use crate::helper::read_service_account_key;
     use crate::parse_json;
     use hyper_rustls::HttpsConnector;
 
@@ -333,7 +331,7 @@ mod tests {
     //#[tokio::test]
     #[allow(dead_code)]
     async fn test_service_account_e2e() {
-        let key = service_account_key_from_file(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
+        let key = read_service_account_key(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
         let acc = ServiceAccountFlow::new(ServiceAccountFlowOpts { key, subject: None }).unwrap();
         let https = HttpsConnector::new();
         let client = hyper::Client::builder()
@@ -348,7 +346,7 @@ mod tests {
 
     #[test]
     fn test_jwt_initialize_claims() {
-        let key = service_account_key_from_file(TEST_PRIVATE_KEY_PATH).unwrap();
+        let key = read_service_account_key(TEST_PRIVATE_KEY_PATH).unwrap();
         let scopes = vec!["scope1", "scope2", "scope3"];
         let claims = Claims::new(&key, &scopes, None);
 
@@ -368,7 +366,7 @@ mod tests {
 
     #[test]
     fn test_jwt_sign() {
-        let key = service_account_key_from_file(TEST_PRIVATE_KEY_PATH).unwrap();
+        let key = read_service_account_key(TEST_PRIVATE_KEY_PATH).unwrap();
         let scopes = vec!["scope1", "scope2", "scope3"];
         let signer = JWTSigner::new(&key.private_key).unwrap();
         let claims = Claims::new(&key, &scopes, None);

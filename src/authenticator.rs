@@ -134,7 +134,7 @@ impl DeviceFlowAuthenticator {
 /// Create an authenticator that uses a service account.
 /// ```
 /// # async fn foo() {
-/// # let service_account_key = yup_oauth2::service_account_key_from_file("/tmp/foo").unwrap();
+/// # let service_account_key = yup_oauth2::read_service_account_key("/tmp/foo").unwrap();
 ///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(service_account_key)
 ///         .build()
 ///         .await
@@ -358,7 +358,7 @@ impl<C> AuthenticatorBuilder<C, InstalledFlow> {
 /// ## Methods available when building a service account authenticator.
 /// ```
 /// # async fn foo() {
-/// # let service_account_key = yup_oauth2::service_account_key_from_file("/tmp/foo").unwrap();
+/// # let service_account_key = yup_oauth2::read_service_account_key("/tmp/foo").unwrap();
 ///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(
 ///         service_account_key,
 ///     )

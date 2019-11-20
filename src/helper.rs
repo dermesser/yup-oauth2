@@ -38,10 +38,14 @@ pub fn parse_application_secret<S: AsRef<str>>(secret: S) -> io::Result<Applicat
 
 /// Read a service account key from a JSON file. You can download the JSON keys from the Google
 /// Cloud Console or the respective console of your service provider.
-pub fn service_account_key_from_file<S: AsRef<Path>>(path: S) -> io::Result<ServiceAccountKey> {
+pub fn read_service_account_key<P: AsRef<Path>>(path: P) -> io::Result<ServiceAccountKey> {
     let key = std::fs::read_to_string(path)?;
-    serde_json::from_str(&key)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("{}", e)))
+    serde_json::from_str(&key).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Bad service account key: {}", e),
+        )
+    })
 }
 
 pub(crate) fn join<T>(pieces: &[T], separator: &str) -> String
