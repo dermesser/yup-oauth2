@@ -1,6 +1,6 @@
 //! Module containing types related to delegates.
 
-use crate::error::{Error, PollError, RefreshError};
+use crate::error::{PollError, RefreshError};
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -69,16 +69,6 @@ impl StdError for PollError {
 /// The only method that needs to be implemented manually is `present_user_code(...)`,
 /// as no assumptions are made on how this presentation should happen.
 pub trait AuthenticatorDelegate: Send + Sync {
-    /// Called whenever there is an client, usually if there are network problems.
-    ///
-    /// Return retry information.
-    fn client_error(&self, _: &hyper::Error) -> Retry {
-        Retry::Abort
-    }
-
-    /// The server denied the attempt to obtain a request code
-    fn request_failure(&self, _: Error) {}
-
     /// Called if we could not acquire a refresh token for a reason possibly specified
     /// by the server.
     /// This call is made for the delegate's information only.
