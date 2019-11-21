@@ -127,21 +127,16 @@ impl InstalledFlow {
             scopes,
             self.flow_delegate.redirect_uri(),
         );
-        let authcode = match self
+        let mut authcode = self
             .flow_delegate
             .present_user_url(&url, true /* need code */)
             .await
-        {
-            Ok(mut code) => {
-                // Partial backwards compatibility in case an implementation adds a new line
-                // due to previous behaviour.
-                if code.ends_with('\n') {
-                    code.pop();
-                }
-                code
-            }
-            _ => return Err(Error::UserError("couldn't read code".to_string())),
-        };
+            .map_err(Error::UserError)?;
+        // Partial backwards compatibility in case an implementation adds a new line
+        // due to previous behaviour.
+        if authcode.ends_with('\n') {
+            authcode.pop();
+        }
         self.exchange_auth_code(&authcode, hyper_client, app_secret, None)
             .await
     }
@@ -395,7 +390,6 @@ mod installed_flow_server {
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
     use std::str::FromStr;
 
     use hyper::client::connect::HttpConnector;
@@ -420,9 +414,7 @@ mod tests {
                 &'a self,
                 url: &'a str,
                 need_code: bool,
-            ) -> Pin<
-                Box<dyn Future<Output = Result<String, Box<dyn Error + Send + Sync>>> + Send + 'a>,
-            > {
+            ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
                 Box::pin(async move {
                     if need_code {
                         Ok(self.0.clone())
@@ -449,7 +441,7 @@ mod tests {
                         self.1
                             .get(rduri)
                             .await
-                            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)
+                            .map_err(|e| e.to_string())
                             .map(|_| "".to_string())
                     }
                 })

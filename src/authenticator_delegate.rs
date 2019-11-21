@@ -2,7 +2,6 @@
 
 use crate::error::RefreshError;
 
-use std::error::Error as StdError;
 use std::fmt;
 use std::pin::Pin;
 use std::time::Duration;
@@ -106,16 +105,12 @@ pub trait InstalledFlowDelegate: Send + Sync {
         &'a self,
         url: &'a str,
         need_code: bool,
-    ) -> Pin<Box<dyn Future<Output = Result<String, Box<dyn StdError + Send + Sync>>> + Send + 'a>>
-    {
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
         Box::pin(present_user_url(url, need_code))
     }
 }
 
-async fn present_user_url(
-    url: &str,
-    need_code: bool,
-) -> Result<String, Box<dyn StdError + Send + Sync>> {
+async fn present_user_url(url: &str, need_code: bool) -> Result<String, String> {
     use tokio::io::AsyncBufReadExt;
     if need_code {
         println!(
@@ -124,16 +119,13 @@ async fn present_user_url(
             url
         );
         let mut user_input = String::new();
-        match tokio::io::BufReader::new(tokio::io::stdin())
+        tokio::io::BufReader::new(tokio::io::stdin())
             .read_line(&mut user_input)
             .await
-        {
-            Err(err) => {
-                println!("{:?}", err);
-                Err(Box::new(err) as Box<dyn StdError + Send + Sync>)
-            }
-            Ok(_) => Ok(user_input),
-        }
+            .map_err(|e| format!("couldn't read code: {}", e))?;
+        // remove trailing whitespace.
+        user_input.truncate(user_input.trim_end().len());
+        Ok(user_input)
     } else {
         println!(
             "Please direct your browser to {} and follow the instructions displayed \
