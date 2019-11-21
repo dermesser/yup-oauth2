@@ -127,16 +127,11 @@ impl InstalledFlow {
             scopes,
             self.flow_delegate.redirect_uri(),
         );
-        let mut authcode = self
+        let authcode = self
             .flow_delegate
             .present_user_url(&url, true /* need code */)
             .await
             .map_err(Error::UserError)?;
-        // Partial backwards compatibility in case an implementation adds a new line
-        // due to previous behaviour.
-        if authcode.ends_with('\n') {
-            authcode.pop();
-        }
         self.exchange_auth_code(&authcode, hyper_client, app_secret, None)
             .await
     }
