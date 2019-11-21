@@ -200,15 +200,8 @@ impl ServiceAccountFlow {
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(rqbody))
             .unwrap();
-        let response = hyper_client
-            .request(request)
-            .await
-            .map_err(Error::ClientError)?;
-        let body = response
-            .into_body()
-            .try_concat()
-            .await
-            .map_err(Error::ClientError)?;
+        let response = hyper_client.request(request).await?;
+        let body = response.into_body().try_concat().await?;
 
         /// This is the schema of the server's response.
         #[derive(Deserialize, Debug)]

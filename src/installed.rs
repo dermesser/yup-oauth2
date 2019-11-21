@@ -185,15 +185,8 @@ impl InstalledFlow {
     {
         let redirect_uri = self.flow_delegate.redirect_uri();
         let request = Self::request_token(app_secret, authcode, redirect_uri, server_addr);
-        let resp = hyper_client
-            .request(request)
-            .await
-            .map_err(Error::ClientError)?;
-        let body = resp
-            .into_body()
-            .try_concat()
-            .await
-            .map_err(Error::ClientError)?;
+        let resp = hyper_client.request(request).await?;
+        let body = resp.into_body().try_concat().await?;
 
         #[derive(Deserialize)]
         struct JSONTokenResponse {

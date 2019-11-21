@@ -153,7 +153,7 @@ impl DeviceFlow {
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(req))
             .unwrap();
-        let resp = client.request(req).await.map_err(Error::ClientError)?;
+        let resp = client.request(req).await?;
         // This return type is defined in https://tools.ietf.org/html/draft-ietf-oauth-device-flow-15#section-3.2
         // The alias is present as Google use a non-standard name for verification_uri.
         // According to the standard interval is optional, however, all tested implementations provide it.

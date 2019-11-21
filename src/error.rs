@@ -71,7 +71,7 @@ impl StdError for PollError {
 #[derive(Debug)]
 pub enum Error {
     /// Indicates connection failure
-    ClientError(hyper::Error),
+    HttpError(hyper::Error),
     /// The server returned an error.
     NegativeServerResponse {
         /// The error code
@@ -93,7 +93,7 @@ pub enum Error {
 
 impl From<hyper::Error> for Error {
     fn from(error: hyper::Error) -> Error {
-        Error::ClientError(error)
+        Error::HttpError(error)
     }
 }
 
@@ -121,7 +121,7 @@ impl From<RefreshError> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
-            Error::ClientError(ref err) => err.fmt(f),
+            Error::HttpError(ref err) => err.fmt(f),
             Error::NegativeServerResponse {
                 ref error,
                 ref error_description,
@@ -148,7 +148,7 @@ impl fmt::Display for Error {
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
-            Error::ClientError(ref err) => Some(err),
+            Error::HttpError(ref err) => Some(err),
             Error::LowLevelError(ref err) => Some(err),
             Error::JSONError(ref err) => Some(err),
             _ => None,
@@ -160,14 +160,14 @@ impl StdError for Error {
 #[derive(Debug)]
 pub enum RefreshError {
     /// Indicates connection failure
-    ConnectionError(hyper::Error),
+    HttpError(hyper::Error),
     /// The server did not answer with a new token, providing the server message
     ServerError(String, Option<String>),
 }
 
 impl From<hyper::Error> for RefreshError {
     fn from(value: hyper::Error) -> Self {
-        RefreshError::ConnectionError(value)
+        RefreshError::HttpError(value)
     }
 }
 
