@@ -2,7 +2,7 @@
 //
 // Refer to the project root for licensing information.
 //
-use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate};
+use crate::authenticator_delegate::{DefaultInstalledFlowDelegate, InstalledFlowDelegate};
 use crate::error::{Error, JsonErrorOr};
 use crate::types::{ApplicationSecret, Token};
 
@@ -68,7 +68,7 @@ pub enum InstalledFlowReturnMethod {
 pub struct InstalledFlow {
     pub(crate) app_secret: ApplicationSecret,
     pub(crate) method: InstalledFlowReturnMethod,
-    pub(crate) flow_delegate: Box<dyn FlowDelegate>,
+    pub(crate) flow_delegate: Box<dyn InstalledFlowDelegate>,
 }
 
 impl InstalledFlow {
@@ -80,7 +80,7 @@ impl InstalledFlow {
         InstalledFlow {
             app_secret,
             method,
-            flow_delegate: Box::new(DefaultFlowDelegate),
+            flow_delegate: Box::new(DefaultInstalledFlowDelegate),
         }
     }
 
@@ -89,7 +89,7 @@ impl InstalledFlow {
     /// . Obtain a token and refresh token using that code.
     /// . Return that token
     ///
-    /// It's recommended not to use the DefaultFlowDelegate, but a specialized one.
+    /// It's recommended not to use the DefaultInstalledFlowDelegate, but a specialized one.
     pub(crate) async fn token<C, T>(
         &self,
         hyper_client: &hyper::Client<C>,
@@ -404,7 +404,7 @@ mod tests {
     use mockito::mock;
 
     use super::*;
-    use crate::authenticator_delegate::FlowDelegate;
+    use crate::authenticator_delegate::InstalledFlowDelegate;
 
     #[tokio::test]
     async fn test_end2end() {
@@ -413,7 +413,7 @@ mod tests {
             String,
             hyper::Client<HttpsConnector<HttpConnector>, hyper::Body>,
         );
-        impl FlowDelegate for FD {
+        impl InstalledFlowDelegate for FD {
             /// Depending on need_code, return the pre-set code or send the code to the server at
             /// the redirect_uri given in the url.
             fn present_user_url<'a>(

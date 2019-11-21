@@ -1,4 +1,6 @@
-use crate::authenticator_delegate::{DefaultFlowDelegate, FlowDelegate, PollInformation, Retry};
+use crate::authenticator_delegate::{
+    DefaultDeviceFlowDelegate, DeviceFlowDelegate, PollInformation, Retry,
+};
 use crate::error::{Error, JsonErrorOr, PollError};
 use crate::types::{ApplicationSecret, Token};
 
@@ -24,7 +26,7 @@ pub const GOOGLE_GRANT_TYPE: &str = "http://oauth.net/grant_type/device/1.0";
 pub struct DeviceFlow {
     pub(crate) app_secret: ApplicationSecret,
     pub(crate) device_code_url: Cow<'static, str>,
-    pub(crate) flow_delegate: Box<dyn FlowDelegate>,
+    pub(crate) flow_delegate: Box<dyn DeviceFlowDelegate>,
     pub(crate) wait_duration: Duration,
     pub(crate) grant_type: Cow<'static, str>,
 }
@@ -36,7 +38,7 @@ impl DeviceFlow {
         DeviceFlow {
             app_secret,
             device_code_url: GOOGLE_DEVICE_CODE_URL.into(),
-            flow_delegate: Box::new(DefaultFlowDelegate),
+            flow_delegate: Box::new(DefaultDeviceFlowDelegate),
             wait_duration: Duration::from_secs(120),
             grant_type: GOOGLE_GRANT_TYPE.into(),
         }
@@ -93,7 +95,7 @@ impl DeviceFlow {
                 device_code,
                 grant_type,
                 pollinf.expires_at,
-                &*self.flow_delegate as &dyn FlowDelegate,
+                &*self.flow_delegate as &dyn DeviceFlowDelegate,
             )
             .await
             {
@@ -203,7 +205,7 @@ impl DeviceFlow {
         device_code: &str,
         grant_type: &str,
         expires_at: DateTime<Utc>,
-        flow_delegate: &dyn FlowDelegate,
+        flow_delegate: &dyn DeviceFlowDelegate,
     ) -> Result<Option<Token>, PollError>
     where
         C: hyper::client::connect::Connect + 'static,
@@ -278,7 +280,7 @@ mod tests {
     async fn test_device_end2end() {
         #[derive(Clone)]
         struct FD;
-        impl FlowDelegate for FD {
+        impl DeviceFlowDelegate for FD {
             fn present_user_code(&self, pi: &PollInformation) {
                 assert_eq!("https://example.com/verify", pi.verification_url);
             }

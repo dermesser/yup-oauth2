@@ -1,6 +1,6 @@
 //! Module contianing the core functionality for OAuth2 Authentication.
 use crate::authenticator_delegate::{
-    AuthenticatorDelegate, DefaultAuthenticatorDelegate, FlowDelegate,
+    AuthenticatorDelegate, DefaultAuthenticatorDelegate, DeviceFlowDelegate, InstalledFlowDelegate,
 };
 use crate::device::DeviceFlow;
 use crate::error::Error;
@@ -87,7 +87,7 @@ pub struct AuthenticatorBuilder<C, F> {
 /// ```
 /// # async fn foo() {
 /// # use yup_oauth2::InstalledFlowReturnMethod;
-/// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultFlowDelegate;
+/// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultInstalledFlowDelegate;
 /// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::InstalledFlowAuthenticator::builder(
 ///         app_secret,
@@ -240,7 +240,7 @@ impl<C, F> AuthenticatorBuilder<C, F> {
 /// ## Methods available when building a device flow Authenticator.
 /// ```
 /// # async fn foo() {
-/// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultFlowDelegate;
+/// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultDeviceFlowDelegate;
 /// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
 ///         .device_code_url("foo")
@@ -264,8 +264,8 @@ impl<C> AuthenticatorBuilder<C, DeviceFlow> {
         }
     }
 
-    /// Use the provided FlowDelegate.
-    pub fn flow_delegate(self, flow_delegate: Box<dyn FlowDelegate>) -> Self {
+    /// Use the provided DeviceFlowDelegate.
+    pub fn flow_delegate(self, flow_delegate: Box<dyn DeviceFlowDelegate>) -> Self {
         AuthenticatorBuilder {
             auth_flow: DeviceFlow {
                 flow_delegate,
@@ -316,7 +316,7 @@ impl<C> AuthenticatorBuilder<C, DeviceFlow> {
 /// ```
 /// # async fn foo() {
 /// # use yup_oauth2::InstalledFlowReturnMethod;
-/// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultFlowDelegate;
+/// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultInstalledFlowDelegate;
 /// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::InstalledFlowAuthenticator::builder(
 ///         app_secret,
@@ -329,8 +329,8 @@ impl<C> AuthenticatorBuilder<C, DeviceFlow> {
 /// # }
 /// ```
 impl<C> AuthenticatorBuilder<C, InstalledFlow> {
-    /// Use the provided FlowDelegate.
-    pub fn flow_delegate(self, flow_delegate: Box<dyn FlowDelegate>) -> Self {
+    /// Use the provided InstalledFlowDelegate.
+    pub fn flow_delegate(self, flow_delegate: Box<dyn InstalledFlowDelegate>) -> Self {
         AuthenticatorBuilder {
             auth_flow: InstalledFlow {
                 flow_delegate,

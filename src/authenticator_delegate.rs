@@ -75,9 +75,9 @@ pub trait AuthenticatorDelegate: Send + Sync {
     fn token_refresh_failed(&self, _: &RefreshError) {}
 }
 
-/// FlowDelegate methods are called when an OAuth flow needs to ask the application what to do in
-/// certain cases.
-pub trait FlowDelegate: Send + Sync {
+/// DeviceFlowDelegate methods are called when a device flow needs to ask the
+/// application what to do in certain cases.
+pub trait DeviceFlowDelegate: Send + Sync {
     /// Called if the request code is expired. You will have to start over in this case.
     /// This will be the last call the delegate receives.
     /// Given `DateTime` is the expiration date
@@ -91,22 +91,14 @@ pub trait FlowDelegate: Send + Sync {
     /// Can be used to print progress information, or decide to time-out.
     ///
     /// If the returned `Retry` variant is a duration.
-    /// # Notes
-    /// * Only used in `DeviceFlow`. Return value will only be used if it
-    /// is larger than the interval desired by the server.
     fn pending(&self, _: &PollInformation) -> Retry {
         Retry::After(Duration::from_secs(5))
     }
 
-    /// Configure a custom redirect uri if needed.
-    fn redirect_uri(&self) -> Option<&str> {
-        None
-    }
     /// The server has returned a `user_code` which must be shown to the user,
     /// along with the `verification_url`.
     /// # Notes
     /// * Will be called exactly once, provided we didn't abort during `request_code` phase.
-    /// * Will only be called if the Authenticator's flow_type is `DeviceFlow`.
     fn present_user_code(&self, pi: &PollInformation) {
         println!(
             "Please enter {} at {} and grant access to this application",
@@ -118,8 +110,16 @@ pub trait FlowDelegate: Send + Sync {
             pi.expires_at.with_timezone(&Local)
         );
     }
+}
 
-    /// This method is used by the InstalledFlow.
+/// InstalledFlowDelegate methods are called when an installed flow needs to ask
+/// the application what to do in certain cases.
+pub trait InstalledFlowDelegate: Send + Sync {
+    /// Configure a custom redirect uri if needed.
+    fn redirect_uri(&self) -> Option<&str> {
+        None
+    }
+
     /// We need the user to navigate to a URL using their browser and potentially paste back a code
     /// (or maybe not). Whether they have to enter a code depends on the InstalledFlowReturnMethod
     /// used.
@@ -167,11 +167,16 @@ async fn present_user_url(
 
 /// Uses all default implementations by AuthenticatorDelegate, and makes the trait's
 /// implementation usable in the first place.
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct DefaultAuthenticatorDelegate;
 impl AuthenticatorDelegate for DefaultAuthenticatorDelegate {}
 
-/// Uses all default implementations in the FlowDelegate trait.
-#[derive(Clone)]
-pub struct DefaultFlowDelegate;
-impl FlowDelegate for DefaultFlowDelegate {}
+/// Uses all default implementations in the DeviceFlowDelegate trait.
+#[derive(Copy, Clone)]
+pub struct DefaultDeviceFlowDelegate;
+impl DeviceFlowDelegate for DefaultDeviceFlowDelegate {}
+
+/// Uses all default implementations in the DeviceFlowDelegate trait.
+#[derive(Copy, Clone)]
+pub struct DefaultInstalledFlowDelegate;
+impl InstalledFlowDelegate for DefaultInstalledFlowDelegate {}
