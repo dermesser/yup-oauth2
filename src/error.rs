@@ -46,6 +46,27 @@ pub enum PollError {
     Other(String),
 }
 
+impl fmt::Display for PollError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            PollError::HttpError(ref err) => err.fmt(f),
+            PollError::Expired(ref date) => writeln!(f, "Authentication expired at {}", date),
+            PollError::AccessDenied => "Access denied by user".fmt(f),
+            PollError::TimedOut => "Timed out waiting for token".fmt(f),
+            PollError::Other(ref s) => format!("Unknown server error: {}", s).fmt(f),
+        }
+    }
+}
+
+impl StdError for PollError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match *self {
+            PollError::HttpError(ref e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
 /// Encapsulates all possible results of the `token(...)` operation
 #[derive(Debug)]
 pub enum Error {

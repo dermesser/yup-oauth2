@@ -1,6 +1,6 @@
 //! Module containing types related to delegates.
 
-use crate::error::{PollError, RefreshError};
+use crate::error::{RefreshError};
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -40,27 +40,6 @@ pub struct PollInformation {
 impl fmt::Display for PollInformation {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         writeln!(f, "Proceed with polling until {}", self.expires_at)
-    }
-}
-
-impl fmt::Display for PollError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match *self {
-            PollError::HttpError(ref err) => err.fmt(f),
-            PollError::Expired(ref date) => writeln!(f, "Authentication expired at {}", date),
-            PollError::AccessDenied => "Access denied by user".fmt(f),
-            PollError::TimedOut => "Timed out waiting for token".fmt(f),
-            PollError::Other(ref s) => format!("Unknown server error: {}", s).fmt(f),
-        }
-    }
-}
-
-impl StdError for PollError {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match *self {
-            PollError::HttpError(ref e) => Some(e),
-            _ => None,
-        }
     }
 }
 
