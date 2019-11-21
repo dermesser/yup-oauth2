@@ -1,6 +1,6 @@
 //! Module containing types related to delegates.
 
-use crate::error::{RefreshError};
+use crate::error::RefreshError;
 
 use std::error::Error as StdError;
 use std::fmt;

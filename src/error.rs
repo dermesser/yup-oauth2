@@ -72,16 +72,13 @@ impl StdError for PollError {
 pub enum Error {
     /// Indicates connection failure
     ClientError(hyper::Error),
-    /// The OAuth client was not found
-    InvalidClient,
-    /// Some requested scopes were invalid. String contains the scopes as part of
-    /// the server error message
-    InvalidScope(String),
-    /// A 'catch-all' variant containing the server error and description
-    /// First string is the error code, the second may be a more detailed description
-    NegativeServerResponse(String, Option<String>),
-    /// A malformed server response.
-    BadServerResponse(String),
+    /// The server returned an error.
+    NegativeServerResponse {
+        /// The error code
+        error: String,
+        /// Detailed description
+        error_description: Option<String>,
+    },
     /// Error while decoding a JSON response.
     JSONError(serde_json::Error),
     /// Error within user input.
@@ -92,8 +89,6 @@ pub enum Error {
     Poll(PollError),
     /// An error occurred while refreshing tokens.
     Refresh(RefreshError),
-    /// Error in token cache layer
-    Cache(Box<dyn StdError + Send + Sync>),
 }
 
 impl From<hyper::Error> for Error {
@@ -104,14 +99,9 @@ impl From<hyper::Error> for Error {
 
 impl From<JsonError> for Error {
     fn from(value: JsonError) -> Error {
-        match &*value.error {
-            "invalid_client" => Error::InvalidClient,
-            "invalid_scope" => Error::InvalidScope(
-                value
-                    .error_description
-                    .unwrap_or_else(|| "no description provided".to_string()),
-            ),
-            _ => Error::NegativeServerResponse(value.error, value.error_description),
+        Error::NegativeServerResponse {
+            error: value.error,
+            error_description: value.error_description,
         }
     }
 }
@@ -132,16 +122,16 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             Error::ClientError(ref err) => err.fmt(f),
-            Error::InvalidClient => "Invalid Client".fmt(f),
-            Error::InvalidScope(ref scope) => writeln!(f, "Invalid Scope: '{}'", scope),
-            Error::NegativeServerResponse(ref error, ref desc) => {
+            Error::NegativeServerResponse {
+                ref error,
+                ref error_description,
+            } => {
                 error.fmt(f)?;
-                if let Some(ref desc) = *desc {
+                if let Some(ref desc) = *error_description {
                     write!(f, ": {}", desc)?;
                 }
                 "\n".fmt(f)
             }
-            Error::BadServerResponse(ref s) => s.fmt(f),
             Error::JSONError(ref e) => format!(
                 "JSON Error; this might be a bug with unexpected server responses! {}",
                 e
@@ -151,7 +141,6 @@ impl fmt::Display for Error {
             Error::LowLevelError(ref e) => e.fmt(f),
             Error::Poll(ref pe) => pe.fmt(f),
             Error::Refresh(ref rr) => format!("{:?}", rr).fmt(f),
-            Error::Cache(ref e) => e.fmt(f),
         }
     }
 }

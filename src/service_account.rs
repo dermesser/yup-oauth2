@@ -213,32 +213,24 @@ impl ServiceAccountFlow {
         /// This is the schema of the server's response.
         #[derive(Deserialize, Debug)]
         struct TokenResponse {
-            access_token: Option<String>,
-            token_type: Option<String>,
-            expires_in: Option<i64>,
+            access_token: String,
+            token_type: String,
+            expires_in: i64,
         }
 
-        match serde_json::from_slice::<JsonErrorOr<_>>(&body)?.into_result()? {
-            TokenResponse {
-                access_token: Some(access_token),
-                token_type: Some(token_type),
-                expires_in: Some(expires_in),
-                ..
-            } => {
-                let expires_ts = chrono::Utc::now().timestamp() + expires_in;
-                Ok(Token {
-                    access_token,
-                    token_type,
-                    refresh_token: None,
-                    expires_in: Some(expires_in),
-                    expires_in_timestamp: Some(expires_ts),
-                })
-            }
-            token => Err(Error::BadServerResponse(format!(
-                "Token response lacks fields: {:?}",
-                token
-            ))),
-        }
+        let TokenResponse {
+            access_token,
+            token_type,
+            expires_in,
+        } = serde_json::from_slice::<JsonErrorOr<_>>(&body)?.into_result()?;
+        let expires_ts = chrono::Utc::now().timestamp() + expires_in;
+        Ok(Token {
+            access_token,
+            token_type,
+            refresh_token: None,
+            expires_in: Some(expires_in),
+            expires_in_timestamp: Some(expires_ts),
+        })
     }
 }
 
