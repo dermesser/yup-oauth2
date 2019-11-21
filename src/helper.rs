@@ -11,18 +11,19 @@ use std::io;
 use std::path::Path;
 
 /// Read an application secret from a file.
-pub fn read_application_secret<P: AsRef<Path>>(path: P) -> io::Result<ApplicationSecret> {
-    parse_application_secret(std::fs::read_to_string(path)?)
+pub async fn read_application_secret<P: AsRef<Path>>(path: P) -> io::Result<ApplicationSecret> {
+    parse_application_secret(tokio::fs::read(path).await?)
 }
 
 /// Read an application secret from a JSON string.
-pub fn parse_application_secret<S: AsRef<str>>(secret: S) -> io::Result<ApplicationSecret> {
-    let decoded: ConsoleApplicationSecret = serde_json::from_str(secret.as_ref()).map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Bad application secret: {}", e),
-        )
-    })?;
+pub fn parse_application_secret<S: AsRef<[u8]>>(secret: S) -> io::Result<ApplicationSecret> {
+    let decoded: ConsoleApplicationSecret =
+        serde_json::from_slice(secret.as_ref()).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Bad application secret: {}", e),
+            )
+        })?;
 
     if let Some(web) = decoded.web {
         Ok(web)
@@ -38,9 +39,9 @@ pub fn parse_application_secret<S: AsRef<str>>(secret: S) -> io::Result<Applicat
 
 /// Read a service account key from a JSON file. You can download the JSON keys from the Google
 /// Cloud Console or the respective console of your service provider.
-pub fn read_service_account_key<P: AsRef<Path>>(path: P) -> io::Result<ServiceAccountKey> {
-    let key = std::fs::read_to_string(path)?;
-    serde_json::from_str(&key).map_err(|e| {
+pub async fn read_service_account_key<P: AsRef<Path>>(path: P) -> io::Result<ServiceAccountKey> {
+    let key = tokio::fs::read(path).await?;
+    serde_json::from_slice(&key).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("Bad service account key: {}", e),

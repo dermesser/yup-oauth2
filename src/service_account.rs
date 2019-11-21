@@ -330,7 +330,9 @@ mod tests {
     //#[tokio::test]
     #[allow(dead_code)]
     async fn test_service_account_e2e() {
-        let key = read_service_account_key(&TEST_PRIVATE_KEY_PATH.to_string()).unwrap();
+        let key = read_service_account_key(TEST_PRIVATE_KEY_PATH)
+            .await
+            .unwrap();
         let acc = ServiceAccountFlow::new(ServiceAccountFlowOpts { key, subject: None }).unwrap();
         let https = HttpsConnector::new();
         let client = hyper::Client::builder()
@@ -343,9 +345,11 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_jwt_initialize_claims() {
-        let key = read_service_account_key(TEST_PRIVATE_KEY_PATH).unwrap();
+    #[tokio::test]
+    async fn test_jwt_initialize_claims() {
+        let key = read_service_account_key(TEST_PRIVATE_KEY_PATH)
+            .await
+            .unwrap();
         let scopes = vec!["scope1", "scope2", "scope3"];
         let claims = Claims::new(&key, &scopes, None);
 
@@ -363,9 +367,11 @@ mod tests {
         assert_eq!(claims.exp - claims.iat, 3595);
     }
 
-    #[test]
-    fn test_jwt_sign() {
-        let key = read_service_account_key(TEST_PRIVATE_KEY_PATH).unwrap();
+    #[tokio::test]
+    async fn test_jwt_sign() {
+        let key = read_service_account_key(TEST_PRIVATE_KEY_PATH)
+            .await
+            .unwrap();
         let scopes = vec!["scope1", "scope2", "scope3"];
         let signer = JWTSigner::new(&key.private_key).unwrap();
         let claims = Claims::new(&key, &scopes, None);

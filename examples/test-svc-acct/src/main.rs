@@ -3,7 +3,9 @@ use yup_oauth2::ServiceAccountAuthenticator;
 
 #[tokio::main]
 async fn main() {
-    let creds = yup_oauth2::read_service_account_key("serviceaccount.json").unwrap();
+    let creds = yup_oauth2::read_service_account_key("serviceaccount.json")
+        .await
+        .unwrap();
     let sa = ServiceAccountAuthenticator::builder(creds)
         .build()
         .await

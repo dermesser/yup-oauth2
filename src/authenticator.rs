@@ -88,7 +88,7 @@ pub struct AuthenticatorBuilder<C, F> {
 /// # async fn foo() {
 /// # use yup_oauth2::InstalledFlowReturnMethod;
 /// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultFlowDelegate;
-/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").unwrap();
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::InstalledFlowAuthenticator::builder(
 ///         app_secret,
 ///         InstalledFlowReturnMethod::HTTPRedirect,
@@ -114,7 +114,7 @@ impl InstalledFlowAuthenticator {
 /// Create an authenticator that uses the device flow.
 /// ```
 /// # async fn foo() {
-/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").unwrap();
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
 ///         .build()
 ///         .await
@@ -134,7 +134,7 @@ impl DeviceFlowAuthenticator {
 /// Create an authenticator that uses a service account.
 /// ```
 /// # async fn foo() {
-/// # let service_account_key = yup_oauth2::read_service_account_key("/tmp/foo").unwrap();
+/// # let service_account_key = yup_oauth2::read_service_account_key("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(service_account_key)
 ///         .build()
 ///         .await
@@ -159,7 +159,7 @@ impl ServiceAccountAuthenticator {
 /// # async fn foo() {
 /// # let custom_hyper_client = hyper::Client::new();
 /// # let custom_auth_delegate = yup_oauth2::authenticator_delegate::DefaultAuthenticatorDelegate;
-/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").unwrap();
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
 ///         .hyper_client(custom_hyper_client)
 ///         .persist_tokens_to_disk("/tmp/tokenfile.json")
@@ -241,7 +241,7 @@ impl<C, F> AuthenticatorBuilder<C, F> {
 /// ```
 /// # async fn foo() {
 /// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultFlowDelegate;
-/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").unwrap();
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
 ///         .device_code_url("foo")
 ///         .flow_delegate(Box::new(custom_flow_delegate))
@@ -317,7 +317,7 @@ impl<C> AuthenticatorBuilder<C, DeviceFlow> {
 /// # async fn foo() {
 /// # use yup_oauth2::InstalledFlowReturnMethod;
 /// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultFlowDelegate;
-/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").unwrap();
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::InstalledFlowAuthenticator::builder(
 ///         app_secret,
 ///         InstalledFlowReturnMethod::HTTPRedirect,
@@ -358,7 +358,7 @@ impl<C> AuthenticatorBuilder<C, InstalledFlow> {
 /// ## Methods available when building a service account authenticator.
 /// ```
 /// # async fn foo() {
-/// # let service_account_key = yup_oauth2::read_service_account_key("/tmp/foo").unwrap();
+/// # let service_account_key = yup_oauth2::read_service_account_key("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(
 ///         service_account_key,
 ///     )

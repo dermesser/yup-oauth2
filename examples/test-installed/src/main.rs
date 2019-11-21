@@ -5,6 +5,7 @@ use std::path::Path;
 #[tokio::main]
 async fn main() {
     let app_secret = yup_oauth2::read_application_secret(Path::new("clientsecret.json"))
+        .await
         .expect("clientsecret.json");
 
     let auth =
