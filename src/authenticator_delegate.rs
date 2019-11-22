@@ -80,17 +80,24 @@ pub trait DeviceFlowDelegate: Send + Sync {
     /// along with the `verification_uri`.
     /// # Notes
     /// * Will be called exactly once, provided we didn't abort during `request_code` phase.
-    fn present_user_code(&self, pi: &DeviceAuthResponse) {
-        println!(
-            "Please enter {} at {} and grant access to this application",
-            pi.user_code, pi.verification_uri
-        );
-        println!("Do not close this application until you either denied or granted access.");
-        println!(
-            "You have time until {}.",
-            pi.expires_at.with_timezone(&Local)
-        );
+    fn present_user_code<'a>(
+        &'a self,
+        device_auth_resp: &'a DeviceAuthResponse,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(present_user_code(device_auth_resp))
     }
+}
+
+async fn present_user_code(device_auth_resp: &DeviceAuthResponse) {
+    println!(
+        "Please enter {} at {} and grant access to this application",
+        device_auth_resp.user_code, device_auth_resp.verification_uri
+    );
+    println!("Do not close this application until you either denied or granted access.");
+    println!(
+        "You have time until {}.",
+        device_auth_resp.expires_at.with_timezone(&Local)
+    );
 }
 
 /// InstalledFlowDelegate methods are called when an installed flow needs to ask

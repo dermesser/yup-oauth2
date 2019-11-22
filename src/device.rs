@@ -55,7 +55,9 @@ impl DeviceFlow {
             scopes,
         )
         .await?;
-        self.flow_delegate.present_user_code(&device_auth_resp);
+        self.flow_delegate
+            .present_user_code(&device_auth_resp)
+            .await;
         self.wait_for_device_token(
             hyper_client,
             &self.app_secret,
@@ -193,6 +195,7 @@ impl DeviceFlow {
 #[cfg(test)]
 mod tests {
     use hyper_rustls::HttpsConnector;
+    use std::pin::Pin;
 
     use super::*;
 
@@ -201,8 +204,12 @@ mod tests {
         #[derive(Clone)]
         struct FD;
         impl DeviceFlowDelegate for FD {
-            fn present_user_code(&self, pi: &DeviceAuthResponse) {
+            fn present_user_code<'a>(
+                &'a self,
+                pi: &'a DeviceAuthResponse,
+            ) -> Pin<Box<dyn Future<Output = ()> + 'a + Send>> {
                 assert_eq!("https://example.com/verify", pi.verification_uri);
+                Box::pin(futures::future::ready(()))
             }
         }
 
