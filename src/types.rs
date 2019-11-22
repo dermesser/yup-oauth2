@@ -1,4 +1,6 @@
-use chrono::{DateTime, TimeZone, Utc};
+use crate::error::{AuthErrorOr, Error};
+
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Represents a token as returned by OAuth2 servers.
@@ -21,50 +23,43 @@ pub struct Token {
     pub refresh_token: Option<String>,
     /// The token type as string - usually 'Bearer'.
     pub token_type: String,
-    /// access_token will expire after this amount of time.
-    /// Prefer using expiry_date()
-    pub expires_in: Option<i64>,
-    /// timestamp is seconds since epoch indicating when the token will expire in absolute terms.
-    /// use expiry_date() to convert to DateTime.
-    pub expires_in_timestamp: Option<i64>,
+    /// The time when the token expires.
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 impl Token {
+    pub(crate) fn from_json(json_data: &[u8]) -> Result<Token, Error> {
+        #[derive(Deserialize)]
+        struct RawToken {
+            access_token: String,
+            refresh_token: Option<String>,
+            token_type: String,
+            expires_in: Option<i64>,
+        }
+
+        let RawToken {
+            access_token,
+            refresh_token,
+            token_type,
+            expires_in,
+        } = serde_json::from_slice::<AuthErrorOr<RawToken>>(json_data)?.into_result()?;
+
+        let expires_at = expires_in
+            .map(|seconds_from_now| Utc::now() + chrono::Duration::seconds(seconds_from_now));
+
+        Ok(Token {
+            access_token,
+            refresh_token,
+            token_type,
+            expires_at,
+        })
+    }
+
     /// Returns true if we are expired.
-    ///
-    /// # Panics
-    /// * if our access_token is unset
     pub fn expired(&self) -> bool {
-        if self.access_token.is_empty() {
-            panic!("called expired() on unset token");
-        }
-        if let Some(expiry_date) = self.expiry_date() {
-            expiry_date - chrono::Duration::minutes(1) <= Utc::now()
-        } else {
-            false
-        }
-    }
-
-    /// Returns a DateTime object representing our expiry date.
-    pub fn expiry_date(&self) -> Option<DateTime<Utc>> {
-        let expires_in_timestamp = self.expires_in_timestamp?;
-
-        Utc.timestamp(expires_in_timestamp, 0).into()
-    }
-
-    /// Adjust our stored expiry format to be absolute, using the current time.
-    pub fn set_expiry_absolute(&mut self) -> &mut Token {
-        if self.expires_in_timestamp.is_some() {
-            assert!(self.expires_in.is_none());
-            return self;
-        }
-
-        if let Some(expires_in) = self.expires_in {
-            self.expires_in_timestamp = Some(Utc::now().timestamp() + expires_in);
-            self.expires_in = None;
-        }
-
-        self
+        self.expires_at
+            .map(|expiration_time| expiration_time - chrono::Duration::minutes(1) <= Utc::now())
+            .unwrap_or(false)
     }
 }
 

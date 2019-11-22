@@ -208,9 +208,7 @@ impl DeviceFlow {
             .unwrap(); // TODO: Error checking
         let res = client.request(request).await?;
         let body = res.into_body().try_concat().await?;
-        let mut t = serde_json::from_slice::<AuthErrorOr<Token>>(&body)?.into_result()?;
-        t.set_expiry_absolute();
-        Ok(t)
+        Token::from_json(&body)
     }
 }
 

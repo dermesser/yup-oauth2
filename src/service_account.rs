@@ -11,7 +11,7 @@
 //! Copyright (c) 2016 Google Inc (lewinb@google.com).
 //!
 
-use crate::error::{AuthErrorOr, Error};
+use crate::error::Error;
 use crate::types::Token;
 
 use std::io;
@@ -202,28 +202,7 @@ impl ServiceAccountFlow {
             .unwrap();
         let response = hyper_client.request(request).await?;
         let body = response.into_body().try_concat().await?;
-
-        /// This is the schema of the server's response.
-        #[derive(Deserialize, Debug)]
-        struct TokenResponse {
-            access_token: String,
-            token_type: String,
-            expires_in: i64,
-        }
-
-        let TokenResponse {
-            access_token,
-            token_type,
-            expires_in,
-        } = serde_json::from_slice::<AuthErrorOr<_>>(&body)?.into_result()?;
-        let expires_ts = chrono::Utc::now().timestamp() + expires_in;
-        Ok(Token {
-            access_token,
-            token_type,
-            refresh_token: None,
-            expires_in: Some(expires_in),
-            expires_in_timestamp: Some(expires_ts),
-        })
+        Token::from_json(&body)
     }
 }
 
@@ -232,6 +211,7 @@ mod tests {
     use super::*;
     use crate::helper::read_service_account_key;
     use crate::parse_json;
+    use chrono::Utc;
     use hyper_rustls::HttpsConnector;
 
     use mockito::mock;
@@ -263,8 +243,7 @@ mod tests {
           "token_type": "Bearer"
         });
         let bad_json_response = serde_json::json!({
-          "access_token": "ya29.c.ElouBywiys0LyNaZoLPJcp1Fdi2KjFMxzvYKLXkTdvM-rDfqKlvEq6PiMhGoGHx97t5FAvz3eb_ahdwlBjSStxHtDVQB4ZPRJQ_EOi-iS7PnayahU2S9Jp8S6rk",
-          "token_type": "Bearer"
+          "error": "access_denied",
         });
 
         // Successful path.
@@ -285,7 +264,7 @@ mod tests {
                 .await
                 .expect("token failed");
             assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
-            assert_eq!(Some(3600), tok.expires_in);
+            assert!(Utc::now() + chrono::Duration::seconds(3600) >= tok.expires_at.unwrap());
             _m.assert();
         }
         // Malformed response.

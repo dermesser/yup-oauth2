@@ -3,7 +3,7 @@
 // Refer to the project root for licensing information.
 //
 use crate::authenticator_delegate::{DefaultInstalledFlowDelegate, InstalledFlowDelegate};
-use crate::error::{AuthErrorOr, Error};
+use crate::error::Error;
 use crate::types::{ApplicationSecret, Token};
 
 use std::convert::AsRef;
@@ -15,7 +15,6 @@ use std::sync::{Arc, Mutex};
 use futures::future::FutureExt;
 use futures_util::try_stream::TryStreamExt;
 use hyper::header;
-use serde::Deserialize;
 use tokio::sync::oneshot;
 use url::form_urlencoded;
 use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
@@ -187,30 +186,7 @@ impl InstalledFlow {
         let request = Self::request_token(app_secret, authcode, redirect_uri, server_addr);
         let resp = hyper_client.request(request).await?;
         let body = resp.into_body().try_concat().await?;
-
-        #[derive(Deserialize)]
-        struct JSONTokenResponse {
-            access_token: String,
-            refresh_token: Option<String>,
-            token_type: String,
-            expires_in: Option<i64>,
-        }
-
-        let JSONTokenResponse {
-            access_token,
-            refresh_token,
-            token_type,
-            expires_in,
-        } = serde_json::from_slice::<AuthErrorOr<_>>(&body)?.into_result()?;
-        let mut token = Token {
-            access_token,
-            refresh_token,
-            token_type,
-            expires_in,
-            expires_in_timestamp: None,
-        };
-        token.set_expiry_absolute();
-        Ok(token)
+        Token::from_json(&body)
     }
 
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.

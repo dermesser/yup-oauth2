@@ -1,10 +1,8 @@
-use crate::error::{AuthErrorOr, Error};
+use crate::error::Error;
 use crate::types::{ApplicationSecret, Token};
 
-use chrono::Utc;
 use futures_util::try_stream::TryStreamExt;
 use hyper::header;
-use serde::Deserialize;
 use url::form_urlencoded;
 
 /// Implements the [OAuth2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
@@ -50,26 +48,7 @@ impl RefreshFlow {
 
         let resp = client.request(request).await?;
         let body = resp.into_body().try_concat().await?;
-
-        #[derive(Deserialize)]
-        struct JsonToken {
-            access_token: String,
-            token_type: String,
-            expires_in: i64,
-        }
-
-        let JsonToken {
-            access_token,
-            token_type,
-            expires_in,
-        } = serde_json::from_slice::<AuthErrorOr<_>>(&body)?.into_result()?;
-        Ok(Token {
-            access_token,
-            token_type,
-            refresh_token: Some(refresh_token.to_string()),
-            expires_in: None,
-            expires_in_timestamp: Some(Utc::now().timestamp() + expires_in),
-        })
+        Token::from_json(&body)
     }
 }
 
