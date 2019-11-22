@@ -1,4 +1,4 @@
-use crate::error::{JsonErrorOr, RefreshError};
+use crate::error::{AuthErrorOr, Error};
 use crate::types::{ApplicationSecret, Token};
 
 use chrono::Utc;
@@ -33,7 +33,7 @@ impl RefreshFlow {
         client: &hyper::Client<C>,
         client_secret: &ApplicationSecret,
         refresh_token: &str,
-    ) -> Result<Token, RefreshError> {
+    ) -> Result<Token, Error> {
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
                 ("client_id", client_secret.client_id.as_str()),
@@ -46,7 +46,7 @@ impl RefreshFlow {
         let request = hyper::Request::post(&client_secret.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(req))
-            .unwrap(); // TODO: error handling
+            .unwrap();
 
         let resp = client.request(request).await?;
         let body = resp.into_body().try_concat().await?;
@@ -62,7 +62,7 @@ impl RefreshFlow {
             access_token,
             token_type,
             expires_in,
-        } = serde_json::from_slice::<JsonErrorOr<_>>(&body)?.into_result()?;
+        } = serde_json::from_slice::<AuthErrorOr<_>>(&body)?.into_result()?;
         Ok(Token {
             access_token,
             token_type,
@@ -116,13 +116,16 @@ mod tests {
                 .match_body(
                     mockito::Matcher::Regex(".*client_id=902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com.*refresh_token=my-refresh-token.*".to_string()))
                 .with_status(400)
-                .with_body(r#"{"error": "invalid_token"}"#)
+                .with_body(r#"{"error": "invalid_request"}"#)
                 .create();
 
             let rr = RefreshFlow::refresh_token(&client, &app_secret, refresh_token).await;
             match rr {
-                Err(RefreshError::ServerError(e, None)) => {
-                    assert_eq!(e, "invalid_token");
+                Err(Error::AuthError(auth_error)) => {
+                    assert_eq!(
+                        auth_error.error,
+                        crate::error::AuthErrorCode::InvalidRequest
+                    );
                 }
                 _ => panic!(format!("unexpected RefreshResult {:?}", rr)),
             }

@@ -1,14 +1,13 @@
 use crate::authenticator_delegate::{
-    DefaultDeviceFlowDelegate, DeviceFlowDelegate, PollInformation, Retry,
+    DefaultDeviceFlowDelegate, DeviceFlowDelegate, PollInformation,
 };
-use crate::error::{Error, JsonErrorOr, PollError};
+use crate::error::{AuthError, AuthErrorOr, Error};
 use crate::types::{ApplicationSecret, Token};
 
 use std::borrow::Cow;
 use std::time::Duration;
 
-use ::log::error;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use futures::prelude::*;
 use hyper::header;
 use serde::Deserialize;
@@ -27,7 +26,6 @@ pub struct DeviceFlow {
     pub(crate) app_secret: ApplicationSecret,
     pub(crate) device_code_url: Cow<'static, str>,
     pub(crate) flow_delegate: Box<dyn DeviceFlowDelegate>,
-    pub(crate) wait_duration: Duration,
     pub(crate) grant_type: Cow<'static, str>,
 }
 
@@ -39,7 +37,6 @@ impl DeviceFlow {
             app_secret,
             device_code_url: GOOGLE_DEVICE_CODE_URL.into(),
             flow_delegate: Box::new(DefaultDeviceFlowDelegate),
-            wait_duration: Duration::from_secs(120),
             grant_type: GOOGLE_GRANT_TYPE.into(),
         }
     }
@@ -61,18 +58,14 @@ impl DeviceFlow {
         )
         .await?;
         self.flow_delegate.present_user_code(&pollinf);
-        tokio::timer::Timeout::new(
-            self.wait_for_device_token(
-                hyper_client,
-                &self.app_secret,
-                &pollinf,
-                &device_code,
-                &self.grant_type,
-            ),
-            self.wait_duration,
+        self.wait_for_device_token(
+            hyper_client,
+            &self.app_secret,
+            &pollinf,
+            &device_code,
+            &self.grant_type,
         )
         .await
-        .map_err(|_| Error::Poll(PollError::TimedOut))?
     }
 
     async fn wait_for_device_token<C>(
@@ -89,28 +82,19 @@ impl DeviceFlow {
         let mut interval = pollinf.interval;
         loop {
             tokio::timer::delay_for(interval).await;
-            interval = match Self::poll_token(
-                &app_secret,
-                hyper_client,
-                device_code,
-                grant_type,
-                pollinf.expires_at,
-                &*self.flow_delegate as &dyn DeviceFlowDelegate,
-            )
-            .await
+            interval = match Self::poll_token(&app_secret, hyper_client, device_code, grant_type)
+                .await
             {
-                Ok(None) => match self.flow_delegate.pending(&pollinf) {
-                    Retry::Abort | Retry::Skip => return Err(Error::Poll(PollError::TimedOut)),
-                    Retry::After(d) => d,
-                },
-                Ok(Some(tok)) => return Ok(tok),
-                Err(e @ PollError::AccessDenied)
-                | Err(e @ PollError::TimedOut)
-                | Err(e @ PollError::Expired(_)) => return Err(Error::Poll(e)),
-                Err(ref e) => {
-                    error!("Unknown error from poll token api: {}", e);
-                    pollinf.interval
+                Ok(token) => return Ok(token),
+                Err(Error::AuthError(AuthError { error, .. }))
+                    if error.as_str() == "authorization_pending" =>
+                {
+                    interval
                 }
+                Err(Error::AuthError(AuthError { error, .. })) if error.as_str() == "slow_down" => {
+                    interval + Duration::from_secs(5)
+                }
+                Err(err) => return Err(err),
             }
         }
     }
@@ -170,7 +154,7 @@ impl DeviceFlow {
 
         let json_bytes = resp.into_body().try_concat().await?;
         let decoded: JsonData =
-            serde_json::from_slice::<JsonErrorOr<_>>(&json_bytes)?.into_result()?;
+            serde_json::from_slice::<AuthErrorOr<_>>(&json_bytes)?.into_result()?;
         let expires_in = decoded.expires_in.unwrap_or(60 * 60);
         let pi = PollInformation {
             user_code: decoded.user_code,
@@ -204,17 +188,10 @@ impl DeviceFlow {
         client: &hyper::Client<C>,
         device_code: &str,
         grant_type: &str,
-        expires_at: DateTime<Utc>,
-        flow_delegate: &dyn DeviceFlowDelegate,
-    ) -> Result<Option<Token>, PollError>
+    ) -> Result<Token, Error>
     where
         C: hyper::client::connect::Connect + 'static,
     {
-        if expires_at <= Utc::now() {
-            flow_delegate.expired(expires_at);
-            return Err(PollError::Expired(expires_at));
-        }
-
         // We should be ready for a new request
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
@@ -229,44 +206,11 @@ impl DeviceFlow {
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(req))
             .unwrap(); // TODO: Error checking
-        let res = client
-            .request(request)
-            .await
-            .map_err(PollError::HttpError)?;
-        let body = res
-            .into_body()
-            .try_concat()
-            .await
-            .map_err(PollError::HttpError)?;
-        #[derive(Deserialize)]
-        struct JsonError {
-            error: String,
-        }
-
-        match serde_json::from_slice::<JsonError>(&body) {
-            Err(_) => {} // ignore, move on, it's not an error
-            Ok(res) => {
-                match res.error.as_ref() {
-                    "access_denied" => {
-                        flow_delegate.denied();
-                        return Err(PollError::AccessDenied);
-                    }
-                    "authorization_pending" => return Ok(None),
-                    s => {
-                        return Err(PollError::Other(format!(
-                            "server message '{}' not understood",
-                            s
-                        )))
-                    }
-                };
-            }
-        }
-
-        // yes, we expect that !
-        let mut t: Token = serde_json::from_slice(&body).unwrap();
+        let res = client.request(request).await?;
+        let body = res.into_body().try_concat().await?;
+        let mut t = serde_json::from_slice::<AuthErrorOr<Token>>(&body)?.into_result()?;
         t.set_expiry_absolute();
-
-        Ok(Some(t))
+        Ok(t)
     }
 }
 
@@ -307,7 +251,6 @@ mod tests {
             app_secret,
             device_code_url: device_code_url.into(),
             flow_delegate: Box::new(FD),
-            wait_duration: Duration::from_secs(5),
             grant_type: GOOGLE_GRANT_TYPE.into(),
         };
 
@@ -415,7 +358,7 @@ mod tests {
                 .token(&client, &["https://www.googleapis.com/scope/1"])
                 .await;
             assert!(res.is_err());
-            assert!(format!("{}", res.unwrap_err()).contains("Access denied by user"));
+            assert!(format!("{}", res.unwrap_err()).contains("access_denied"));
             _m.assert();
         }
     }

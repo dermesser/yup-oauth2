@@ -11,7 +11,7 @@
 //! Copyright (c) 2016 Google Inc (lewinb@google.com).
 //!
 
-use crate::error::{Error, JsonErrorOr};
+use crate::error::{AuthErrorOr, Error};
 use crate::types::Token;
 
 use std::io;
@@ -215,7 +215,7 @@ impl ServiceAccountFlow {
             access_token,
             token_type,
             expires_in,
-        } = serde_json::from_slice::<JsonErrorOr<_>>(&body)?.into_result()?;
+        } = serde_json::from_slice::<AuthErrorOr<_>>(&body)?.into_result()?;
         let expires_ts = chrono::Utc::now().timestamp() + expires_in;
         Ok(Token {
             access_token,

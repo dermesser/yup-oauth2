@@ -1,7 +1,5 @@
 //! Module contianing the core functionality for OAuth2 Authentication.
-use crate::authenticator_delegate::{
-    AuthenticatorDelegate, DefaultAuthenticatorDelegate, DeviceFlowDelegate, InstalledFlowDelegate,
-};
+use crate::authenticator_delegate::{DeviceFlowDelegate, InstalledFlowDelegate};
 use crate::device::DeviceFlow;
 use crate::error::Error;
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
@@ -15,13 +13,11 @@ use std::borrow::Cow;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::Duration;
 
 /// Authenticator is responsible for fetching tokens, handling refreshing tokens,
 /// and optionally persisting tokens to disk.
 pub struct Authenticator<C> {
     hyper_client: hyper::Client<C>,
-    auth_delegate: Box<dyn AuthenticatorDelegate>,
     storage: Storage,
     auth_flow: AuthFlow,
 }
@@ -49,19 +45,9 @@ where
                 Some(app_secret),
             ) => {
                 // token is expired but has a refresh token.
-                let token = match RefreshFlow::refresh_token(
-                    &self.hyper_client,
-                    app_secret,
-                    &refresh_token,
-                )
-                .await
-                {
-                    Err(err) => {
-                        self.auth_delegate.token_refresh_failed(&err);
-                        return Err(err.into());
-                    }
-                    Ok(token) => token,
-                };
+                let token =
+                    RefreshFlow::refresh_token(&self.hyper_client, app_secret, &refresh_token)
+                        .await?;
                 self.storage.set(hashed_scopes, token.clone()).await;
                 Ok(token)
             }
@@ -78,7 +64,6 @@ where
 /// Configure an Authenticator using the builder pattern.
 pub struct AuthenticatorBuilder<C, F> {
     hyper_client_builder: C,
-    auth_delegate: Box<dyn AuthenticatorDelegate>,
     storage_type: StorageType,
     auth_flow: F,
 }
@@ -158,12 +143,10 @@ impl ServiceAccountAuthenticator {
 /// ```
 /// # async fn foo() {
 /// # let custom_hyper_client = hyper::Client::new();
-/// # let custom_auth_delegate = yup_oauth2::authenticator_delegate::DefaultAuthenticatorDelegate;
 /// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
 ///         .hyper_client(custom_hyper_client)
 ///         .persist_tokens_to_disk("/tmp/tokenfile.json")
-///         .auth_delegate(Box::new(custom_auth_delegate))
 ///         .build()
 ///         .await
 ///         .expect("failed to create authenticator");
@@ -173,7 +156,6 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     async fn common_build(
         hyper_client_builder: C,
         storage_type: StorageType,
-        auth_delegate: Box<dyn AuthenticatorDelegate>,
         auth_flow: AuthFlow,
     ) -> io::Result<Authenticator<C::Connector>>
     where
@@ -190,7 +172,6 @@ impl<C, F> AuthenticatorBuilder<C, F> {
         Ok(Authenticator {
             hyper_client,
             storage,
-            auth_delegate,
             auth_flow,
         })
     }
@@ -198,7 +179,6 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     fn with_auth_flow(auth_flow: F) -> AuthenticatorBuilder<DefaultHyperClient, F> {
         AuthenticatorBuilder {
             hyper_client_builder: DefaultHyperClient,
-            auth_delegate: Box::new(DefaultAuthenticatorDelegate),
             storage_type: StorageType::Memory,
             auth_flow,
         }
@@ -211,7 +191,6 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     ) -> AuthenticatorBuilder<hyper::Client<NewC>, F> {
         AuthenticatorBuilder {
             hyper_client_builder: hyper_client,
-            auth_delegate: self.auth_delegate,
             storage_type: self.storage_type,
             auth_flow: self.auth_flow,
         }
@@ -221,17 +200,6 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     pub fn persist_tokens_to_disk<P: Into<PathBuf>>(self, path: P) -> AuthenticatorBuilder<C, F> {
         AuthenticatorBuilder {
             storage_type: StorageType::Disk(path.into()),
-            ..self
-        }
-    }
-
-    /// Use the provided authenticator delegate.
-    pub fn auth_delegate(
-        self,
-        auth_delegate: Box<dyn AuthenticatorDelegate>,
-    ) -> AuthenticatorBuilder<C, F> {
-        AuthenticatorBuilder {
-            auth_delegate,
             ..self
         }
     }
@@ -245,7 +213,6 @@ impl<C, F> AuthenticatorBuilder<C, F> {
 ///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
 ///         .device_code_url("foo")
 ///         .flow_delegate(Box::new(custom_flow_delegate))
-///         .wait_duration(std::time::Duration::from_secs(120))
 ///         .grant_type("foo")
 ///         .build()
 ///         .await
@@ -275,17 +242,6 @@ impl<C> AuthenticatorBuilder<C, DeviceFlow> {
         }
     }
 
-    /// Use the provided wait duration.
-    pub fn wait_duration(self, wait_duration: Duration) -> Self {
-        AuthenticatorBuilder {
-            auth_flow: DeviceFlow {
-                wait_duration,
-                ..self.auth_flow
-            },
-            ..self
-        }
-    }
-
     /// Use the provided grant type.
     pub fn grant_type(self, grant_type: impl Into<Cow<'static, str>>) -> Self {
         AuthenticatorBuilder {
@@ -305,7 +261,6 @@ impl<C> AuthenticatorBuilder<C, DeviceFlow> {
         Self::common_build(
             self.hyper_client_builder,
             self.storage_type,
-            self.auth_delegate,
             AuthFlow::DeviceFlow(self.auth_flow),
         )
         .await
@@ -348,7 +303,6 @@ impl<C> AuthenticatorBuilder<C, InstalledFlow> {
         Self::common_build(
             self.hyper_client_builder,
             self.storage_type,
-            self.auth_delegate,
             AuthFlow::InstalledFlow(self.auth_flow),
         )
         .await
@@ -389,7 +343,6 @@ impl<C> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
         Self::common_build(
             self.hyper_client_builder,
             self.storage_type,
-            self.auth_delegate,
             AuthFlow::ServiceAccountFlow(service_account_auth_flow),
         )
         .await

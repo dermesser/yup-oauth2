@@ -3,7 +3,7 @@
 // Refer to the project root for licensing information.
 //
 use crate::authenticator_delegate::{DefaultInstalledFlowDelegate, InstalledFlowDelegate};
-use crate::error::{Error, JsonErrorOr};
+use crate::error::{AuthErrorOr, Error};
 use crate::types::{ApplicationSecret, Token};
 
 use std::convert::AsRef;
@@ -201,7 +201,7 @@ impl InstalledFlow {
             refresh_token,
             token_type,
             expires_in,
-        } = serde_json::from_slice::<JsonErrorOr<_>>(&body)?.into_result()?;
+        } = serde_json::from_slice::<AuthErrorOr<_>>(&body)?.into_result()?;
         let mut token = Token {
             access_token,
             refresh_token,
