@@ -1,16 +1,14 @@
 use crate::authenticator_delegate::{
-    DefaultDeviceFlowDelegate, DeviceFlowDelegate, PollInformation,
+    DefaultDeviceFlowDelegate, DeviceAuthResponse, DeviceFlowDelegate,
 };
-use crate::error::{AuthError, AuthErrorOr, Error};
+use crate::error::{AuthError, Error};
 use crate::types::{ApplicationSecret, Token};
 
 use std::borrow::Cow;
 use std::time::Duration;
 
-use chrono::Utc;
 use futures::prelude::*;
 use hyper::header;
-use serde::Deserialize;
 use url::form_urlencoded;
 
 pub const GOOGLE_DEVICE_CODE_URL: &str = "https://accounts.google.com/o/oauth2/device/code";
@@ -50,19 +48,18 @@ impl DeviceFlow {
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
     {
-        let (pollinf, device_code) = Self::request_code(
+        let device_auth_resp = Self::request_code(
             &self.app_secret,
             hyper_client,
             &self.device_code_url,
             scopes,
         )
         .await?;
-        self.flow_delegate.present_user_code(&pollinf);
+        self.flow_delegate.present_user_code(&device_auth_resp);
         self.wait_for_device_token(
             hyper_client,
             &self.app_secret,
-            &pollinf,
-            &device_code,
+            &device_auth_resp,
             &self.grant_type,
         )
         .await
@@ -72,18 +69,22 @@ impl DeviceFlow {
         &self,
         hyper_client: &hyper::Client<C>,
         app_secret: &ApplicationSecret,
-        pollinf: &PollInformation,
-        device_code: &str,
+        device_auth_resp: &DeviceAuthResponse,
         grant_type: &str,
     ) -> Result<Token, Error>
     where
         C: hyper::client::connect::Connect + 'static,
     {
-        let mut interval = pollinf.interval;
+        let mut interval = device_auth_resp.interval;
         loop {
             tokio::timer::delay_for(interval).await;
-            interval = match Self::poll_token(&app_secret, hyper_client, device_code, grant_type)
-                .await
+            interval = match Self::poll_token(
+                &app_secret,
+                hyper_client,
+                &device_auth_resp.device_code,
+                grant_type,
+            )
+            .await
             {
                 Ok(token) => return Ok(token),
                 Err(Error::AuthError(AuthError { error, .. }))
@@ -119,7 +120,7 @@ impl DeviceFlow {
         client: &hyper::Client<C>,
         device_code_url: &str,
         scopes: &[T],
-    ) -> Result<(PollInformation, String), Error>
+    ) -> Result<DeviceAuthResponse, Error>
     where
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
@@ -138,37 +139,14 @@ impl DeviceFlow {
             .body(hyper::Body::from(req))
             .unwrap();
         let resp = client.request(req).await?;
-        // This return type is defined in https://tools.ietf.org/html/draft-ietf-oauth-device-flow-15#section-3.2
-        // The alias is present as Google use a non-standard name for verification_uri.
-        // According to the standard interval is optional, however, all tested implementations provide it.
-        // verification_uri_complete is optional in the standard but not provided in tested implementations.
-        #[derive(Deserialize)]
-        struct JsonData {
-            device_code: String,
-            user_code: String,
-            #[serde(alias = "verification_url")]
-            verification_uri: String,
-            expires_in: Option<i64>,
-            interval: i64,
-        }
-
-        let json_bytes = resp.into_body().try_concat().await?;
-        let decoded: JsonData =
-            serde_json::from_slice::<AuthErrorOr<_>>(&json_bytes)?.into_result()?;
-        let expires_in = decoded.expires_in.unwrap_or(60 * 60);
-        let pi = PollInformation {
-            user_code: decoded.user_code,
-            verification_url: decoded.verification_uri,
-            expires_at: Utc::now() + chrono::Duration::seconds(expires_in),
-            interval: Duration::from_secs(i64::abs(decoded.interval) as u64),
-        };
-        Ok((pi, decoded.device_code))
+        let body = resp.into_body().try_concat().await?;
+        DeviceAuthResponse::from_json(&body)
     }
 
     /// If the first call is successful, this method may be called.
     /// As long as we are waiting for authentication, it will return `Ok(None)`.
     /// You should call it within the interval given the previously returned
-    /// `PollInformation.interval` field.
+    /// `DeviceAuthResponse.interval` field.
     ///
     /// The operation was successful once you receive an Ok(Some(Token)) for the first time.
     /// Subsequent calls will return the previous result, which may also be an error state.
@@ -223,8 +201,8 @@ mod tests {
         #[derive(Clone)]
         struct FD;
         impl DeviceFlowDelegate for FD {
-            fn present_user_code(&self, pi: &PollInformation) {
-                assert_eq!("https://example.com/verify", pi.verification_url);
+            fn present_user_code(&self, pi: &DeviceAuthResponse) {
+                assert_eq!("https://example.com/verify", pi.verification_uri);
             }
         }
 
