@@ -7,7 +7,7 @@ use crate::types::Token;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
@@ -184,32 +184,25 @@ impl Serialize for JSONToken {
 /// List of tokens in a JSON object
 #[derive(Debug, Clone)]
 pub(crate) struct JSONTokens {
-    token_map: BTreeMap<ScopeHash, Arc<Mutex<JSONToken>>>,
-    tokens: Vec<Arc<Mutex<JSONToken>>>,
+    token_map: BTreeMap<ScopeHash, JSONToken>,
 }
 
 impl JSONTokens {
     pub(crate) fn new() -> Self {
         JSONTokens {
             token_map: BTreeMap::new(),
-            tokens: Vec::new(),
         }
     }
 
     pub(crate) async fn load_from_file(filename: &Path) -> Result<Self, io::Error> {
         let contents = tokio::fs::read(filename).await?;
-        let tokens: Vec<Arc<Mutex<JSONToken>>> =
+        let token_map: BTreeMap<ScopeHash, JSONToken> =
             serde_json::from_slice::<Vec<JSONToken>>(&contents)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
                 .into_iter()
-                .map(|json_token| Arc::new(Mutex::new(json_token)))
+                .map(|json_token| (json_token.hash, json_token))
                 .collect();
-        let mut token_map: BTreeMap<ScopeHash, Arc<Mutex<JSONToken>>> = BTreeMap::new();
-        for token in tokens.iter().cloned() {
-            let hash = token.lock().unwrap().hash;
-            token_map.insert(hash, token);
-        }
-        Ok(JSONTokens { token_map, tokens })
+        Ok(JSONTokens { token_map })
     }
 
     fn get<T>(
@@ -224,7 +217,7 @@ impl JSONTokens {
         T: AsRef<str>,
     {
         if let Some(json_token) = self.token_map.get(&hash) {
-            return Some(json_token.lock().unwrap().token.clone());
+            return Some(json_token.token.clone());
         }
 
         let requested_scopes_are_subset_of = |other_scopes: &[String]| {
@@ -234,15 +227,11 @@ impl JSONTokens {
         };
         // No exact match for the scopes provided. Search for any tokens that
         // exist for a superset of the scopes requested.
-        self.tokens
-            .iter()
-            .filter(|json_token| {
-                filter.is_subset_of(json_token.lock().unwrap().filter) == FilterResponse::Maybe
-            })
-            .find(|v: &&Arc<Mutex<JSONToken>>| {
-                requested_scopes_are_subset_of(&v.lock().unwrap().scopes)
-            })
-            .map(|t: &Arc<Mutex<JSONToken>>| t.lock().unwrap().token.clone())
+        self.token_map
+            .values()
+            .filter(|json_token| filter.is_subset_of(json_token.filter) == FilterResponse::Maybe)
+            .find(|v: &&JSONToken| requested_scopes_are_subset_of(&v.scopes))
+            .map(|t: &JSONToken| t.token.clone())
     }
 
     fn set<T>(
@@ -258,26 +247,25 @@ impl JSONTokens {
     {
         use std::collections::btree_map::Entry;
         match self.token_map.entry(hash) {
-            Entry::Occupied(entry) => {
-                entry.get().lock().unwrap().token = token;
+            Entry::Occupied(mut entry) => {
+                entry.get_mut().token = token;
             }
             Entry::Vacant(entry) => {
-                let json_token = Arc::new(Mutex::new(JSONToken {
+                let json_token = JSONToken {
                     scopes: scopes.iter().map(|x| x.as_ref().to_owned()).collect(),
                     token,
                     hash,
                     filter,
-                }));
+                };
                 entry.insert(json_token.clone());
-                self.tokens.push(json_token);
             }
         }
     }
 
     fn all_tokens(&self) -> Vec<JSONToken> {
-        self.tokens
-            .iter()
-            .map(|t: &Arc<Mutex<JSONToken>>| t.lock().unwrap().clone())
+        self.token_map
+            .values()
+            .map(|t: &JSONToken| t.clone())
             .collect()
     }
 }
