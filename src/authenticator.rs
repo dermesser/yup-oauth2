@@ -429,3 +429,14 @@ enum StorageType {
     Memory,
     Disk(PathBuf),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ensure_send_sync() {
+        fn is_send_sync<T: Send + Sync>() {}
+        is_send_sync::<Authenticator<<DefaultHyperClient as HyperClientBuilder>::Connector>>()
+    }
+}
