@@ -239,7 +239,9 @@ impl JSONTokens {
             .filter(|json_token| {
                 filter.is_subset_of(json_token.lock().unwrap().filter) == FilterResponse::Maybe
             })
-            .find(|v: &&Arc<Mutex<JSONToken>>| requested_scopes_are_subset_of(&v.lock().unwrap().scopes))
+            .find(|v: &&Arc<Mutex<JSONToken>>| {
+                requested_scopes_are_subset_of(&v.lock().unwrap().scopes)
+            })
             .map(|t: &Arc<Mutex<JSONToken>>| t.lock().unwrap().token.clone())
     }
 
