@@ -4,12 +4,10 @@
 //
 use crate::types::Token;
 
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
@@ -186,8 +184,8 @@ impl Serialize for JSONToken {
 /// List of tokens in a JSON object
 #[derive(Debug, Clone)]
 pub(crate) struct JSONTokens {
-    token_map: BTreeMap<ScopeHash, Rc<RefCell<JSONToken>>>,
-    tokens: Vec<Rc<RefCell<JSONToken>>>,
+    token_map: BTreeMap<ScopeHash, Arc<Mutex<JSONToken>>>,
+    tokens: Vec<Arc<Mutex<JSONToken>>>,
 }
 
 impl JSONTokens {
@@ -200,15 +198,15 @@ impl JSONTokens {
 
     pub(crate) async fn load_from_file(filename: &Path) -> Result<Self, io::Error> {
         let contents = tokio::fs::read(filename).await?;
-        let tokens: Vec<Rc<RefCell<JSONToken>>> =
+        let tokens: Vec<Arc<Mutex<JSONToken>>> =
             serde_json::from_slice::<Vec<JSONToken>>(&contents)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
                 .into_iter()
-                .map(|json_token| Rc::new(RefCell::new(json_token)))
+                .map(|json_token| Arc::new(Mutex::new(json_token)))
                 .collect();
-        let mut token_map: BTreeMap<ScopeHash, Rc<RefCell<JSONToken>>> = BTreeMap::new();
+        let mut token_map: BTreeMap<ScopeHash, Arc<Mutex<JSONToken>>> = BTreeMap::new();
         for token in tokens.iter().cloned() {
-            let hash = token.borrow().hash;
+            let hash = token.lock().unwrap().hash;
             token_map.insert(hash, token);
         }
         Ok(JSONTokens { token_map, tokens })
@@ -226,7 +224,7 @@ impl JSONTokens {
         T: AsRef<str>,
     {
         if let Some(json_token) = self.token_map.get(&hash) {
-            return Some(json_token.borrow().token.clone());
+            return Some(json_token.lock().unwrap().token.clone());
         }
 
         let requested_scopes_are_subset_of = |other_scopes: &[String]| {
@@ -239,10 +237,10 @@ impl JSONTokens {
         self.tokens
             .iter()
             .filter(|json_token| {
-                filter.is_subset_of(json_token.borrow().filter) == FilterResponse::Maybe
+                filter.is_subset_of(json_token.lock().unwrap().filter) == FilterResponse::Maybe
             })
-            .find(|v: &&Rc<RefCell<JSONToken>>| requested_scopes_are_subset_of(&v.borrow().scopes))
-            .map(|t: &Rc<RefCell<JSONToken>>| t.borrow().token.clone())
+            .find(|v: &&Arc<Mutex<JSONToken>>| requested_scopes_are_subset_of(&v.lock().unwrap().scopes))
+            .map(|t: &Arc<Mutex<JSONToken>>| t.lock().unwrap().token.clone())
     }
 
     fn set<T>(
@@ -259,10 +257,10 @@ impl JSONTokens {
         use std::collections::btree_map::Entry;
         match self.token_map.entry(hash) {
             Entry::Occupied(entry) => {
-                entry.get().borrow_mut().token = token;
+                entry.get().lock().unwrap().token = token;
             }
             Entry::Vacant(entry) => {
-                let json_token = Rc::new(RefCell::new(JSONToken {
+                let json_token = Arc::new(Mutex::new(JSONToken {
                     scopes: scopes.iter().map(|x| x.as_ref().to_owned()).collect(),
                     token,
                     hash,
@@ -277,7 +275,7 @@ impl JSONTokens {
     fn all_tokens(&self) -> Vec<JSONToken> {
         self.tokens
             .iter()
-            .map(|t: &Rc<RefCell<JSONToken>>| t.borrow().clone())
+            .map(|t: &Arc<Mutex<JSONToken>>| t.lock().unwrap().clone())
             .collect()
     }
 }
@@ -287,8 +285,11 @@ pub(crate) struct DiskStorage {
     write_tx: tokio::sync::mpsc::Sender<Vec<JSONToken>>,
 }
 
+fn is_send<T: Send>() {}
+
 impl DiskStorage {
     pub(crate) async fn new(path: PathBuf) -> Result<Self, io::Error> {
+        is_send::<JSONTokens>();
         let tokens = match JSONTokens::load_from_file(&path).await {
             Ok(tokens) => tokens,
             Err(e) if e.kind() == io::ErrorKind::NotFound => JSONTokens::new(),
