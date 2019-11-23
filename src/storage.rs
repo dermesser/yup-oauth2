@@ -4,9 +4,11 @@
 //
 use crate::types::Token;
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
@@ -22,12 +24,15 @@ use serde::{Deserialize, Serialize};
 // definitively not a superset.
 // The current implementation uses a 64bit bloom filter with 4 hash functions.
 
+/// ScopeHash is a hash value derived from a list of scopes. The hash value
+/// represents a fingerprint of the set of scopes *independent* of the ordering.
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+struct ScopeHash(u64);
+
 /// ScopeFilter represents a filter for a set of scopes. It can definitively
 /// prove that a given list of scopes is not a subset of another.
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-struct ScopeFilter {
-    bitmask: u64,
-}
+struct ScopeFilter(u64);
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum FilterResponse {
@@ -36,27 +41,9 @@ enum FilterResponse {
 }
 
 impl ScopeFilter {
-    fn new<T>(scopes: &[T]) -> Self
-    where
-        T: AsRef<str>,
-    {
-        let mut bitmask = 0u64;
-        for scope in scopes {
-            let scope_hash = seahash::hash(scope.as_ref().as_bytes());
-            // Use the first 4 6-bit chunks of the seahash as the 4 hash values
-            // in the bloom filter.
-            for i in 0..4 {
-                // h is a hash derived value in the range 0..64
-                let h = (scope_hash >> (6 * i)) & 0b11_1111;
-                bitmask |= 1 << h;
-            }
-        }
-        ScopeFilter { bitmask }
-    }
-
     /// Determine if this ScopeFilter could be a subset of the provided filter.
     fn is_subset_of(self, filter: ScopeFilter) -> FilterResponse {
-        if self.bitmask & filter.bitmask == self.bitmask {
+        if self.0 & filter.0 == self.0 {
             FilterResponse::Maybe
         } else {
             FilterResponse::No
@@ -65,34 +52,26 @@ impl ScopeFilter {
 }
 
 #[derive(Debug)]
-pub struct ScopesAndFilter<'a, T> {
+pub(crate) struct ScopeSet<'a, T> {
+    hash: ScopeHash,
     filter: ScopeFilter,
     scopes: &'a [T],
 }
 
 // Implement Clone manually. Auto derive fails to work correctly because we want
 // Clone to be implemented regardless of whether T is Clone or not.
-impl<'a, T> Clone for ScopesAndFilter<'a, T> {
+impl<'a, T> Clone for ScopeSet<'a, T> {
     fn clone(&self) -> Self {
-        ScopesAndFilter {
+        ScopeSet {
+            hash: self.hash,
             filter: self.filter,
             scopes: self.scopes,
         }
     }
 }
-impl<'a, T> Copy for ScopesAndFilter<'a, T> {}
+impl<'a, T> Copy for ScopeSet<'a, T> {}
 
-impl<'a, T> From<&'a [T]> for ScopesAndFilter<'a, T>
-where
-    T: AsRef<str>,
-{
-    fn from(scopes: &'a [T]) -> Self {
-        let filter = ScopeFilter::new(scopes);
-        ScopesAndFilter { filter, scopes }
-    }
-}
-
-impl<'a, T> ScopesAndFilter<'a, T>
+impl<'a, T> ScopeSet<'a, T>
 where
     T: AsRef<str>,
 {
@@ -102,7 +81,29 @@ where
     // From trait. This inherent method just serves to auto deref from array
     // refs to slices and proxy to the From impl.
     pub fn from(scopes: &'a [T]) -> Self {
-        <Self as From<&'a [T]>>::from(scopes)
+        let (hash, filter) = scopes.iter().fold(
+            (ScopeHash(0), ScopeFilter(0)),
+            |(mut scope_hash, mut scope_filter), scope| {
+                let h = seahash::hash(scope.as_ref().as_bytes());
+
+                // Use the first 4 6-bit chunks of the seahash as the 4 hash values
+                // in the bloom filter.
+                for i in 0..4 {
+                    // h is a hash derived value in the range 0..64
+                    let h = (h >> (6 * i)) & 0b11_1111;
+                    scope_filter.0 |= 1 << h;
+                }
+
+                // xor the hashes together to get an order independent fingerprint.
+                scope_hash.0 ^= h;
+                (scope_hash, scope_filter)
+            },
+        );
+        ScopeSet {
+            hash,
+            filter,
+            scopes,
+        }
     }
 }
 
@@ -112,7 +113,7 @@ pub(crate) enum Storage {
 }
 
 impl Storage {
-    pub(crate) async fn set<T>(&self, scopes: ScopesAndFilter<'_, T>, token: Token)
+    pub(crate) async fn set<T>(&self, scopes: ScopeSet<'_, T>, token: Token)
     where
         T: AsRef<str>,
     {
@@ -122,7 +123,7 @@ impl Storage {
         }
     }
 
-    pub(crate) fn get<T>(&self, scopes: ScopesAndFilter<T>) -> Option<Token>
+    pub(crate) fn get<T>(&self, scopes: ScopeSet<T>) -> Option<Token>
     where
         T: AsRef<str>,
     {
@@ -134,85 +135,149 @@ impl Storage {
 }
 
 /// A single stored token.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+
+#[derive(Debug, Clone)]
 struct JSONToken {
-    pub scopes: Vec<String>,
-    pub token: Token,
+    scopes: Vec<String>,
+    token: Token,
+    hash: ScopeHash,
+    filter: ScopeFilter,
+}
+
+impl<'de> Deserialize<'de> for JSONToken {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RawJSONToken {
+            scopes: Vec<String>,
+            token: Token,
+        }
+        let RawJSONToken { scopes, token } = RawJSONToken::deserialize(deserializer)?;
+        let ScopeSet { hash, filter, .. } = ScopeSet::from(&scopes);
+        Ok(JSONToken {
+            scopes,
+            token,
+            hash,
+            filter,
+        })
+    }
+}
+
+impl Serialize for JSONToken {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        #[derive(Serialize)]
+        struct RawJSONToken<'a> {
+            scopes: &'a [String],
+            token: &'a Token,
+        }
+        RawJSONToken {
+            scopes: &self.scopes,
+            token: &self.token,
+        }
+        .serialize(serializer)
+    }
 }
 
 /// List of tokens in a JSON object
 #[derive(Debug, Clone)]
 pub(crate) struct JSONTokens {
-    token_map: BTreeMap<ScopeFilter, Vec<JSONToken>>,
+    token_map: BTreeMap<ScopeHash, Rc<RefCell<JSONToken>>>,
+    tokens: Vec<Rc<RefCell<JSONToken>>>,
 }
 
 impl JSONTokens {
     pub(crate) fn new() -> Self {
         JSONTokens {
             token_map: BTreeMap::new(),
+            tokens: Vec::new(),
         }
     }
 
     pub(crate) async fn load_from_file(filename: &Path) -> Result<Self, io::Error> {
         let contents = tokio::fs::read(filename).await?;
-        let token_vec: Vec<JSONToken> = serde_json::from_slice(&contents)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        let mut token_map: BTreeMap<ScopeFilter, Vec<JSONToken>> = BTreeMap::new();
-        for token in token_vec {
-            let filter = ScopesAndFilter::from(&token.scopes).filter;
-            token_map.entry(filter).or_default().push(token);
+        let tokens: Vec<Rc<RefCell<JSONToken>>> =
+            serde_json::from_slice::<Vec<JSONToken>>(&contents)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+                .into_iter()
+                .map(|json_token| Rc::new(RefCell::new(json_token)))
+                .collect();
+        let mut token_map: BTreeMap<ScopeHash, Rc<RefCell<JSONToken>>> = BTreeMap::new();
+        for token in tokens.iter().cloned() {
+            let hash = token.borrow().hash;
+            token_map.insert(hash, token);
         }
-        Ok(JSONTokens { token_map })
+        Ok(JSONTokens { token_map, tokens })
     }
 
-    fn get<T>(&self, ScopesAndFilter { filter, scopes }: ScopesAndFilter<T>) -> Option<Token>
+    fn get<T>(
+        &self,
+        ScopeSet {
+            hash,
+            filter,
+            scopes,
+        }: ScopeSet<T>,
+    ) -> Option<Token>
     where
         T: AsRef<str>,
     {
+        if let Some(json_token) = self.token_map.get(&hash) {
+            return Some(json_token.borrow().token.clone());
+        }
+
         let requested_scopes_are_subset_of = |other_scopes: &[String]| {
             scopes
                 .iter()
                 .all(|s| other_scopes.iter().any(|t| t.as_str() == s.as_ref()))
         };
-        // Check for exact match of bloom filter first. In the common case an
-        // application will provide the same set of scopes repeatedly. If a
-        // token exists for the exact scope list requested a lookup of the
-        // ScopeFilter will return a list that would contain it.
-        if let Some(t) = self
-            .token_map
-            .get(&filter)
-            .into_iter()
-            .flat_map(|tokens_matching_filter| tokens_matching_filter.iter())
-            .find(|js_token: &&JSONToken| requested_scopes_are_subset_of(&js_token.scopes))
-        {
-            return Some(t.token.clone());
-        }
-
         // No exact match for the scopes provided. Search for any tokens that
         // exist for a superset of the scopes requested.
-        self.token_map
+        self.tokens
             .iter()
-            .filter(|(k, _)| filter.is_subset_of(**k) == FilterResponse::Maybe)
-            .flat_map(|(_, tokens_matching_filter)| tokens_matching_filter.iter())
-            .find(|v: &&JSONToken| requested_scopes_are_subset_of(&v.scopes))
-            .map(|t: &JSONToken| t.token.clone())
+            .filter(|json_token| {
+                filter.is_subset_of(json_token.borrow().filter) == FilterResponse::Maybe
+            })
+            .find(|v: &&Rc<RefCell<JSONToken>>| requested_scopes_are_subset_of(&v.borrow().scopes))
+            .map(|t: &Rc<RefCell<JSONToken>>| t.borrow().token.clone())
     }
 
-    fn set<T>(&mut self, ScopesAndFilter { filter, scopes }: ScopesAndFilter<T>, token: Token)
-    where
+    fn set<T>(
+        &mut self,
+        ScopeSet {
+            hash,
+            filter,
+            scopes,
+        }: ScopeSet<T>,
+        token: Token,
+    ) where
         T: AsRef<str>,
     {
-        self.token_map.entry(filter).or_default().push(JSONToken {
-            scopes: scopes.iter().map(|x| x.as_ref().to_string()).collect(),
-            token,
-        });
+        use std::collections::btree_map::Entry;
+        match self.token_map.entry(hash) {
+            Entry::Occupied(entry) => {
+                entry.get().borrow_mut().token = token;
+            }
+            Entry::Vacant(entry) => {
+                let json_token = Rc::new(RefCell::new(JSONToken {
+                    scopes: scopes.iter().map(|x| x.as_ref().to_owned()).collect(),
+                    token,
+                    hash,
+                    filter,
+                }));
+                entry.insert(json_token.clone());
+                self.tokens.push(json_token);
+            }
+        }
     }
 
     fn all_tokens(&self) -> Vec<JSONToken> {
-        self.token_map
-            .values()
-            .flat_map(|v| v.iter())
-            .cloned()
+        self.tokens
+            .iter()
+            .map(|t: &Rc<RefCell<JSONToken>>| t.borrow().clone())
             .collect()
     }
 }
@@ -255,7 +320,7 @@ impl DiskStorage {
         })
     }
 
-    async fn set<T>(&self, scopes: ScopesAndFilter<'_, T>, token: Token)
+    async fn set<T>(&self, scopes: ScopeSet<'_, T>, token: Token)
     where
         T: AsRef<str>,
     {
@@ -271,7 +336,7 @@ impl DiskStorage {
             .expect("disk storage task not running");
     }
 
-    pub(crate) fn get<T>(&self, scopes: ScopesAndFilter<T>) -> Option<Token>
+    pub(crate) fn get<T>(&self, scopes: ScopeSet<T>) -> Option<Token>
     where
         T: AsRef<str>,
     {
@@ -285,9 +350,9 @@ mod tests {
 
     #[test]
     fn test_scope_filter() {
-        let foo = ScopeFilter::new(&["foo"]);
-        let bar = ScopeFilter::new(&["bar"]);
-        let foobar = ScopeFilter::new(&["foo", "bar"]);
+        let foo = ScopeSet::from(&["foo"]).filter;
+        let bar = ScopeSet::from(&["bar"]).filter;
+        let foobar = ScopeSet::from(&["foo", "bar"]).filter;
 
         // foo and bar are both subsets of foobar. This condition should hold no
         // matter what changes are made to the bloom filter implementation.

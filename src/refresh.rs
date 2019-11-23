@@ -48,7 +48,13 @@ impl RefreshFlow {
 
         let resp = client.request(request).await?;
         let body = resp.into_body().try_concat().await?;
-        Token::from_json(&body)
+        let mut token = Token::from_json(&body)?;
+        // If the refresh result contains a refresh_token use it, otherwise
+        // continue using our previous refresh_token.
+        token
+            .refresh_token
+            .get_or_insert_with(|| refresh_token.to_owned());
+        Ok(token)
     }
 }
 
