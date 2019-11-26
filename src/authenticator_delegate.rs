@@ -186,6 +186,14 @@ pub trait FlowDelegate: Clone {
             Box::new(future::ok(None))
         }
     }
+
+    fn device_code_name(&self) -> &str {
+        "code"
+    }
+
+    fn grant_type_for_check(&self) -> &str {
+        "http://oauth.net/grant_type/device/1.0"
+    }
 }
 
 /// Uses all default implementations by AuthenticatorDelegate, and makes the trait's
