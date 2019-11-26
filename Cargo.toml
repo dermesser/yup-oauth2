@@ -29,6 +29,7 @@ seahash = "3.0.6"
 [dev-dependencies]
 mockito = "0.17"
 env_logger = "0.6"
+tempfile = "3.1"
 
 [workspace]
 members = ["examples/test-installed/", "examples/test-svc-acct/", "examples/test-device/"]

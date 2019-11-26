@@ -48,13 +48,13 @@ where
                 let token =
                     RefreshFlow::refresh_token(&self.hyper_client, app_secret, &refresh_token)
                         .await?;
-                self.storage.set(hashed_scopes, token.clone()).await;
+                self.storage.set(hashed_scopes, token.clone()).await?;
                 Ok(token)
             }
             _ => {
                 // no token in the cache or the token returned can't be refreshed.
                 let t = self.auth_flow.token(&self.hyper_client, scopes).await?;
-                self.storage.set(hashed_scopes, t.clone()).await;
+                self.storage.set(hashed_scopes, t.clone()).await?;
                 Ok(t)
             }
         }

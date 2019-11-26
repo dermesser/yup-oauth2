@@ -174,6 +174,12 @@ impl From<serde_json::Error> for Error {
     }
 }
 
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Error {
+        Error::LowLevelError(value)
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {

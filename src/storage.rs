@@ -4,7 +4,7 @@
 //
 use crate::types::Token;
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -24,12 +24,12 @@ use serde::{Deserialize, Serialize};
 
 /// ScopeHash is a hash value derived from a list of scopes. The hash value
 /// represents a fingerprint of the set of scopes *independent* of the ordering.
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 struct ScopeHash(u64);
 
 /// ScopeFilter represents a filter for a set of scopes. It can definitively
 /// prove that a given list of scopes is not a subset of another.
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 struct ScopeFilter(u64);
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -111,7 +111,11 @@ pub(crate) enum Storage {
 }
 
 impl Storage {
-    pub(crate) async fn set<T>(&self, scopes: ScopeSet<'_, T>, token: Token)
+    pub(crate) async fn set<T>(
+        &self,
+        scopes: ScopeSet<'_, T>,
+        token: Token,
+    ) -> Result<(), io::Error>
     where
         T: AsRef<str>,
     {
@@ -184,25 +188,60 @@ impl Serialize for JSONToken {
 /// List of tokens in a JSON object
 #[derive(Debug, Clone)]
 pub(crate) struct JSONTokens {
-    token_map: BTreeMap<ScopeHash, JSONToken>,
+    token_map: HashMap<ScopeHash, JSONToken>,
+}
+
+impl Serialize for JSONTokens {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_seq(self.token_map.values())
+    }
+}
+
+impl<'de> Deserialize<'de> for JSONTokens {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = JSONTokens;
+
+            // Format a message stating what data this Visitor expects to receive.
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a sequence of JSONToken's")
+            }
+
+            fn visit_seq<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::SeqAccess<'de>,
+            {
+                let mut token_map = HashMap::with_capacity(access.size_hint().unwrap_or(0));
+                while let Some(json_token) = access.next_element::<JSONToken>()? {
+                    token_map.insert(json_token.hash, json_token);
+                }
+                Ok(JSONTokens { token_map })
+            }
+        }
+
+        // Instantiate our Visitor and ask the Deserializer to drive
+        // it over the input data, resulting in an instance of MyMap.
+        deserializer.deserialize_seq(V)
+    }
 }
 
 impl JSONTokens {
     pub(crate) fn new() -> Self {
         JSONTokens {
-            token_map: BTreeMap::new(),
+            token_map: HashMap::new(),
         }
     }
 
-    pub(crate) async fn load_from_file(filename: &Path) -> Result<Self, io::Error> {
+    async fn load_from_file(filename: &Path) -> Result<Self, io::Error> {
         let contents = tokio::fs::read(filename).await?;
-        let token_map: BTreeMap<ScopeHash, JSONToken> =
-            serde_json::from_slice::<Vec<JSONToken>>(&contents)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
-                .into_iter()
-                .map(|json_token| (json_token.hash, json_token))
-                .collect();
-        Ok(JSONTokens { token_map })
+        serde_json::from_slice(&contents).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 
     fn get<T>(
@@ -242,10 +281,11 @@ impl JSONTokens {
             scopes,
         }: ScopeSet<T>,
         token: Token,
-    ) where
+    ) -> Result<(), io::Error>
+    where
         T: AsRef<str>,
     {
-        use std::collections::btree_map::Entry;
+        use std::collections::hash_map::Entry;
         match self.token_map.entry(hash) {
             Entry::Occupied(mut entry) => {
                 entry.get_mut().token = token;
@@ -260,71 +300,45 @@ impl JSONTokens {
                 entry.insert(json_token.clone());
             }
         }
-    }
-
-    fn all_tokens(&self) -> Vec<JSONToken> {
-        self.token_map
-            .values()
-            .map(|t: &JSONToken| t.clone())
-            .collect()
+        Ok(())
     }
 }
 
 pub(crate) struct DiskStorage {
     tokens: Mutex<JSONTokens>,
-    write_tx: tokio::sync::mpsc::Sender<Vec<JSONToken>>,
+    filename: PathBuf,
 }
 
-fn is_send<T: Send>() {}
-
 impl DiskStorage {
-    pub(crate) async fn new(path: PathBuf) -> Result<Self, io::Error> {
-        is_send::<JSONTokens>();
-        let tokens = match JSONTokens::load_from_file(&path).await {
+    pub(crate) async fn new(filename: PathBuf) -> Result<Self, io::Error> {
+        let tokens = match JSONTokens::load_from_file(&filename).await {
             Ok(tokens) => tokens,
             Err(e) if e.kind() == io::ErrorKind::NotFound => JSONTokens::new(),
             Err(e) => return Err(e),
         };
 
-        // Writing to disk will happen in a separate task. This means in the
-        // common case returning a token to the user will not be required to
-        // wait for disk i/o. We communicate with a dedicated writer task via a
-        // buffered channel. This ensures that the writes happen in the order
-        // received, and if writes fall too far behind we will block GetToken
-        // requests until disk i/o completes.
-        let (write_tx, mut write_rx) = tokio::sync::mpsc::channel::<Vec<JSONToken>>(2);
-        tokio::spawn(async move {
-            while let Some(tokens) = write_rx.recv().await {
-                match serde_json::to_string(&tokens) {
-                    Err(e) => log::error!("Failed to serialize tokens: {}", e),
-                    Ok(ser) => {
-                        if let Err(e) = tokio::fs::write(path.clone(), &ser).await {
-                            log::error!("Failed to write tokens to disk: {}", e);
-                        }
-                    }
-                }
-            }
-        });
         Ok(DiskStorage {
             tokens: Mutex::new(tokens),
-            write_tx,
+            filename,
         })
     }
 
-    async fn set<T>(&self, scopes: ScopeSet<'_, T>, token: Token)
+    pub(crate) async fn set<T>(
+        &self,
+        scopes: ScopeSet<'_, T>,
+        token: Token,
+    ) -> Result<(), io::Error>
     where
         T: AsRef<str>,
     {
-        let cloned_tokens = {
-            let mut tokens = self.tokens.lock().unwrap();
-            tokens.set(scopes, token);
-            tokens.all_tokens()
+        let json = {
+            use std::ops::Deref;
+            let mut lock = self.tokens.lock().unwrap();
+            lock.set(scopes, token)?;
+            serde_json::to_string(lock.deref())
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
         };
-        self.write_tx
-            .clone()
-            .send(cloned_tokens)
-            .await
-            .expect("disk storage task not running");
+        tokio::fs::write(self.filename.clone(), json).await
     }
 
     pub(crate) fn get<T>(&self, scopes: ScopeSet<T>) -> Option<Token>
@@ -357,5 +371,32 @@ mod tests {
         assert!(bar.is_subset_of(foo) == FilterResponse::No);
         assert!(foobar.is_subset_of(foo) == FilterResponse::No);
         assert!(foobar.is_subset_of(bar) == FilterResponse::No);
+    }
+
+    #[tokio::test]
+    async fn test_disk_storage() {
+        let new_token = |access_token: &str| Token {
+            access_token: access_token.to_owned(),
+            refresh_token: None,
+            token_type: "Bearer".to_owned(),
+            expires_at: None,
+        };
+        let tempdir = tempfile::tempdir().unwrap();
+        let storage = DiskStorage::new(tempdir.path().join("tokenstorage.json"))
+            .await
+            .unwrap();
+        let scope_set = ScopeSet::from(&["myscope"]);
+        assert!(storage.get(scope_set).is_none());
+        storage
+            .set(scope_set, new_token("my_access_token"))
+            .await
+            .unwrap();
+        assert_eq!(storage.get(scope_set), Some(new_token("my_access_token")));
+
+        // Create a new DiskStorage instance and verify the tokens were read from disk correctly.
+        let storage = DiskStorage::new(tempdir.path().join("tokenstorage.json"))
+            .await
+            .unwrap();
+        assert_eq!(storage.get(scope_set), Some(new_token("my_access_token")));
     }
 }
