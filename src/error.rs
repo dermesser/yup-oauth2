@@ -10,7 +10,7 @@ use serde::Deserialize;
 /// Error returned by the authorization server.
 /// https://tools.ietf.org/html/rfc6749#section-5.2
 /// https://tools.ietf.org/html/rfc8628#section-3.5
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq, Eq)]
 pub struct AuthError {
     /// Error code from the server.
     pub error: AuthErrorCode,
@@ -36,7 +36,6 @@ impl StdError for AuthError {}
 
 /// The error code returned by the authorization server.
 #[derive(Debug, Clone, Eq, PartialEq)]
-
 pub enum AuthErrorCode {
     /// invalid_request
     InvalidRequest,

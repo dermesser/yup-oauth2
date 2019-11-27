@@ -381,22 +381,25 @@ mod tests {
             token_type: "Bearer".to_owned(),
             expires_at: None,
         };
-        let tempdir = tempfile::tempdir().unwrap();
-        let storage = DiskStorage::new(tempdir.path().join("tokenstorage.json"))
-            .await
-            .unwrap();
         let scope_set = ScopeSet::from(&["myscope"]);
-        assert!(storage.get(scope_set).is_none());
-        storage
-            .set(scope_set, new_token("my_access_token"))
-            .await
-            .unwrap();
-        assert_eq!(storage.get(scope_set), Some(new_token("my_access_token")));
-
-        // Create a new DiskStorage instance and verify the tokens were read from disk correctly.
-        let storage = DiskStorage::new(tempdir.path().join("tokenstorage.json"))
-            .await
-            .unwrap();
-        assert_eq!(storage.get(scope_set), Some(new_token("my_access_token")));
+        let tempdir = tempfile::tempdir().unwrap();
+        {
+            let storage = DiskStorage::new(tempdir.path().join("tokenstorage.json"))
+                .await
+                .unwrap();
+            assert!(storage.get(scope_set).is_none());
+            storage
+                .set(scope_set, new_token("my_access_token"))
+                .await
+                .unwrap();
+            assert_eq!(storage.get(scope_set), Some(new_token("my_access_token")));
+        }
+        {
+            // Create a new DiskStorage instance and verify the tokens were read from disk correctly.
+            let storage = DiskStorage::new(tempdir.path().join("tokenstorage.json"))
+                .await
+                .unwrap();
+            assert_eq!(storage.get(scope_set), Some(new_token("my_access_token")));
+        }
     }
 }

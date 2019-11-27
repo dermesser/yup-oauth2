@@ -70,13 +70,3 @@ where
     debug_assert_eq!(size, result.len());
     result
 }
-
-#[cfg(test)]
-#[macro_export]
-/// Utility function for parsing json. Useful in unit tests. Simply wrap the
-/// json! macro in a from_value to deserialize the contents to arbitrary structs.
-macro_rules! parse_json {
-    ($($json:tt)+) => {
-        ::serde_json::from_value(::serde_json::json!($($json)+)).expect("failed to deserialize")
-    }
-}
