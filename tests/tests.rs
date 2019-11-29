@@ -88,7 +88,7 @@ async fn test_device_success() {
         .token(&["https://www.googleapis.com/scope/1"])
         .await
         .expect("token failed");
-    assert_eq!("accesstoken", token.access_token);
+    assert_eq!("accesstoken", token.as_str());
     _m.assert();
 }
 
@@ -253,9 +253,7 @@ async fn test_installed_interactive_success() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken", tok.access_token);
-    assert_eq!("refreshtoken", tok.refresh_token.unwrap());
-    assert_eq!("Bearer", tok.token_type);
+    assert_eq!("accesstoken", tok.as_str());
     _m.assert();
 }
 
@@ -282,9 +280,7 @@ async fn test_installed_redirect_success() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken", tok.access_token);
-    assert_eq!("refreshtoken", tok.refresh_token.unwrap());
-    assert_eq!("Bearer", tok.token_type);
+    assert_eq!("accesstoken", tok.as_str());
     _m.assert();
 }
 
@@ -347,8 +343,8 @@ async fn test_service_account_success() {
         .token(&["https://www.googleapis.com/auth/pubsub"])
         .await
         .expect("token failed");
-    assert!(tok.access_token.contains("ya29.c.ElouBywiys0Ly"));
-    assert!(Utc::now() + chrono::Duration::seconds(3600) >= tok.expires_at.unwrap());
+    assert!(tok.as_str().contains("ya29.c.ElouBywiys0Ly"));
+    assert!(Utc::now() + chrono::Duration::seconds(3600) >= tok.expiration_time().unwrap());
     _m.assert();
 }
 
@@ -396,9 +392,7 @@ async fn test_refresh() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken", tok.access_token);
-    assert_eq!("refreshtoken", tok.refresh_token.unwrap());
-    assert_eq!("Bearer", tok.token_type);
+    assert_eq!("accesstoken", tok.as_str());
     _m.assert();
 
     let _m = mockito::mock("POST", "/token")
@@ -420,9 +414,7 @@ async fn test_refresh() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken2", tok.access_token);
-    assert_eq!("refreshtoken", tok.refresh_token.unwrap());
-    assert_eq!("Bearer", tok.token_type);
+    assert_eq!("accesstoken2", tok.as_str());
     _m.assert();
 
     let _m = mockito::mock("POST", "/token")
@@ -481,7 +473,7 @@ async fn test_memory_storage() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!(token1.access_token.as_str(), "accesstoken");
+    assert_eq!(token1.as_str(), "accesstoken");
     assert_eq!(token1, token2);
     _m.assert();
 
@@ -507,7 +499,7 @@ async fn test_memory_storage() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!(token3.access_token.as_str(), "accesstoken2");
+    assert_eq!(token3.as_str(), "accesstoken2");
     _m.assert();
 }
 
@@ -547,7 +539,7 @@ async fn test_disk_storage() {
             .token(&["https://googleapis.com/some/scope"])
             .await
             .expect("failed to get token");
-        assert_eq!(token1.access_token.as_str(), "accesstoken");
+        assert_eq!(token1.as_str(), "accesstoken");
         assert_eq!(token1, token2);
         _m.assert();
     }
@@ -569,6 +561,6 @@ async fn test_disk_storage() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!(token1.access_token.as_str(), "accesstoken");
+    assert_eq!(token1.as_str(), "accesstoken");
     assert_eq!(token1, token2);
 }

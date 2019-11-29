@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::types::{ApplicationSecret, Token};
+use crate::types::{ApplicationSecret, TokenInfo};
 
 use futures_util::try_stream::TryStreamExt;
 use hyper::header;
@@ -10,7 +10,7 @@ use url::form_urlencoded;
 /// Refresh an expired access token, as obtained by any other authentication flow.
 /// This flow is useful when your `Token` is expired and allows to obtain a new
 /// and valid access token.
-pub struct RefreshFlow;
+pub(crate) struct RefreshFlow;
 
 impl RefreshFlow {
     /// Attempt to refresh the given token, and obtain a new, valid one.
@@ -27,11 +27,11 @@ impl RefreshFlow {
     ///
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub async fn refresh_token<C: hyper::client::connect::Connect + 'static>(
+    pub(crate) async fn refresh_token<C: hyper::client::connect::Connect + 'static>(
         client: &hyper::Client<C>,
         client_secret: &ApplicationSecret,
         refresh_token: &str,
-    ) -> Result<Token, Error> {
+    ) -> Result<TokenInfo, Error> {
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
                 ("client_id", client_secret.client_id.as_str()),
@@ -48,7 +48,7 @@ impl RefreshFlow {
 
         let resp = client.request(request).await?;
         let body = resp.into_body().try_concat().await?;
-        let mut token = Token::from_json(&body)?;
+        let mut token = TokenInfo::from_json(&body)?;
         // If the refresh result contains a refresh_token use it, otherwise
         // continue using our previous refresh_token.
         token

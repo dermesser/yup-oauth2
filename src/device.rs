@@ -2,7 +2,7 @@ use crate::authenticator_delegate::{
     DefaultDeviceFlowDelegate, DeviceAuthResponse, DeviceFlowDelegate,
 };
 use crate::error::{AuthError, Error};
-use crate::types::{ApplicationSecret, Token};
+use crate::types::{ApplicationSecret, TokenInfo};
 
 use std::borrow::Cow;
 use std::time::Duration;
@@ -43,7 +43,7 @@ impl DeviceFlow {
         &self,
         hyper_client: &hyper::Client<C>,
         scopes: &[T],
-    ) -> Result<Token, Error>
+    ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
@@ -73,7 +73,7 @@ impl DeviceFlow {
         app_secret: &ApplicationSecret,
         device_auth_resp: &DeviceAuthResponse,
         grant_type: &str,
-    ) -> Result<Token, Error>
+    ) -> Result<TokenInfo, Error>
     where
         C: hyper::client::connect::Connect + 'static,
     {
@@ -168,7 +168,7 @@ impl DeviceFlow {
         client: &hyper::Client<C>,
         device_code: &str,
         grant_type: &str,
-    ) -> Result<Token, Error>
+    ) -> Result<TokenInfo, Error>
     where
         C: hyper::client::connect::Connect + 'static,
     {
@@ -188,6 +188,6 @@ impl DeviceFlow {
             .unwrap(); // TODO: Error checking
         let res = client.request(request).await?;
         let body = res.into_body().try_concat().await?;
-        Token::from_json(&body)
+        TokenInfo::from_json(&body)
     }
 }

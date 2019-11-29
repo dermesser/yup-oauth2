@@ -4,7 +4,7 @@
 //
 use crate::authenticator_delegate::{DefaultInstalledFlowDelegate, InstalledFlowDelegate};
 use crate::error::Error;
-use crate::types::{ApplicationSecret, Token};
+use crate::types::{ApplicationSecret, TokenInfo};
 
 use std::convert::AsRef;
 use std::future::Future;
@@ -93,7 +93,7 @@ impl InstalledFlow {
         &self,
         hyper_client: &hyper::Client<C>,
         scopes: &[T],
-    ) -> Result<Token, Error>
+    ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
@@ -115,7 +115,7 @@ impl InstalledFlow {
         hyper_client: &hyper::Client<C>,
         app_secret: &ApplicationSecret,
         scopes: &[T],
-    ) -> Result<Token, Error>
+    ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
@@ -140,7 +140,7 @@ impl InstalledFlow {
         hyper_client: &hyper::Client<C>,
         app_secret: &ApplicationSecret,
         scopes: &[T],
-    ) -> Result<Token, Error>
+    ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
@@ -178,7 +178,7 @@ impl InstalledFlow {
         hyper_client: &hyper::Client<C>,
         app_secret: &ApplicationSecret,
         server_addr: Option<SocketAddr>,
-    ) -> Result<Token, Error>
+    ) -> Result<TokenInfo, Error>
     where
         C: hyper::client::connect::Connect + 'static,
     {
@@ -186,7 +186,7 @@ impl InstalledFlow {
         let request = Self::request_token(app_secret, authcode, redirect_uri, server_addr);
         let resp = hyper_client.request(request).await?;
         let body = resp.into_body().try_concat().await?;
-        Token::from_json(&body)
+        TokenInfo::from_json(&body)
     }
 
     /// Sends the authorization code to the provider in order to obtain access and refresh tokens.

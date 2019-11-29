@@ -6,7 +6,7 @@ use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 use crate::refresh::RefreshFlow;
 use crate::service_account::{ServiceAccountFlow, ServiceAccountFlowOpts, ServiceAccountKey};
 use crate::storage::{self, Storage};
-use crate::types::{ApplicationSecret, Token};
+use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
 use private::AuthFlow;
 
 use std::borrow::Cow;
@@ -27,35 +27,35 @@ where
     C: hyper::client::connect::Connect + 'static,
 {
     /// Return the current token for the provided scopes.
-    pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<Token, Error>
+    pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<AccessToken, Error>
     where
         T: AsRef<str>,
     {
         let hashed_scopes = storage::ScopeSet::from(scopes);
         match (self.storage.get(hashed_scopes), self.auth_flow.app_secret()) {
-            (Some(t), _) if !t.expired() => {
+            (Some(t), _) if !t.is_expired() => {
                 // unexpired token found
-                Ok(t)
+                Ok(t.into())
             }
             (
-                Some(Token {
+                Some(TokenInfo {
                     refresh_token: Some(refresh_token),
                     ..
                 }),
                 Some(app_secret),
             ) => {
                 // token is expired but has a refresh token.
-                let token =
+                let token_info =
                     RefreshFlow::refresh_token(&self.hyper_client, app_secret, &refresh_token)
                         .await?;
-                self.storage.set(hashed_scopes, token.clone()).await?;
-                Ok(token)
+                self.storage.set(hashed_scopes, token_info.clone()).await?;
+                Ok(token_info.into())
             }
             _ => {
                 // no token in the cache or the token returned can't be refreshed.
-                let t = self.auth_flow.token(&self.hyper_client, scopes).await?;
-                self.storage.set(hashed_scopes, t.clone()).await?;
-                Ok(t)
+                let token_info = self.auth_flow.token(&self.hyper_client, scopes).await?;
+                self.storage.set(hashed_scopes, token_info.clone()).await?;
+                Ok(token_info.into())
             }
         }
     }
@@ -354,7 +354,7 @@ mod private {
     use crate::error::Error;
     use crate::installed::InstalledFlow;
     use crate::service_account::ServiceAccountFlow;
-    use crate::types::{ApplicationSecret, Token};
+    use crate::types::{ApplicationSecret, TokenInfo};
 
     pub enum AuthFlow {
         DeviceFlow(DeviceFlow),
@@ -375,7 +375,7 @@ mod private {
             &'a self,
             hyper_client: &'a hyper::Client<C>,
             scopes: &'a [T],
-        ) -> Result<Token, Error>
+        ) -> Result<TokenInfo, Error>
         where
             T: AsRef<str>,
             C: hyper::client::connect::Connect + 'static,

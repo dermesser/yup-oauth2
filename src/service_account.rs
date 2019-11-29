@@ -12,7 +12,7 @@
 //!
 
 use crate::error::Error;
-use crate::types::Token;
+use crate::types::TokenInfo;
 
 use std::io;
 
@@ -181,7 +181,7 @@ impl ServiceAccountFlow {
         &self,
         hyper_client: &hyper::Client<C>,
         scopes: &[T],
-    ) -> Result<Token, Error>
+    ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
         C: hyper::client::connect::Connect + 'static,
@@ -202,7 +202,7 @@ impl ServiceAccountFlow {
             .unwrap();
         let response = hyper_client.request(request).await?;
         let body = response.into_body().try_concat().await?;
-        Token::from_json(&body)
+        TokenInfo::from_json(&body)
     }
 }
 

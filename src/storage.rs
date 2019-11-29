@@ -2,7 +2,7 @@
 //
 // See project root for licensing information.
 //
-use crate::types::Token;
+use crate::types::TokenInfo;
 
 use std::collections::HashMap;
 use std::io;
@@ -114,7 +114,7 @@ impl Storage {
     pub(crate) async fn set<T>(
         &self,
         scopes: ScopeSet<'_, T>,
-        token: Token,
+        token: TokenInfo,
     ) -> Result<(), io::Error>
     where
         T: AsRef<str>,
@@ -125,7 +125,7 @@ impl Storage {
         }
     }
 
-    pub(crate) fn get<T>(&self, scopes: ScopeSet<T>) -> Option<Token>
+    pub(crate) fn get<T>(&self, scopes: ScopeSet<T>) -> Option<TokenInfo>
     where
         T: AsRef<str>,
     {
@@ -141,7 +141,7 @@ impl Storage {
 #[derive(Debug, Clone)]
 struct JSONToken {
     scopes: Vec<String>,
-    token: Token,
+    token: TokenInfo,
     hash: ScopeHash,
     filter: ScopeFilter,
 }
@@ -154,7 +154,7 @@ impl<'de> Deserialize<'de> for JSONToken {
         #[derive(Deserialize)]
         struct RawJSONToken {
             scopes: Vec<String>,
-            token: Token,
+            token: TokenInfo,
         }
         let RawJSONToken { scopes, token } = RawJSONToken::deserialize(deserializer)?;
         let ScopeSet { hash, filter, .. } = ScopeSet::from(&scopes);
@@ -175,7 +175,7 @@ impl Serialize for JSONToken {
         #[derive(Serialize)]
         struct RawJSONToken<'a> {
             scopes: &'a [String],
-            token: &'a Token,
+            token: &'a TokenInfo,
         }
         RawJSONToken {
             scopes: &self.scopes,
@@ -251,7 +251,7 @@ impl JSONTokens {
             filter,
             scopes,
         }: ScopeSet<T>,
-    ) -> Option<Token>
+    ) -> Option<TokenInfo>
     where
         T: AsRef<str>,
     {
@@ -280,7 +280,7 @@ impl JSONTokens {
             filter,
             scopes,
         }: ScopeSet<T>,
-        token: Token,
+        token: TokenInfo,
     ) -> Result<(), io::Error>
     where
         T: AsRef<str>,
@@ -326,7 +326,7 @@ impl DiskStorage {
     pub(crate) async fn set<T>(
         &self,
         scopes: ScopeSet<'_, T>,
-        token: Token,
+        token: TokenInfo,
     ) -> Result<(), io::Error>
     where
         T: AsRef<str>,
@@ -341,7 +341,7 @@ impl DiskStorage {
         tokio::fs::write(self.filename.clone(), json).await
     }
 
-    pub(crate) fn get<T>(&self, scopes: ScopeSet<T>) -> Option<Token>
+    pub(crate) fn get<T>(&self, scopes: ScopeSet<T>) -> Option<TokenInfo>
     where
         T: AsRef<str>,
     {
@@ -375,10 +375,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_disk_storage() {
-        let new_token = |access_token: &str| Token {
+        let new_token = |access_token: &str| TokenInfo {
             access_token: access_token.to_owned(),
             refresh_token: None,
-            token_type: "Bearer".to_owned(),
             expires_at: None,
         };
         let scope_set = ScopeSet::from(&["myscope"]);
