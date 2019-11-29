@@ -423,6 +423,28 @@ async fn test_refresh() {
         ))
         .with_body(
             serde_json::json!({
+                "access_token": "accesstoken3",
+                "token_type": "Bearer",
+                "expires_in": 59,
+            })
+            .to_string(),
+        )
+        .expect(1)
+        .create();
+
+    let tok = auth
+        .token(&["https://googleapis.com/some/scope"])
+        .await
+        .expect("failed to get token");
+    assert_eq!("accesstoken3", tok.as_str());
+    _m.assert();
+
+    let _m = mockito::mock("POST", "/token")
+        .match_body(mockito::Matcher::Regex(
+            ".*client_id=9022167.*refresh_token=refreshtoken.*".to_string(),
+        ))
+        .with_body(
+            serde_json::json!({
                 "error": "invalid_request",
             })
             .to_string(),
