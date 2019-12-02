@@ -227,7 +227,7 @@ impl<'de> Deserialize<'de> for JSONTokens {
         }
 
         // Instantiate our Visitor and ask the Deserializer to drive
-        // it over the input data, resulting in an instance of MyMap.
+        // it over the input data.
         deserializer.deserialize_seq(V)
     }
 }

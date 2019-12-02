@@ -55,6 +55,7 @@ impl DeviceFlow {
             scopes,
         )
         .await?;
+        log::debug!("Presenting code to user");
         self.flow_delegate
             .present_user_code(&device_auth_resp)
             .await;
@@ -78,6 +79,7 @@ impl DeviceFlow {
         C: hyper::client::connect::Connect + 'static,
     {
         let mut interval = device_auth_resp.interval;
+        log::debug!("Polling every {:?} for device token", interval);
         loop {
             tokio::timer::delay_for(interval).await;
             interval = match Self::poll_token(
@@ -92,10 +94,16 @@ impl DeviceFlow {
                 Err(Error::AuthError(AuthError { error, .. }))
                     if error.as_str() == "authorization_pending" =>
                 {
+                    log::debug!("still waiting on authorization from the server");
                     interval
                 }
                 Err(Error::AuthError(AuthError { error, .. })) if error.as_str() == "slow_down" => {
-                    interval + Duration::from_secs(5)
+                    let interval = interval + Duration::from_secs(5);
+                    log::debug!(
+                        "server requested slow_down. Increasing polling interval to {:?}",
+                        interval
+                    );
+                    interval
                 }
                 Err(err) => return Err(err),
             }
@@ -140,8 +148,10 @@ impl DeviceFlow {
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(req))
             .unwrap();
-        let resp = client.request(req).await?;
-        let body = resp.into_body().try_concat().await?;
+        log::debug!("requesting code from server: {:?}", req);
+        let (head, body) = client.request(req).await?.into_parts();
+        let body = body.try_concat().await?;
+        log::debug!("received response; head: {:?}, body: {:?}", head, body);
         DeviceAuthResponse::from_json(&body)
     }
 
@@ -186,8 +196,10 @@ impl DeviceFlow {
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(req))
             .unwrap(); // TODO: Error checking
-        let res = client.request(request).await?;
-        let body = res.into_body().try_concat().await?;
+        log::debug!("polling for token: {:?}", request);
+        let (head, body) = client.request(request).await?.into_parts();
+        let body = body.try_concat().await?;
+        log::debug!("received response; head: {:?} body: {:?}", head, body);
         TokenInfo::from_json(&body)
     }
 }

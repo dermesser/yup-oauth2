@@ -126,12 +126,14 @@ impl InstalledFlow {
             scopes,
             self.flow_delegate.redirect_uri(),
         );
-        let authcode = self
+        log::debug!("Presenting auth url to user: {}", url);
+        let auth_code = self
             .flow_delegate
             .present_user_url(&url, true /* need code */)
             .await
             .map_err(Error::UserError)?;
-        self.exchange_auth_code(&authcode, hyper_client, app_secret, None)
+        log::debug!("Received auth code: {}", auth_code);
+        self.exchange_auth_code(&auth_code, hyper_client, app_secret, None)
             .await
     }
 
@@ -162,11 +164,11 @@ impl InstalledFlow {
             scopes,
             Some(redirect_uri.as_ref()),
         );
+        log::debug!("Presenting auth url to user: {}", url);
         let _ = self
             .flow_delegate
             .present_user_url(&url, false /* need code */)
             .await;
-
         let auth_code = server.wait_for_auth_code().await;
         self.exchange_auth_code(&auth_code, hyper_client, app_secret, Some(server_addr))
             .await
@@ -184,8 +186,10 @@ impl InstalledFlow {
     {
         let redirect_uri = self.flow_delegate.redirect_uri();
         let request = Self::request_token(app_secret, authcode, redirect_uri, server_addr);
-        let resp = hyper_client.request(request).await?;
-        let body = resp.into_body().try_concat().await?;
+        log::debug!("Sending request: {:?}", request);
+        let (head, body) = hyper_client.request(request).await?.into_parts();
+        let body = body.try_concat().await?;
+        log::debug!("Received response; head: {:?} body: {:?}", head, body);
         TokenInfo::from_json(&body)
     }
 
@@ -265,6 +269,7 @@ impl InstalledFlowServer {
                 })
                 .await;
         });
+        log::debug!("HTTP server listening on {}", addr);
         Ok(InstalledFlowServer {
             addr,
             auth_code_rx,
@@ -278,11 +283,14 @@ impl InstalledFlowServer {
     }
 
     async fn wait_for_auth_code(self) -> String {
+        log::debug!("Waiting for HTTP server to receive auth code");
         // Wait for the auth code from the server.
         let auth_code = self
             .auth_code_rx
             .await
             .expect("server shutdown while waiting for auth_code");
+        log::debug!("HTTP server received auth code: {}", auth_code);
+        log::debug!("Shutting down HTTP server");
         // auth code received. shutdown the server
         let _ = self.trigger_shutdown_tx.send(());
         self.shutdown_complete.await;

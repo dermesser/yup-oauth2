@@ -32,6 +32,10 @@ impl RefreshFlow {
         client_secret: &ApplicationSecret,
         refresh_token: &str,
     ) -> Result<TokenInfo, Error> {
+        log::debug!(
+            "refreshing access token with refresh token: {}",
+            refresh_token
+        );
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
                 ("client_id", client_secret.client_id.as_str()),
@@ -45,9 +49,10 @@ impl RefreshFlow {
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(req))
             .unwrap();
-
-        let resp = client.request(request).await?;
-        let body = resp.into_body().try_concat().await?;
+        log::debug!("Sending request: {:?}", request);
+        let (head, body) = client.request(request).await?.into_parts();
+        let body = body.try_concat().await?;
+        log::debug!("Received response; head: {:?}, body: {:?}", head, body);
         let mut token = TokenInfo::from_json(&body)?;
         // If the refresh result contains a refresh_token use it, otherwise
         // continue using our previous refresh_token.

@@ -200,8 +200,10 @@ impl ServiceAccountFlow {
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(rqbody))
             .unwrap();
-        let response = hyper_client.request(request).await?;
-        let body = response.into_body().try_concat().await?;
+        log::debug!("requesting token from service account: {:?}", request);
+        let (head, body) = hyper_client.request(request).await?.into_parts();
+        let body = body.try_concat().await?;
+        log::debug!("received response; head: {:?}, body: {:?}", head, body);
         TokenInfo::from_json(&body)
     }
 }

@@ -10,6 +10,7 @@ use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
 use private::AuthFlow;
 
 use std::borrow::Cow;
+use std::fmt;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -22,6 +23,25 @@ pub struct Authenticator<C> {
     auth_flow: AuthFlow,
 }
 
+struct DisplayScopes<'a, T>(&'a [T]);
+impl<'a, T> fmt::Display for DisplayScopes<'a, T>
+where
+    T: AsRef<str>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("[")?;
+        let mut iter = self.0.iter();
+        if let Some(first) = iter.next() {
+            f.write_str(first.as_ref())?;
+            for scope in iter {
+                f.write_str(", ")?;
+                f.write_str(scope.as_ref())?;
+            }
+        }
+        f.write_str("]")
+    }
+}
+
 impl<C> Authenticator<C>
 where
     C: hyper::client::connect::Connect + 'static,
@@ -31,10 +51,15 @@ where
     where
         T: AsRef<str>,
     {
+        log::debug!(
+            "access token requested for scopes: {}",
+            DisplayScopes(scopes)
+        );
         let hashed_scopes = storage::ScopeSet::from(scopes);
         match (self.storage.get(hashed_scopes), self.auth_flow.app_secret()) {
             (Some(t), _) if !t.is_expired() => {
                 // unexpired token found
+                log::debug!("found valid token in cache: {:?}", t);
                 Ok(t.into())
             }
             (
