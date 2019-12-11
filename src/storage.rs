@@ -331,6 +331,7 @@ impl DiskStorage {
     where
         T: AsRef<str>,
     {
+        use tokio::io::AsyncWriteExt;
         let json = {
             use std::ops::Deref;
             let mut lock = self.tokens.lock().unwrap();
@@ -338,7 +339,9 @@ impl DiskStorage {
             serde_json::to_string(lock.deref())
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
         };
-        tokio::fs::write(self.filename.clone(), json).await
+        let mut f = open_writeable_file(&self.filename).await?;
+        f.write_all(json.as_bytes()).await?;
+        Ok(())
     }
 
     pub(crate) fn get<T>(&self, scopes: ScopeSet<T>) -> Option<TokenInfo>
@@ -347,6 +350,30 @@ impl DiskStorage {
     {
         self.tokens.lock().unwrap().get(scopes)
     }
+}
+
+#[cfg(unix)]
+async fn open_writeable_file(
+    filename: impl AsRef<Path>,
+) -> Result<tokio::fs::File, tokio::io::Error> {
+    // Ensure if the file is created it's only readable and writable by the
+    // current user.
+    use std::os::unix::fs::OpenOptionsExt;
+    let opts: tokio::fs::OpenOptions = {
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true).mode(0o600);
+        opts.into()
+    };
+    opts.open(filename).await
+}
+
+#[cfg(not(unix))]
+async fn open_writeable_file(
+    filename: impl AsRef<Path>,
+) -> Result<tokio::fs::File, tokio::io::Error> {
+    // I don't have knowledge of windows or other platforms to know how to
+    // create a file that's only readable by the current user.
+    tokio::fs::File::create(filename).await
 }
 
 #[cfg(test)]
