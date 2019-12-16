@@ -3,6 +3,7 @@
 // See project root for licensing information.
 //
 
+use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::fmt;
@@ -98,8 +99,8 @@ impl TokenStorage for MemoryStorage {
         token: Option<Token>,
     ) -> Result<(), NullError> {
         let matched = self.tokens.iter().find_position(|x| x.hash == scope_hash);
-        if let Some((idx, _)) = matched {
-            self.tokens.remove(idx);
+        if let Some(_) = matched {
+            self.tokens.retain(|x| x.hash != scope_hash);
         }
 
         match token {
@@ -142,6 +143,26 @@ struct JSONToken {
     pub hash: u64,
     pub scopes: Option<Vec<String>>,
     pub token: Token,
+}
+
+impl PartialEq for JSONToken {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
+    }
+}
+
+impl Eq for JSONToken {}
+
+impl PartialOrd for JSONToken {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for JSONToken {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.hash.cmp(&other.hash)
+    }
 }
 
 /// List of tokens in a JSON object
@@ -232,8 +253,8 @@ impl TokenStorage for DiskTokenStorage {
         token: Option<Token>,
     ) -> Result<(), Self::Error> {
         let matched = self.tokens.iter().find_position(|x| x.hash == scope_hash);
-        if let Some((idx, _)) = matched {
-            self.tokens.remove(idx);
+        if let Some(_) = matched {
+            self.tokens.retain(|x| x.hash != scope_hash);
         }
 
         match token {
