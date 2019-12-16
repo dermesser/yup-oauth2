@@ -347,8 +347,8 @@ where
             .extend_pairs(&[
                 ("client_id", &application_secret.client_id[..]),
                 ("client_secret", &application_secret.client_secret),
-                ("code", &device_code),
-                ("grant_type", "http://oauth.net/grant_type/device/1.0"),
+                (fd.device_code_name(), &device_code),
+                ("grant_type", fd.grant_type_for_check()),
             ])
             .finish();
 

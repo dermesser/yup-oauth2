@@ -96,7 +96,7 @@ mod types;
 pub use crate::authenticator::{AuthFlow, Authenticator};
 pub use crate::authenticator_delegate::{
     AuthenticatorDelegate, DefaultAuthenticatorDelegate, DefaultFlowDelegate, FlowDelegate,
-    PollInformation,
+    PollInformation, Retry
 };
 pub use crate::device::{DeviceFlow, GOOGLE_DEVICE_CODE_URL};
 pub use crate::helper::*;
