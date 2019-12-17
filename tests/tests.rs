@@ -10,6 +10,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 
+use httptest::{mappers::*, responders::json_encoded, Expectation, Server};
 use hyper::client::connect::HttpConnector;
 use hyper::Uri;
 use hyper_rustls::HttpsConnector;
@@ -23,13 +24,12 @@ macro_rules! parse_json {
     }
 }
 
-async fn create_device_flow_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
-    let server_url = mockito::server_url();
+async fn create_device_flow_auth(server: &Server) -> Authenticator<HttpsConnector<HttpConnector>> {
     let app_secret: ApplicationSecret = parse_json!({
         "client_id": "902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com",
         "project_id": "yup-test-243420",
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": format!("{}/token", server_url),
+        "token_uri": server.url_str("/token"),
         "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
         "client_secret": "iuMPN6Ne1PD7cos29Tk9rlqH",
         "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob","http://localhost"],
@@ -47,7 +47,7 @@ async fn create_device_flow_auth() -> Authenticator<HttpsConnector<HttpConnector
 
     DeviceFlowAuthenticator::builder(app_secret)
         .flow_delegate(Box::new(FD))
-        .device_code_url(format!("{}/code", server_url))
+        .device_code_url(server.url_str("/code"))
         .build()
         .await
         .unwrap()
@@ -55,121 +55,124 @@ async fn create_device_flow_auth() -> Authenticator<HttpsConnector<HttpConnector
 
 #[tokio::test]
 async fn test_device_success() {
-    let auth = create_device_flow_auth().await;
-    let code_response = serde_json::json!({
-        "device_code": "devicecode",
-        "user_code": "usercode",
-        "verification_url": "https://example.com/verify",
-        "expires_in": 1234567,
-        "interval": 1
-    });
-    let _m = mockito::mock("POST", "/code")
-        .match_body(mockito::Matcher::Regex(
-            ".*client_id=902216714886.*".to_string(),
-        ))
-        .with_status(200)
-        .with_body(code_response.to_string())
-        .create();
-    let token_response = serde_json::json!({
-        "access_token": "accesstoken",
-        "refresh_token": "refreshtoken",
-        "token_type": "Bearer",
-        "expires_in": 1234567
-    });
-    let _m = mockito::mock("POST", "/token")
-        .match_body(mockito::Matcher::Regex(
-            ".*client_secret=iuMPN6Ne1PD7cos29Tk9rlqH&code=devicecode.*".to_string(),
-        ))
-        .with_status(200)
-        .with_body(token_response.to_string())
-        .create();
+    let _ = env_logger::try_init();
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/code"),
+            request::body(url_decoded(contains_entry((
+                "client_id",
+                matches("902216714886")
+            )))),
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "device_code": "devicecode",
+            "user_code": "usercode",
+            "verification_url": "https://example.com/verify",
+            "expires_in": 1234567,
+            "interval": 1
+        }))),
+    );
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+            request::body(url_decoded(all_of![
+                contains_entry(("client_secret", "iuMPN6Ne1PD7cos29Tk9rlqH")),
+                contains_entry(("code", "devicecode")),
+            ])),
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "access_token": "accesstoken",
+            "refresh_token": "refreshtoken",
+            "token_type": "Bearer",
+            "expires_in": 1234567
+        }))),
+    );
 
+    let auth = create_device_flow_auth(&server).await;
     let token = auth
         .token(&["https://www.googleapis.com/scope/1"])
         .await
         .expect("token failed");
     assert_eq!("accesstoken", token.as_str());
-    _m.assert();
 }
 
 #[tokio::test]
 async fn test_device_no_code() {
-    let auth = create_device_flow_auth().await;
-    let code_response = serde_json::json!({
-        "error": "invalid_client_id",
-        "error_description": "description"
-    });
-    let _m = mockito::mock("POST", "/code")
-        .match_body(mockito::Matcher::Regex(
-            ".*client_id=902216714886.*".to_string(),
-        ))
-        .with_status(400)
-        .with_body(code_response.to_string())
-        .create();
-    let token_response = serde_json::json!({
-        "access_token": "accesstoken",
-        "refresh_token": "refreshtoken",
-        "token_type": "Bearer",
-        "expires_in": 1234567
-    });
-    let _m = mockito::mock("POST", "/token")
-        .match_body(mockito::Matcher::Regex(
-            ".*client_secret=iuMPN6Ne1PD7cos29Tk9rlqH&code=devicecode.*".to_string(),
-        ))
-        .with_status(200)
-        .with_body(token_response.to_string())
-        .expect(0) // Never called!
-        .create();
-
+    let _ = env_logger::try_init();
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/code"),
+            request::body(url_decoded(contains_entry((
+                "client_id",
+                matches("902216714886")
+            )))),
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "error": "invalid_client_id",
+            "error_description": "description"
+        }))),
+    );
+    let auth = create_device_flow_auth(&server).await;
     let res = auth.token(&["https://www.googleapis.com/scope/1"]).await;
     assert!(res.is_err());
     assert!(format!("{}", res.unwrap_err()).contains("invalid_client_id"));
-    _m.assert();
 }
 
 #[tokio::test]
 async fn test_device_no_token() {
-    let auth = create_device_flow_auth().await;
-    let code_response = serde_json::json!({
-        "device_code": "devicecode",
-        "user_code": "usercode",
-        "verification_url": "https://example.com/verify",
-        "expires_in": 1234567,
-        "interval": 1
-    });
-    let _m = mockito::mock("POST", "/code")
-        .match_body(mockito::Matcher::Regex(
-            ".*client_id=902216714886.*".to_string(),
-        ))
-        .with_status(200)
-        .with_body(code_response.to_string())
-        .create();
-    let token_response = serde_json::json!({"error": "access_denied"});
-    let _m = mockito::mock("POST", "/token")
-        .match_body(mockito::Matcher::Regex(
-            ".*client_secret=iuMPN6Ne1PD7cos29Tk9rlqH&code=devicecode.*".to_string(),
-        ))
-        .with_status(400)
-        .with_body(token_response.to_string())
-        .expect(1)
-        .create();
-
+    let _ = env_logger::try_init();
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/code"),
+            request::body(url_decoded(contains_entry((
+                "client_id",
+                matches("902216714886")
+            )))),
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+                    "device_code": "devicecode",
+                    "user_code": "usercode",
+                    "verification_url": "https://example.com/verify",
+                    "expires_in": 1234567,
+                    "interval": 1
+        }))),
+    );
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+            request::body(url_decoded(all_of![
+                contains_entry(("client_secret", "iuMPN6Ne1PD7cos29Tk9rlqH")),
+                contains_entry(("code", "devicecode")),
+            ])),
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "error": "access_denied"
+        }))),
+    );
+    let auth = create_device_flow_auth(&server).await;
     let res = auth.token(&["https://www.googleapis.com/scope/1"]).await;
     assert!(res.is_err());
     assert!(format!("{}", res.unwrap_err()).contains("access_denied"));
-    _m.assert();
 }
 
 async fn create_installed_flow_auth(
+    server: &Server,
     method: InstalledFlowReturnMethod,
     filename: Option<PathBuf>,
 ) -> Authenticator<HttpsConnector<HttpConnector>> {
-    let server_url = mockito::server_url();
     let app_secret: ApplicationSecret = parse_json!({
         "client_id": "902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com",
         "project_id": "yup-test-243420",
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": format!("{}/token", server_url),
+        "token_uri": server.url_str("/token"),
         "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
         "client_secret": "iuMPN6Ne1PD7cos29Tk9rlqH",
         "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob","http://localhost"],
@@ -232,78 +235,95 @@ async fn create_installed_flow_auth(
 
 #[tokio::test]
 async fn test_installed_interactive_success() {
-    let auth = create_installed_flow_auth(InstalledFlowReturnMethod::Interactive, None).await;
-    let _m = mockito::mock("POST", "/token")
-        .match_body(mockito::Matcher::Regex(
-            ".*code=authorizationcode.*client_id=9022167.*".to_string(),
-        ))
-        .with_body(
-            serde_json::json!({
-                "access_token": "accesstoken",
-                "refresh_token": "refreshtoken",
-                "token_type": "Bearer",
-                "expires_in": 12345678
-            })
-            .to_string(),
-        )
-        .expect(1)
-        .create();
+    let _ = env_logger::try_init();
+    let server = Server::run();
+    let auth =
+        create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+            request::body(url_decoded(all_of![
+                contains_entry(("code", "authorizationcode")),
+                contains_entry(("client_id", matches("9022167.*"))),
+            ]))
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "access_token": "accesstoken",
+            "refresh_token": "refreshtoken",
+            "token_type": "Bearer",
+            "expires_in": 12345678
+        }))),
+    );
 
     let tok = auth
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
     assert_eq!("accesstoken", tok.as_str());
-    _m.assert();
 }
 
 #[tokio::test]
 async fn test_installed_redirect_success() {
-    let auth = create_installed_flow_auth(InstalledFlowReturnMethod::HTTPRedirect, None).await;
-    let _m = mockito::mock("POST", "/token")
-        .match_body(mockito::Matcher::Regex(
-            ".*code=authorizationcode.*client_id=9022167.*".to_string(),
-        ))
-        .with_body(
-            serde_json::json!({
-                "access_token": "accesstoken",
-                "refresh_token": "refreshtoken",
-                "token_type": "Bearer",
-                "expires_in": 12345678
-            })
-            .to_string(),
-        )
-        .expect(1)
-        .create();
+    let _ = env_logger::try_init();
+    let server = Server::run();
+    let auth =
+        create_installed_flow_auth(&server, InstalledFlowReturnMethod::HTTPRedirect, None).await;
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+            request::body(url_decoded(all_of![
+                contains_entry(("code", "authorizationcode")),
+                contains_entry(("client_id", matches("9022167.*"))),
+            ]))
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "access_token": "accesstoken",
+            "refresh_token": "refreshtoken",
+            "token_type": "Bearer",
+            "expires_in": 12345678
+        }))),
+    );
 
     let tok = auth
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
     assert_eq!("accesstoken", tok.as_str());
-    _m.assert();
 }
 
 #[tokio::test]
 async fn test_installed_error() {
-    let auth = create_installed_flow_auth(InstalledFlowReturnMethod::Interactive, None).await;
-    let _m = mockito::mock("POST", "/token")
-        .match_body(mockito::Matcher::Regex(
-            ".*code=authorizationcode.*client_id=9022167.*".to_string(),
-        ))
-        .with_status(400)
-        .with_body(serde_json::json!({"error": "invalid_code"}).to_string())
-        .expect(1)
-        .create();
+    let _ = env_logger::try_init();
+    let server = Server::run();
+    let auth =
+        create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+            request::body(url_decoded(all_of![
+                contains_entry(("code", "authorizationcode")),
+                contains_entry(("client_id", matches("9022167.*"))),
+            ]))
+        ])
+        .respond_with(
+            http::Response::builder()
+                .status(404)
+                .body(serde_json::json!({"error": "invalid_code"}).to_string())
+                .unwrap(),
+        ),
+    );
 
     let tokr = auth.token(&["https://googleapis.com/some/scope"]).await;
     assert!(tokr.is_err());
     assert!(format!("{}", tokr.unwrap_err()).contains("invalid_code"));
-    _m.assert();
 }
 
-async fn create_service_account_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
-    let server_url = &mockito::server_url();
+async fn create_service_account_auth(
+    server: &Server,
+) -> Authenticator<HttpsConnector<HttpConnector>> {
     let key: ServiceAccountKey = parse_json!({
         "type": "service_account",
         "project_id": "yup-test-243420",
@@ -312,7 +332,7 @@ async fn create_service_account_auth() -> Authenticator<HttpsConnector<HttpConne
         "client_email": "yup-test-sa-1@yup-test-243420.iam.gserviceaccount.com",
         "client_id": "102851967901799660408",
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": format!("{}/token", server_url),
+        "token_uri": server.url_str("/token"),
         "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
         "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/yup-test-sa-1%40yup-test-243420.iam.gserviceaccount.com"
     });
@@ -326,131 +346,134 @@ async fn create_service_account_auth() -> Authenticator<HttpsConnector<HttpConne
 #[tokio::test]
 async fn test_service_account_success() {
     use chrono::Utc;
-    let auth = create_service_account_auth().await;
+    let _ = env_logger::try_init();
+    let server = Server::run();
+    let auth = create_service_account_auth(&server).await;
 
-    let json_response = serde_json::json!({
-        "access_token": "ya29.c.ElouBywiys0LyNaZoLPJcp1Fdi2KjFMxzvYKLXkTdvM-rDfqKlvEq6PiMhGoGHx97t5FAvz3eb_ahdwlBjSStxHtDVQB4ZPRJQ_EOi-iS7PnayahU2S9Jp8S6rk",
-        "expires_in": 3600,
-        "token_type": "Bearer"
-    });
-    let _m = mockito::mock("POST", "/token")
-        .with_status(200)
-        .with_header("content-type", "text/json")
-        .with_body(json_response.to_string())
-        .expect(1)
-        .create();
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+        ]).respond_with(json_encoded(serde_json::json!({
+            "access_token": "ya29.c.ElouBywiys0LyNaZoLPJcp1Fdi2KjFMxzvYKLXkTdvM-rDfqKlvEq6PiMhGoGHx97t5FAvz3eb_ahdwlBjSStxHtDVQB4ZPRJQ_EOi-iS7PnayahU2S9Jp8S6rk",
+            "expires_in": 3600,
+            "token_type": "Bearer"
+        })))
+    );
     let tok = auth
         .token(&["https://www.googleapis.com/auth/pubsub"])
         .await
         .expect("token failed");
     assert!(tok.as_str().contains("ya29.c.ElouBywiys0Ly"));
     assert!(Utc::now() + chrono::Duration::seconds(3600) >= tok.expiration_time().unwrap());
-    _m.assert();
 }
 
 #[tokio::test]
 async fn test_service_account_error() {
-    let auth = create_service_account_auth().await;
-    let bad_json_response = serde_json::json!({
-        "error": "access_denied",
-    });
+    let _ = env_logger::try_init();
+    let server = Server::run();
+    let auth = create_service_account_auth(&server).await;
+    server.expect(
+        Expectation::matching(all_of![request::method("POST"), request::path("/token"),])
+            .respond_with(json_encoded(serde_json::json!({
+                "error": "access_denied",
+            }))),
+    );
 
-    let _m = mockito::mock("POST", "/token")
-        .with_status(200)
-        .with_header("content-type", "text/json")
-        .with_body(bad_json_response.to_string())
-        .create();
     let result = auth
         .token(&["https://www.googleapis.com/auth/pubsub"])
         .await;
     assert!(result.is_err());
-    _m.assert();
 }
 
 #[tokio::test]
 async fn test_refresh() {
-    let auth = create_installed_flow_auth(InstalledFlowReturnMethod::Interactive, None).await;
+    let _ = env_logger::try_init();
+    let server = Server::run();
+    let auth =
+        create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
     // We refresh a token whenever it's within 1 minute of expiring. So
     // acquiring a token that expires in 59 seconds will force a refresh on
     // the next token call.
-    let _m = mockito::mock("POST", "/token")
-        .match_body(mockito::Matcher::Regex(
-            ".*code=authorizationcode.*client_id=9022167.*".to_string(),
-        ))
-        .with_body(
-            serde_json::json!({
-                "access_token": "accesstoken",
-                "refresh_token": "refreshtoken",
-                "token_type": "Bearer",
-                "expires_in": 59,
-            })
-            .to_string(),
-        )
-        .expect(1)
-        .create();
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+            request::body(url_decoded(all_of![
+                contains_entry(("code", "authorizationcode")),
+                contains_entry(("client_id", matches("^9022167"))),
+            ]))
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "access_token": "accesstoken",
+            "refresh_token": "refreshtoken",
+            "token_type": "Bearer",
+            "expires_in": 59,
+        }))),
+    );
     let tok = auth
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
     assert_eq!("accesstoken", tok.as_str());
-    _m.assert();
 
-    let _m = mockito::mock("POST", "/token")
-        .match_body(mockito::Matcher::Regex(
-            ".*client_id=9022167.*refresh_token=refreshtoken.*".to_string(),
-        ))
-        .with_body(
-            serde_json::json!({
-                "access_token": "accesstoken2",
-                "token_type": "Bearer",
-                "expires_in": 59,
-            })
-            .to_string(),
-        )
-        .expect(1)
-        .create();
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+            request::body(url_decoded(all_of![
+                contains_entry(("refresh_token", "refreshtoken")),
+                contains_entry(("client_id", matches("^9022167"))),
+            ]))
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "access_token": "accesstoken2",
+            "token_type": "Bearer",
+            "expires_in": 59,
+        }))),
+    );
 
     let tok = auth
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
     assert_eq!("accesstoken2", tok.as_str());
-    _m.assert();
 
-    let _m = mockito::mock("POST", "/token")
-        .match_body(mockito::Matcher::Regex(
-            ".*client_id=9022167.*refresh_token=refreshtoken.*".to_string(),
-        ))
-        .with_body(
-            serde_json::json!({
-                "access_token": "accesstoken3",
-                "token_type": "Bearer",
-                "expires_in": 59,
-            })
-            .to_string(),
-        )
-        .expect(1)
-        .create();
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+            request::body(url_decoded(all_of![
+                contains_entry(("refresh_token", "refreshtoken")),
+                contains_entry(("client_id", matches("^9022167"))),
+            ]))
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "access_token": "accesstoken3",
+            "token_type": "Bearer",
+            "expires_in": 59,
+        }))),
+    );
 
     let tok = auth
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
     assert_eq!("accesstoken3", tok.as_str());
-    _m.assert();
 
-    let _m = mockito::mock("POST", "/token")
-        .match_body(mockito::Matcher::Regex(
-            ".*client_id=9022167.*refresh_token=refreshtoken.*".to_string(),
-        ))
-        .with_body(
-            serde_json::json!({
-                "error": "invalid_request",
-            })
-            .to_string(),
-        )
-        .expect(1)
-        .create();
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+            request::body(url_decoded(all_of![
+                contains_entry(("refresh_token", "refreshtoken")),
+                contains_entry(("client_id", matches("^9022167"))),
+            ]))
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "error": "invalid_request",
+        }))),
+    );
 
     let tok_err = auth
         .token(&["https://googleapis.com/some/scope"])
@@ -463,27 +486,30 @@ async fn test_refresh() {
         }) => {}
         e => panic!("unexpected error on refresh: {:?}", e),
     }
-    _m.assert();
 }
 
 #[tokio::test]
 async fn test_memory_storage() {
-    let auth = create_installed_flow_auth(InstalledFlowReturnMethod::Interactive, None).await;
-    let _m = mockito::mock("POST", "/token")
-        .match_body(mockito::Matcher::Regex(
-            ".*code=authorizationcode.*client_id=9022167.*".to_string(),
-        ))
-        .with_body(
-            serde_json::json!({
-                "access_token": "accesstoken",
-                "refresh_token": "refreshtoken",
-                "token_type": "Bearer",
-                "expires_in": 12345678
-            })
-            .to_string(),
-        )
-        .expect(1)
-        .create();
+    let _ = env_logger::try_init();
+    let server = Server::run();
+    let auth =
+        create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+            request::body(url_decoded(all_of![
+                contains_entry(("code", "authorizationcode")),
+                contains_entry(("client_id", matches("^9022167"))),
+            ]))
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "access_token": "accesstoken",
+            "refresh_token": "refreshtoken",
+            "token_type": "Bearer",
+            "expires_in": 12345678,
+        }))),
+    );
 
     // Call token twice. Ensure that only one http request is made and
     // identical tokens are returned.
@@ -497,59 +523,63 @@ async fn test_memory_storage() {
         .expect("failed to get token");
     assert_eq!(token1.as_str(), "accesstoken");
     assert_eq!(token1, token2);
-    _m.assert();
 
     // Create a new authenticator. This authenticator does not share a cache
     // with the previous one. Validate that it receives a different token.
-    let auth2 = create_installed_flow_auth(InstalledFlowReturnMethod::Interactive, None).await;
-    let _m = mockito::mock("POST", "/token")
-        .match_body(mockito::Matcher::Regex(
-            ".*code=authorizationcode.*client_id=9022167.*".to_string(),
-        ))
-        .with_body(
-            serde_json::json!({
-                "access_token": "accesstoken2",
-                "refresh_token": "refreshtoken2",
-                "token_type": "Bearer",
-                "expires_in": 12345678
-            })
-            .to_string(),
-        )
-        .expect(1)
-        .create();
+    let auth2 =
+        create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+            request::body(url_decoded(all_of![
+                contains_entry(("code", "authorizationcode")),
+                contains_entry(("client_id", matches("^9022167"))),
+            ]))
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "access_token": "accesstoken2",
+            "refresh_token": "refreshtoken2",
+            "token_type": "Bearer",
+            "expires_in": 12345678,
+        }))),
+    );
     let token3 = auth2
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
     assert_eq!(token3.as_str(), "accesstoken2");
-    _m.assert();
 }
 
 #[tokio::test]
 async fn test_disk_storage() {
+    let _ = env_logger::try_init();
+    let server = Server::run();
     let tempdir = tempfile::tempdir().unwrap();
     let storage_path = tempdir.path().join("tokenstorage.json");
+    server.expect(
+        Expectation::matching(all_of![
+            request::method("POST"),
+            request::path("/token"),
+            request::body(url_decoded(all_of![
+                contains_entry(("code", "authorizationcode")),
+                contains_entry(("client_id", matches("^9022167"))),
+            ])),
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "access_token": "accesstoken",
+            "refresh_token": "refreshtoken",
+            "token_type": "Bearer",
+            "expires_in": 12345678
+        }))),
+    );
     {
         let auth = create_installed_flow_auth(
+            &server,
             InstalledFlowReturnMethod::Interactive,
             Some(storage_path.clone()),
         )
         .await;
-        let _m = mockito::mock("POST", "/token")
-            .match_body(mockito::Matcher::Regex(
-                ".*code=authorizationcode.*client_id=9022167.*".to_string(),
-            ))
-            .with_body(
-                serde_json::json!({
-                    "access_token": "accesstoken",
-                    "refresh_token": "refreshtoken",
-                    "token_type": "Bearer",
-                    "expires_in": 12345678
-                })
-                .to_string(),
-            )
-            .expect(1)
-            .create();
 
         // Call token twice. Ensure that only one http request is made and
         // identical tokens are returned.
@@ -563,13 +593,13 @@ async fn test_disk_storage() {
             .expect("failed to get token");
         assert_eq!(token1.as_str(), "accesstoken");
         assert_eq!(token1, token2);
-        _m.assert();
     }
 
     // Create a new authenticator. This authenticator uses the same token
     // storage file as the previous one so should receive a token without
     // making any http requests.
     let auth = create_installed_flow_auth(
+        &server,
         InstalledFlowReturnMethod::Interactive,
         Some(storage_path.clone()),
     )

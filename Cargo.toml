@@ -25,7 +25,7 @@ tokio = { version = "0.2", features = ["fs", "macros", "io-std", "time"] }
 url = "1"
 
 [dev-dependencies]
-mockito = "0.17"
+httptest = "0.5"
 env_logger = "0.6"
 tempfile = "3.1"
 
