@@ -7,7 +7,6 @@ use crate::types::{ApplicationSecret, TokenInfo};
 use std::borrow::Cow;
 use std::time::Duration;
 
-use futures::prelude::*;
 use hyper::header;
 use url::form_urlencoded;
 
@@ -46,7 +45,7 @@ impl DeviceFlow {
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + 'static,
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
     {
         let device_auth_resp = Self::request_code(
             &self.app_secret,
@@ -76,12 +75,12 @@ impl DeviceFlow {
         grant_type: &str,
     ) -> Result<TokenInfo, Error>
     where
-        C: hyper::client::connect::Connect + 'static,
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
     {
         let mut interval = device_auth_resp.interval;
         log::debug!("Polling every {:?} for device token", interval);
         loop {
-            tokio::timer::delay_for(interval).await;
+            tokio::time::delay_for(interval).await;
             interval = match Self::poll_token(
                 &app_secret,
                 hyper_client,
@@ -133,7 +132,7 @@ impl DeviceFlow {
     ) -> Result<DeviceAuthResponse, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + 'static,
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
     {
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
@@ -150,7 +149,7 @@ impl DeviceFlow {
             .unwrap();
         log::debug!("requesting code from server: {:?}", req);
         let (head, body) = client.request(req).await?.into_parts();
-        let body = body.try_concat().await?;
+        let body = hyper::body::to_bytes(body).await?;
         log::debug!("received response; head: {:?}, body: {:?}", head, body);
         DeviceAuthResponse::from_json(&body)
     }
@@ -180,7 +179,7 @@ impl DeviceFlow {
         grant_type: &str,
     ) -> Result<TokenInfo, Error>
     where
-        C: hyper::client::connect::Connect + 'static,
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
     {
         // We should be ready for a new request
         let req = form_urlencoded::Serializer::new(String::new())
@@ -198,7 +197,7 @@ impl DeviceFlow {
             .unwrap(); // TODO: Error checking
         log::debug!("polling for token: {:?}", request);
         let (head, body) = client.request(request).await?.into_parts();
-        let body = body.try_concat().await?;
+        let body = hyper::body::to_bytes(body).await?;
         log::debug!("received response; head: {:?} body: {:?}", head, body);
         TokenInfo::from_json(&body)
     }

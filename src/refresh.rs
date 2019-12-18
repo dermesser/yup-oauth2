@@ -1,7 +1,6 @@
 use crate::error::Error;
 use crate::types::{ApplicationSecret, TokenInfo};
 
-use futures_util::try_stream::TryStreamExt;
 use hyper::header;
 use url::form_urlencoded;
 
@@ -27,11 +26,14 @@ impl RefreshFlow {
     ///
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub(crate) async fn refresh_token<C: hyper::client::connect::Connect + 'static>(
+    pub(crate) async fn refresh_token<C>(
         client: &hyper::Client<C>,
         client_secret: &ApplicationSecret,
         refresh_token: &str,
-    ) -> Result<TokenInfo, Error> {
+    ) -> Result<TokenInfo, Error>
+    where
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+    {
         log::debug!(
             "refreshing access token with refresh token: {}",
             refresh_token
@@ -51,7 +53,7 @@ impl RefreshFlow {
             .unwrap();
         log::debug!("Sending request: {:?}", request);
         let (head, body) = client.request(request).await?.into_parts();
-        let body = body.try_concat().await?;
+        let body = hyper::body::to_bytes(body).await?;
         log::debug!("Received response; head: {:?}, body: {:?}", head, body);
         let mut token = TokenInfo::from_json(&body)?;
         // If the refresh result contains a refresh_token use it, otherwise

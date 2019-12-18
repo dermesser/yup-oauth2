@@ -1,4 +1,3 @@
-use tokio;
 use yup_oauth2::ServiceAccountAuthenticator;
 
 #[tokio::main]

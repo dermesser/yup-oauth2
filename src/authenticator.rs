@@ -44,7 +44,7 @@ where
 
 impl<C> Authenticator<C>
 where
-    C: hyper::client::connect::Connect + 'static,
+    C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
 {
     /// Return the current token for the provided scopes.
     pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<AccessToken, Error>
@@ -403,7 +403,7 @@ mod private {
         ) -> Result<TokenInfo, Error>
         where
             T: AsRef<str>,
-            C: hyper::client::connect::Connect + 'static,
+            C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
         {
             match self {
                 AuthFlow::DeviceFlow(device_flow) => device_flow.token(hyper_client, scopes).await,
@@ -421,7 +421,7 @@ mod private {
 /// A trait implemented for any hyper::Client as well as the DefaultHyperClient.
 pub trait HyperClientBuilder {
     /// The hyper connector that the resulting hyper client will use.
-    type Connector: hyper::client::connect::Connect + 'static;
+    type Connector: hyper::client::connect::Connect + Clone + Send + Sync + 'static;
 
     /// Create a hyper::Client
     fn build_hyper_client(self) -> hyper::Client<Self::Connector>;
@@ -441,7 +441,7 @@ impl HyperClientBuilder for DefaultHyperClient {
 
 impl<C> HyperClientBuilder for hyper::Client<C>
 where
-    C: hyper::client::connect::Connect + 'static,
+    C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
 {
     type Connector = C;
 

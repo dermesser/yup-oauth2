@@ -1,11 +1,8 @@
 use yup_oauth2::DeviceFlowAuthenticator;
 
-use std::path;
-use tokio;
-
 #[tokio::main]
 async fn main() {
-    let app_secret = yup_oauth2::read_application_secret(path::Path::new("clientsecret.json"))
+    let app_secret = yup_oauth2::read_application_secret("clientsecret.json")
         .await
         .expect("clientsecret");
     let auth = DeviceFlowAuthenticator::builder(app_secret)

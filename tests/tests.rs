@@ -41,7 +41,7 @@ async fn create_device_flow_auth() -> Authenticator<HttpsConnector<HttpConnector
             pi: &'a DeviceAuthResponse,
         ) -> Pin<Box<dyn Future<Output = ()> + 'a + Send>> {
             assert_eq!("https://example.com/verify", pi.verification_uri);
-            Box::pin(futures::future::ready(()))
+            Box::pin(async {})
         }
     }
 

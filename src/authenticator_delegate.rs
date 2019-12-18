@@ -5,7 +5,7 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use chrono::{DateTime, Local, Utc};
-use futures::prelude::*;
+use std::future::Future;
 
 /// Contains state of pending authentication requests
 #[derive(Clone, Debug, PartialEq)]

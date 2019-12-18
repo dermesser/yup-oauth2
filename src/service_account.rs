@@ -16,7 +16,6 @@ use crate::types::TokenInfo;
 
 use std::io;
 
-use futures::prelude::*;
 use hyper::header;
 use rustls::{
     self,
@@ -184,7 +183,7 @@ impl ServiceAccountFlow {
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + 'static,
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
     {
         let claims = Claims::new(&self.key, scopes, self.subject.as_ref().map(|x| x.as_str()));
         let signed = self.signer.sign_claims(&claims).map_err(|_| {
@@ -202,7 +201,7 @@ impl ServiceAccountFlow {
             .unwrap();
         log::debug!("requesting token from service account: {:?}", request);
         let (head, body) = hyper_client.request(request).await?.into_parts();
-        let body = body.try_concat().await?;
+        let body = hyper::body::to_bytes(body).await?;
         log::debug!("received response; head: {:?}, body: {:?}", head, body);
         TokenInfo::from_json(&body)
     }

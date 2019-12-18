@@ -7,13 +7,9 @@ use crate::error::Error;
 use crate::types::{ApplicationSecret, TokenInfo};
 
 use std::convert::AsRef;
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
-use futures::future::FutureExt;
-use futures_util::try_stream::TryStreamExt;
 use hyper::header;
 use tokio::sync::oneshot;
 use url::form_urlencoded;
@@ -96,7 +92,7 @@ impl InstalledFlow {
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + 'static,
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
     {
         match self.method {
             InstalledFlowReturnMethod::HTTPRedirect => {
@@ -118,7 +114,7 @@ impl InstalledFlow {
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + 'static,
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
     {
         let url = build_authentication_request_url(
             &app_secret.auth_uri,
@@ -145,7 +141,7 @@ impl InstalledFlow {
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + 'static,
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
     {
         use std::borrow::Cow;
         let server = InstalledFlowServer::run()?;
@@ -182,13 +178,13 @@ impl InstalledFlow {
         server_addr: Option<SocketAddr>,
     ) -> Result<TokenInfo, Error>
     where
-        C: hyper::client::connect::Connect + 'static,
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
     {
         let redirect_uri = self.flow_delegate.redirect_uri();
         let request = Self::request_token(app_secret, authcode, redirect_uri, server_addr);
         log::debug!("Sending request: {:?}", request);
         let (head, body) = hyper_client.request(request).await?.into_parts();
-        let body = body.try_concat().await?;
+        let body = hyper::body::to_bytes(body).await?;
         log::debug!("Received response; head: {:?} body: {:?}", head, body);
         TokenInfo::from_json(&body)
     }
@@ -224,22 +220,11 @@ impl InstalledFlow {
     }
 }
 
-fn spawn_with_handle<F>(f: F) -> impl Future<Output = ()>
-where
-    F: Future<Output = ()> + 'static + Send,
-{
-    let (tx, rx) = oneshot::channel();
-    tokio::spawn(f.map(move |_| tx.send(()).unwrap()));
-    async {
-        let _ = rx.await;
-    }
-}
-
 struct InstalledFlowServer {
     addr: SocketAddr,
     auth_code_rx: oneshot::Receiver<String>,
     trigger_shutdown_tx: oneshot::Sender<()>,
-    shutdown_complete: Pin<Box<dyn Future<Output = ()> + Send>>,
+    shutdown_complete: tokio::task::JoinHandle<()>,
 }
 
 impl InstalledFlowServer {
@@ -262,7 +247,7 @@ impl InstalledFlowServer {
         let server = hyper::server::Server::try_bind(&addr)?;
         let server = server.http1_only(true).serve(service);
         let addr = server.local_addr();
-        let shutdown_complete = spawn_with_handle(async {
+        let shutdown_complete = tokio::spawn(async {
             let _ = server
                 .with_graceful_shutdown(async move {
                     let _ = trigger_shutdown_rx.await;
@@ -274,7 +259,7 @@ impl InstalledFlowServer {
             addr,
             auth_code_rx,
             trigger_shutdown_tx,
-            shutdown_complete: Box::pin(shutdown_complete),
+            shutdown_complete,
         })
     }
 
@@ -293,7 +278,7 @@ impl InstalledFlowServer {
         log::debug!("Shutting down HTTP server");
         // auth code received. shutdown the server
         let _ = self.trigger_shutdown_tx.send(());
-        self.shutdown_complete.await;
+        let _ = self.shutdown_complete.await;
         auth_code
     }
 }
