@@ -23,7 +23,7 @@ pub const GOOGLE_DEVICE_CODE_URL: &'static str = "https://accounts.google.com/o/
 /// Implements the [Oauth2 Device Flow](https://developers.google.com/youtube/v3/guides/authentication#devices)
 /// It operates in two steps:
 /// * obtain a code to show to the user
-// * (repeatedly) poll for the user to authenticate your application
+/// * (repeatedly) poll for the user to authenticate your application
 #[derive(Clone)]
 pub struct DeviceFlow<FD> {
     application_secret: ApplicationSecret,
