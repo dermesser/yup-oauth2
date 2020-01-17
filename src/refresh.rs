@@ -1,12 +1,7 @@
-use crate::types::{ApplicationSecret, JsonError, RefreshResult, RequestError};
+use crate::error::Error;
+use crate::types::{ApplicationSecret, TokenInfo};
 
-use super::Token;
-use chrono::Utc;
-use futures::stream::Stream;
-use futures::Future;
-use hyper;
 use hyper::header;
-use serde_json as json;
 use url::form_urlencoded;
 
 /// Implements the [OAuth2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
@@ -14,7 +9,7 @@ use url::form_urlencoded;
 /// Refresh an expired access token, as obtained by any other authentication flow.
 /// This flow is useful when your `Token` is expired and allows to obtain a new
 /// and valid access token.
-pub struct RefreshFlow;
+pub(crate) struct RefreshFlow;
 
 impl RefreshFlow {
     /// Attempt to refresh the given token, and obtain a new, valid one.
@@ -31,155 +26,41 @@ impl RefreshFlow {
     ///
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub fn refresh_token<'a, C: 'static + hyper::client::connect::Connect>(
-        client: hyper::Client<C>,
-        client_secret: ApplicationSecret,
-        refresh_token: String,
-    ) -> impl 'a + Future<Item = RefreshResult, Error = RequestError> {
+    pub(crate) async fn refresh_token<C>(
+        client: &hyper::Client<C>,
+        client_secret: &ApplicationSecret,
+        refresh_token: &str,
+    ) -> Result<TokenInfo, Error>
+    where
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+    {
+        log::debug!(
+            "refreshing access token with refresh token: {}",
+            refresh_token
+        );
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
-                ("client_id", client_secret.client_id.clone()),
-                ("client_secret", client_secret.client_secret.clone()),
-                ("refresh_token", refresh_token.to_string()),
-                ("grant_type", "refresh_token".to_string()),
+                ("client_id", client_secret.client_id.as_str()),
+                ("client_secret", client_secret.client_secret.as_str()),
+                ("refresh_token", refresh_token),
+                ("grant_type", "refresh_token"),
             ])
             .finish();
 
-        let request = hyper::Request::post(client_secret.token_uri.clone())
+        let request = hyper::Request::post(&client_secret.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(hyper::Body::from(req))
-            .unwrap(); // TODO: error handling
-
-        client
-            .request(request)
-            .then(|r| {
-                match r {
-                    Err(err) => return Err(RefreshResult::Error(err)),
-                    Ok(res) => {
-                        Ok(res
-                            .into_body()
-                            .concat2()
-                            .wait()
-                            .map(|c| String::from_utf8(c.into_bytes().to_vec()).unwrap())
-                            .unwrap()) // TODO: error handling
-                    }
-                }
-            })
-            .then(move |maybe_json_str: Result<String, RefreshResult>| {
-                if let Err(e) = maybe_json_str {
-                    return Ok(e);
-                }
-                let json_str = maybe_json_str.unwrap();
-                #[derive(Deserialize)]
-                struct JsonToken {
-                    access_token: String,
-                    token_type: String,
-                    expires_in: i64,
-                }
-
-                match json::from_str::<JsonError>(&json_str) {
-                    Err(_) => {}
-                    Ok(res) => {
-                        return Ok(RefreshResult::RefreshError(
-                            res.error,
-                            res.error_description,
-                        ))
-                    }
-                }
-
-                let t: JsonToken = json::from_str(&json_str).unwrap();
-                Ok(RefreshResult::Success(Token {
-                    access_token: t.access_token,
-                    token_type: t.token_type,
-                    refresh_token: Some(refresh_token.to_string()),
-                    expires_in: None,
-                    expires_in_timestamp: Some(Utc::now().timestamp() + t.expires_in),
-                }))
-            })
-            .map_err(RequestError::Refresh)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::helper;
-
-    use hyper;
-    use hyper_rustls::HttpsConnector;
-    use mockito;
-    use tokio;
-
-    #[test]
-    fn test_refresh_end2end() {
-        let server_url = mockito::server_url();
-
-        let app_secret = r#"{"installed":{"client_id":"902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com","project_id":"yup-test-243420","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"iuMPN6Ne1PD7cos29Tk9rlqH","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"#;
-        let mut app_secret = helper::parse_application_secret(app_secret).unwrap();
-        app_secret.token_uri = format!("{}/token", server_url);
-        let refresh_token = "my-refresh-token".to_string();
-
-        let https = HttpsConnector::new(1);
-        let client = hyper::Client::builder()
-            .keep_alive(false)
-            .build::<_, hyper::Body>(https);
-
-        let mut rt = tokio::runtime::Builder::new()
-            .core_threads(1)
-            .panic_handler(|e| std::panic::resume_unwind(e))
-            .build()
             .unwrap();
-
-        // Success
-        {
-            let _m = mockito::mock("POST", "/token")
-                .match_body(
-                    mockito::Matcher::Regex(".*client_id=902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com.*refresh_token=my-refresh-token.*".to_string()))
-                .with_status(200)
-                .with_body(r#"{"access_token": "new-access-token", "token_type": "Bearer", "expires_in": 1234567}"#)
-                .create();
-            let fut = RefreshFlow::refresh_token(
-                client.clone(),
-                app_secret.clone(),
-                refresh_token.clone(),
-            )
-            .then(|rr| {
-                let rr = rr.unwrap();
-                match rr {
-                    RefreshResult::Success(tok) => {
-                        assert_eq!("new-access-token", tok.access_token);
-                        assert_eq!("Bearer", tok.token_type);
-                    }
-                    _ => panic!(format!("unexpected RefreshResult {:?}", rr)),
-                }
-                Ok(()) as Result<(), ()>
-            });
-
-            rt.block_on(fut).expect("block_on");
-            _m.assert();
-        }
-        // Refresh error.
-        {
-            let _m = mockito::mock("POST", "/token")
-                .match_body(
-                    mockito::Matcher::Regex(".*client_id=902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com.*refresh_token=my-refresh-token.*".to_string()))
-                .with_status(400)
-                .with_body(r#"{"error": "invalid_token"}"#)
-                .create();
-
-            let fut = RefreshFlow::refresh_token(client, app_secret, refresh_token).then(|rr| {
-                let rr = rr.unwrap();
-                match rr {
-                    RefreshResult::RefreshError(e, None) => {
-                        assert_eq!(e, "invalid_token");
-                    }
-                    _ => panic!(format!("unexpected RefreshResult {:?}", rr)),
-                }
-                Ok(())
-            });
-
-            tokio::run(fut);
-            _m.assert();
-        }
+        log::debug!("Sending request: {:?}", request);
+        let (head, body) = client.request(request).await?.into_parts();
+        let body = hyper::body::to_bytes(body).await?;
+        log::debug!("Received response; head: {:?}, body: {:?}", head, body);
+        let mut token = TokenInfo::from_json(&body)?;
+        // If the refresh result contains a refresh_token use it, otherwise
+        // continue using our previous refresh_token.
+        token
+            .refresh_token
+            .get_or_insert_with(|| refresh_token.to_owned());
+        Ok(token)
     }
 }
