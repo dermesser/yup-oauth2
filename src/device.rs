@@ -18,7 +18,7 @@ pub const GOOGLE_GRANT_TYPE: &str = "http://oauth.net/grant_type/device/1.0";
 /// Implements the [Oauth2 Device Flow](https://developers.google.com/youtube/v3/guides/authentication#devices)
 /// It operates in two steps:
 /// * obtain a code to show to the user
-// * (repeatedly) poll for the user to authenticate your application
+/// * (repeatedly) poll for the user to authenticate your application
 pub struct DeviceFlow {
     pub(crate) app_secret: ApplicationSecret,
     pub(crate) device_code_url: Cow<'static, str>,
