@@ -20,72 +20,60 @@
 //! based on the Google APIs; it may or may not work with other providers.
 //!
 //! # Installed Flow Usage
-//! The `InstalledFlow` involves showing a URL to the user (or opening it in a browser)
+//! The installed flow involves showing a URL to the user (or opening it in a browser)
 //! and then either prompting the user to enter a displayed code, or make the authorizing
 //! website redirect to a web server spun up by this library and running on localhost.
 //!
-//! In order to use the interactive method, use the `InstalledInteractive` `FlowType`;
-//! for the redirect method, use `InstalledRedirect`, with the port number to let the
-//! server listen on.
+//! In order to use the interactive method, use the `Interactive` `InstalledFlowReturnMethod`;
+//! for the redirect method, use `HTTPRedirect`.
 //!
 //! You can implement your own `AuthenticatorDelegate` in order to customize the flow;
-//! the `InstalledFlow` uses the `present_user_url` method.
+//! the installed flow uses the `present_user_url` method.
 //!
-//! The returned `Token` is stored permanently in the given token storage in order to
-//! authorize future API requests to the same scopes.
+//! The returned `Token` will be stored in memory in order to authorize future
+//! API requests to the same scopes. The tokens can optionally be persisted to
+//! disk by using `persist_tokens_to_disk` when creating the authenticator.
 //!
 //! The following example, which is derived from the (actual and runnable) example in
 //! `examples/test-installed/`, shows the basics of using this crate:
 //!
 //! ```test_harness,no_run
-//! use futures::prelude::*;
-//! use yup_oauth2::GetToken;
-//! use yup_oauth2::{Authenticator, InstalledFlow};
+//! use yup_oauth2::{InstalledFlowAuthenticator, InstalledFlowReturnMethod};
 //!
-//! use hyper::client::Client;
-//! use hyper_rustls::HttpsConnector;
-//!
-//! use std::path::Path;
-//!
-//! fn main() {
+//! #[tokio::main]
+//! async fn main() {
 //!     // Read application secret from a file. Sometimes it's easier to compile it directly into
 //!     // the binary. The clientsecret file contains JSON like `{"installed":{"client_id": ... }}`
-//!     let secret = yup_oauth2::read_application_secret(Path::new("clientsecret.json"))
+//!     let secret = yup_oauth2::read_application_secret("clientsecret.json")
+//!         .await
 //!         .expect("clientsecret.json");
 //!
 //!     // Create an authenticator that uses an InstalledFlow to authenticate. The
-//!      // authentication tokens are persisted to a file named tokencache.json. The
-//!      // authenticator takes care of caching tokens to disk and refreshing tokens once
-//!      // they've expired.
-//!     let mut auth = Authenticator::new(
-//!         InstalledFlow::new(secret, yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect(0))
-//!     )
+//!     // authentication tokens are persisted to a file named tokencache.json. The
+//!     // authenticator takes care of caching tokens to disk and refreshing tokens once
+//!     // they've expired.
+//!     let mut auth = InstalledFlowAuthenticator::builder(secret, InstalledFlowReturnMethod::HTTPRedirect)
 //!     .persist_tokens_to_disk("tokencache.json")
 //!     .build()
+//!     .await
 //!     .unwrap();
 //!
-//!     let s = "https://www.googleapis.com/auth/drive.file".to_string();
-//!     let scopes = vec![s];
+//!     let scopes = &["https://www.googleapis.com/auth/drive.file"];
 //!
 //!     // token(<scopes>) is the one important function of this crate; it does everything to
 //!     // obtain a token that can be sent e.g. as Bearer token.
-//!     let tok = auth.token(scopes);
-//!     // Finally we print the token.
-//!     let fut = tok.map_err(|e| println!("error: {:?}", e)).and_then(|t| {
-//!         println!("The token is {:?}", t);
-//!         Ok(())
-//!     });
-//!
-//!     tokio::run(fut)
+//!     match auth.token(scopes).await {
+//!         Ok(token) => println!("The token is {:?}", token),
+//!         Err(e) => println!("error: {:?}", e),
+//!     }
 //! }
 //! ```
 //!
-#[macro_use]
-extern crate serde_derive;
-
-mod authenticator;
-mod authenticator_delegate;
+#![deny(missing_docs)]
+pub mod authenticator;
+pub mod authenticator_delegate;
 mod device;
+pub mod error;
 mod helper;
 mod installed;
 mod refresh;
@@ -93,17 +81,20 @@ mod service_account;
 mod storage;
 mod types;
 
-pub use crate::authenticator::{AuthFlow, Authenticator};
-pub use crate::authenticator_delegate::{
-    AuthenticatorDelegate, DefaultAuthenticatorDelegate, DefaultFlowDelegate, FlowDelegate,
-    PollInformation, Retry
+// pub use crate::authenticator::{AuthFlow, Authenticator};
+// pub use crate::authenticator_delegate::{
+//     AuthenticatorDelegate, DefaultAuthenticatorDelegate, DefaultFlowDelegate, FlowDelegate,
+//     PollInformation, Retry
+#[doc(inline)]
+pub use crate::authenticator::{
+    DeviceFlowAuthenticator, InstalledFlowAuthenticator, ServiceAccountAuthenticator, AuthFlow, Retry,
 };
-pub use crate::device::{DeviceFlow, GOOGLE_DEVICE_CODE_URL};
+
 pub use crate::helper::*;
-pub use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
-pub use crate::service_account::*;
-pub use crate::storage::{DiskTokenStorage, MemoryStorage, NullStorage, TokenStorage};
-pub use crate::types::{
-    ApplicationSecret, ConsoleApplicationSecret, FlowType, GetToken, PollError, RefreshResult,
-    RequestError, Scheme, Token, TokenType,
-};
+pub use crate::installed::InstalledFlowReturnMethod;
+
+pub use crate::service_account::ServiceAccountKey;
+
+#[doc(inline)]
+pub use crate::error::Error;
+pub use crate::types::{AccessToken, ApplicationSecret, ConsoleApplicationSecret};

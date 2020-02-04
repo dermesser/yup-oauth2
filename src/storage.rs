@@ -2,270 +2,430 @@
 //
 // See project root for licensing information.
 //
+use crate::types::TokenInfo;
 
-use std::collections::hash_map::DefaultHasher;
-use std::error::Error;
-use std::fmt;
-use std::fs;
-use std::hash::{Hash, Hasher};
+use std::collections::HashMap;
 use std::io;
-use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
-use crate::types::Token;
-use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 
-/// Implements a specialized storage to set and retrieve `Token` instances.
-/// The `scope_hash` represents the signature of the scopes for which the given token
-/// should be stored or retrieved.
-/// For completeness, the underlying, sorted scopes are provided as well. They might be
-/// useful for presentation to the user.
-pub trait TokenStorage {
-    type Error: 'static + Error + Send + Sync;
+// The storage layer allows retrieving tokens for scopes that have been
+// previously granted tokens. One wrinkle is that a token granted for a set
+// of scopes X is also valid for any subset of X's scopes. So when retrieving a
+// token for a set of scopes provided by the caller it's beneficial to compare
+// that set to all previously stored tokens to see if it is a subset of any
+// existing set. To do this efficiently we store a bloom filter along with each
+// token that represents the set of scopes the token is associated with. The
+// bloom filter allows for efficiently skipping any entries that are
+// definitively not a superset.
+// The current implementation uses a 64bit bloom filter with 4 hash functions.
 
-    /// If `token` is None, it is invalid or revoked and should be removed from storage.
-    /// Otherwise, it should be saved.
-    fn set(
-        &mut self,
-        scope_hash: u64,
-        scopes: &Vec<&str>,
-        token: Option<Token>,
-    ) -> Result<(), Self::Error>;
-    /// A `None` result indicates that there is no token for the given scope_hash.
-    fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, Self::Error>;
+/// ScopeHash is a hash value derived from a list of scopes. The hash value
+/// represents a fingerprint of the set of scopes *independent* of the ordering.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+struct ScopeHash(u64);
+
+/// ScopeFilter represents a filter for a set of scopes. It can definitively
+/// prove that a given list of scopes is not a subset of another.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+struct ScopeFilter(u64);
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+enum FilterResponse {
+    Maybe,
+    No,
 }
 
-/// Calculate a hash value describing the scopes, and return a sorted Vec of the scopes.
-pub fn hash_scopes<I, T>(scopes: I) -> (u64, Vec<String>)
-where
-    T: Into<String>,
-    I: IntoIterator<Item = T>,
-{
-    let mut sv: Vec<String> = scopes.into_iter().map(Into::into).collect();
-    sv.sort();
-    let mut sh = DefaultHasher::new();
-    sv.hash(&mut sh);
-    (sh.finish(), sv)
+impl ScopeFilter {
+    /// Determine if this ScopeFilter could be a subset of the provided filter.
+    fn is_subset_of(self, filter: ScopeFilter) -> FilterResponse {
+        if self.0 & filter.0 == self.0 {
+            FilterResponse::Maybe
+        } else {
+            FilterResponse::No
+        }
+    }
 }
-
-/// A storage that remembers nothing.
-#[derive(Default)]
-pub struct NullStorage;
 
 #[derive(Debug)]
-pub struct NullError;
-
-impl Error for NullError {
-    fn description(&self) -> &str {
-        "NULL"
-    }
+pub(crate) struct ScopeSet<'a, T> {
+    hash: ScopeHash,
+    filter: ScopeFilter,
+    scopes: &'a [T],
 }
 
-impl fmt::Display for NullError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        "NULL-ERROR".fmt(f)
-    }
-}
-
-impl TokenStorage for NullStorage {
-    type Error = NullError;
-    fn set(&mut self, _: u64, _: &Vec<&str>, _: Option<Token>) -> Result<(), NullError> {
-        Ok(())
-    }
-    fn get(&self, _: u64, _: &Vec<&str>) -> Result<Option<Token>, NullError> {
-        Ok(None)
-    }
-}
-
-/// A storage that remembers values for one session only.
-#[derive(Debug, Default)]
-pub struct MemoryStorage {
-    tokens: Vec<JSONToken>,
-}
-
-impl MemoryStorage {
-    pub fn new() -> MemoryStorage {
-        Default::default()
-    }
-}
-
-impl TokenStorage for MemoryStorage {
-    type Error = NullError;
-
-    fn set(
-        &mut self,
-        scope_hash: u64,
-        scopes: &Vec<&str>,
-        token: Option<Token>,
-    ) -> Result<(), NullError> {
-        let matched = self.tokens.iter().find_position(|x| x.hash == scope_hash);
-        if let Some((idx, _)) = matched {
-            self.tokens.remove(idx);
+// Implement Clone manually. Auto derive fails to work correctly because we want
+// Clone to be implemented regardless of whether T is Clone or not.
+impl<'a, T> Clone for ScopeSet<'a, T> {
+    fn clone(&self) -> Self {
+        ScopeSet {
+            hash: self.hash,
+            filter: self.filter,
+            scopes: self.scopes,
         }
-
-        match token {
-            Some(t) => {
-                self.tokens.push(JSONToken {
-                    hash: scope_hash,
-                    scopes: Some(scopes.iter().map(|x| x.to_string()).collect()),
-                    token: t.clone(),
-                });
-                ()
-            }
-            None => {}
-        };
-        Ok(())
     }
+}
+impl<'a, T> Copy for ScopeSet<'a, T> {}
 
-    fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, NullError> {
-        let scopes: Vec<_> = scopes.iter().sorted().unique().collect();
+impl<'a, T> ScopeSet<'a, T>
+where
+    T: AsRef<str>,
+{
+    // implement an inherent from method even though From is implemented. This
+    // is because passing an array ref like &[&str; 1] (&["foo"]) will be auto
+    // deref'd to a slice on function boundaries, but it will not implement the
+    // From trait. This inherent method just serves to auto deref from array
+    // refs to slices and proxy to the From impl.
+    pub fn from(scopes: &'a [T]) -> Self {
+        let (hash, filter) = scopes.iter().fold(
+            (ScopeHash(0), ScopeFilter(0)),
+            |(mut scope_hash, mut scope_filter), scope| {
+                let h = seahash::hash(scope.as_ref().as_bytes());
 
-        for t in &self.tokens {
-            if let Some(token_scopes) = &t.scopes {
-                let matched = token_scopes
-                    .iter()
-                    .filter(|x| scopes.contains(&&&x[..]))
-                    .count();
-                if matched >= scopes.len() {
-                    return Result::Ok(Some(t.token.clone()));
+                // Use the first 4 6-bit chunks of the seahash as the 4 hash values
+                // in the bloom filter.
+                for i in 0..4 {
+                    // h is a hash derived value in the range 0..64
+                    let h = (h >> (6 * i)) & 0b11_1111;
+                    scope_filter.0 |= 1 << h;
                 }
-            } else if scope_hash == t.hash {
-                return Result::Ok(Some(t.token.clone()));
-            }
+
+                // xor the hashes together to get an order independent fingerprint.
+                scope_hash.0 ^= h;
+                (scope_hash, scope_filter)
+            },
+        );
+        ScopeSet {
+            hash,
+            filter,
+            scopes,
         }
-        Result::Ok(None)
+    }
+}
+
+pub(crate) enum Storage {
+    Memory { tokens: Mutex<JSONTokens> },
+    Disk(DiskStorage),
+}
+
+impl Storage {
+    pub(crate) async fn set<T>(
+        &self,
+        scopes: ScopeSet<'_, T>,
+        token: TokenInfo,
+    ) -> Result<(), io::Error>
+    where
+        T: AsRef<str>,
+    {
+        match self {
+            Storage::Memory { tokens } => tokens.lock().unwrap().set(scopes, token),
+            Storage::Disk(disk_storage) => disk_storage.set(scopes, token).await,
+        }
+    }
+
+    pub(crate) fn get<T>(&self, scopes: ScopeSet<T>) -> Option<TokenInfo>
+    where
+        T: AsRef<str>,
+    {
+        match self {
+            Storage::Memory { tokens } => tokens.lock().unwrap().get(scopes),
+            Storage::Disk(disk_storage) => disk_storage.get(scopes),
+        }
     }
 }
 
 /// A single stored token.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+
+#[derive(Debug, Clone)]
 struct JSONToken {
-    pub hash: u64,
-    pub scopes: Option<Vec<String>>,
-    pub token: Token,
+    scopes: Vec<String>,
+    token: TokenInfo,
+    hash: ScopeHash,
+    filter: ScopeFilter,
+}
+
+impl<'de> Deserialize<'de> for JSONToken {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RawJSONToken {
+            scopes: Vec<String>,
+            token: TokenInfo,
+        }
+        let RawJSONToken { scopes, token } = RawJSONToken::deserialize(deserializer)?;
+        let ScopeSet { hash, filter, .. } = ScopeSet::from(&scopes);
+        Ok(JSONToken {
+            scopes,
+            token,
+            hash,
+            filter,
+        })
+    }
+}
+
+impl Serialize for JSONToken {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        #[derive(Serialize)]
+        struct RawJSONToken<'a> {
+            scopes: &'a [String],
+            token: &'a TokenInfo,
+        }
+        RawJSONToken {
+            scopes: &self.scopes,
+            token: &self.token,
+        }
+        .serialize(serializer)
+    }
 }
 
 /// List of tokens in a JSON object
-#[derive(Serialize, Deserialize)]
-struct JSONTokens {
-    pub tokens: Vec<JSONToken>,
+#[derive(Debug, Clone)]
+pub(crate) struct JSONTokens {
+    token_map: HashMap<ScopeHash, JSONToken>,
 }
 
-/// Serializes tokens to a JSON file on disk.
-#[derive(Default)]
-pub struct DiskTokenStorage {
-    location: String,
-    tokens: Vec<JSONToken>,
+impl Serialize for JSONTokens {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_seq(self.token_map.values())
+    }
 }
 
-impl DiskTokenStorage {
-    pub fn new<S: AsRef<str>>(location: S) -> Result<DiskTokenStorage, io::Error> {
-        let mut dts = DiskTokenStorage {
-            location: location.as_ref().to_owned(),
-            tokens: Vec::new(),
+impl<'de> Deserialize<'de> for JSONTokens {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = JSONTokens;
+
+            // Format a message stating what data this Visitor expects to receive.
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a sequence of JSONToken's")
+            }
+
+            fn visit_seq<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::SeqAccess<'de>,
+            {
+                let mut token_map = HashMap::with_capacity(access.size_hint().unwrap_or(0));
+                while let Some(json_token) = access.next_element::<JSONToken>()? {
+                    token_map.insert(json_token.hash, json_token);
+                }
+                Ok(JSONTokens { token_map })
+            }
+        }
+
+        // Instantiate our Visitor and ask the Deserializer to drive
+        // it over the input data.
+        deserializer.deserialize_seq(V)
+    }
+}
+
+impl JSONTokens {
+    pub(crate) fn new() -> Self {
+        JSONTokens {
+            token_map: HashMap::new(),
+        }
+    }
+
+    async fn load_from_file(filename: &Path) -> Result<Self, io::Error> {
+        let contents = tokio::fs::read(filename).await?;
+        serde_json::from_slice(&contents).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    }
+
+    fn get<T>(
+        &self,
+        ScopeSet {
+            hash,
+            filter,
+            scopes,
+        }: ScopeSet<T>,
+    ) -> Option<TokenInfo>
+    where
+        T: AsRef<str>,
+    {
+        if let Some(json_token) = self.token_map.get(&hash) {
+            return Some(json_token.token.clone());
+        }
+
+        let requested_scopes_are_subset_of = |other_scopes: &[String]| {
+            scopes
+                .iter()
+                .all(|s| other_scopes.iter().any(|t| t.as_str() == s.as_ref()))
+        };
+        // No exact match for the scopes provided. Search for any tokens that
+        // exist for a superset of the scopes requested.
+        self.token_map
+            .values()
+            .filter(|json_token| filter.is_subset_of(json_token.filter) == FilterResponse::Maybe)
+            .find(|v: &&JSONToken| requested_scopes_are_subset_of(&v.scopes))
+            .map(|t: &JSONToken| t.token.clone())
+    }
+
+    fn set<T>(
+        &mut self,
+        ScopeSet {
+            hash,
+            filter,
+            scopes,
+        }: ScopeSet<T>,
+        token: TokenInfo,
+    ) -> Result<(), io::Error>
+    where
+        T: AsRef<str>,
+    {
+        use std::collections::hash_map::Entry;
+        match self.token_map.entry(hash) {
+            Entry::Occupied(mut entry) => {
+                entry.get_mut().token = token;
+            }
+            Entry::Vacant(entry) => {
+                let json_token = JSONToken {
+                    scopes: scopes.iter().map(|x| x.as_ref().to_owned()).collect(),
+                    token,
+                    hash,
+                    filter,
+                };
+                entry.insert(json_token.clone());
+            }
+        }
+        Ok(())
+    }
+}
+
+pub(crate) struct DiskStorage {
+    tokens: Mutex<JSONTokens>,
+    filename: PathBuf,
+}
+
+impl DiskStorage {
+    pub(crate) async fn new(filename: PathBuf) -> Result<Self, io::Error> {
+        let tokens = match JSONTokens::load_from_file(&filename).await {
+            Ok(tokens) => tokens,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => JSONTokens::new(),
+            Err(e) => return Err(e),
         };
 
-        // best-effort
-        let read_result = dts.load_from_file();
-
-        match read_result {
-            Result::Ok(()) => Result::Ok(dts),
-            Result::Err(e) => {
-                match e.kind() {
-                    io::ErrorKind::NotFound => Result::Ok(dts), // File not found; ignore and create new one
-                    _ => Result::Err(e),                        // e.g. PermissionDenied
-                }
-            }
-        }
+        Ok(DiskStorage {
+            tokens: Mutex::new(tokens),
+            filename,
+        })
     }
 
-    fn load_from_file(&mut self) -> Result<(), io::Error> {
-        let mut f = fs::OpenOptions::new().read(true).open(&self.location)?;
-        let mut contents = String::new();
-
-        match f.read_to_string(&mut contents) {
-            Result::Err(e) => return Result::Err(e),
-            Result::Ok(_sz) => (),
-        }
-
-        let tokens: JSONTokens;
-
-        match serde_json::from_str(&contents) {
-            Result::Err(e) => return Result::Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-            Result::Ok(t) => tokens = t,
-        }
-
-        for t in tokens.tokens {
-            self.tokens.push(t);
-        }
-        return Result::Ok(());
+    pub(crate) async fn set<T>(
+        &self,
+        scopes: ScopeSet<'_, T>,
+        token: TokenInfo,
+    ) -> Result<(), io::Error>
+    where
+        T: AsRef<str>,
+    {
+        use tokio::io::AsyncWriteExt;
+        let json = {
+            use std::ops::Deref;
+            let mut lock = self.tokens.lock().unwrap();
+            lock.set(scopes, token)?;
+            serde_json::to_string(lock.deref())
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+        };
+        let mut f = open_writeable_file(&self.filename).await?;
+        f.write_all(json.as_bytes()).await?;
+        Ok(())
     }
 
-    pub fn dump_to_file(&mut self) -> Result<(), io::Error> {
-        let mut jsontokens = JSONTokens { tokens: Vec::new() };
-
-        for token in self.tokens.iter() {
-            jsontokens.tokens.push((*token).clone());
-        }
-
-        let serialized;
-
-        match serde_json::to_string(&jsontokens) {
-            Result::Err(e) => return Result::Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-            Result::Ok(s) => serialized = s,
-        }
-
-        let mut f = fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&self.location)?;
-        f.write(serialized.as_ref()).map(|_| ())
+    pub(crate) fn get<T>(&self, scopes: ScopeSet<T>) -> Option<TokenInfo>
+    where
+        T: AsRef<str>,
+    {
+        self.tokens.lock().unwrap().get(scopes)
     }
 }
 
-impl TokenStorage for DiskTokenStorage {
-    type Error = io::Error;
-    fn set(
-        &mut self,
-        scope_hash: u64,
-        scopes: &Vec<&str>,
-        token: Option<Token>,
-    ) -> Result<(), Self::Error> {
-        let matched = self.tokens.iter().find_position(|x| x.hash == scope_hash);
-        if let Some((idx, _)) = matched {
-            self.tokens.remove(idx);
-        }
+#[cfg(unix)]
+async fn open_writeable_file(
+    filename: impl AsRef<Path>,
+) -> Result<tokio::fs::File, tokio::io::Error> {
+    // Ensure if the file is created it's only readable and writable by the
+    // current user.
+    use std::os::unix::fs::OpenOptionsExt;
+    let opts: tokio::fs::OpenOptions = {
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true).mode(0o600);
+        opts.into()
+    };
+    opts.open(filename).await
+}
 
-        match token {
-            None => (),
-            Some(t) => {
-                self.tokens.push(JSONToken {
-                    hash: scope_hash,
-                    scopes: Some(scopes.iter().map(|x| x.to_string()).collect()),
-                    token: t.clone(),
-                });
-                ()
-            }
-        }
-        self.dump_to_file()
+#[cfg(not(unix))]
+async fn open_writeable_file(
+    filename: impl AsRef<Path>,
+) -> Result<tokio::fs::File, tokio::io::Error> {
+    // I don't have knowledge of windows or other platforms to know how to
+    // create a file that's only readable by the current user.
+    tokio::fs::File::create(filename).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scope_filter() {
+        let foo = ScopeSet::from(&["foo"]).filter;
+        let bar = ScopeSet::from(&["bar"]).filter;
+        let foobar = ScopeSet::from(&["foo", "bar"]).filter;
+
+        // foo and bar are both subsets of foobar. This condition should hold no
+        // matter what changes are made to the bloom filter implementation.
+        assert!(foo.is_subset_of(foobar) == FilterResponse::Maybe);
+        assert!(bar.is_subset_of(foobar) == FilterResponse::Maybe);
+
+        // These conditions hold under the current bloom filter implementation
+        // because "foo" and "bar" don't collide, but if the bloom filter
+        // implementations change it could be valid for them to return Maybe.
+        assert!(foo.is_subset_of(bar) == FilterResponse::No);
+        assert!(bar.is_subset_of(foo) == FilterResponse::No);
+        assert!(foobar.is_subset_of(foo) == FilterResponse::No);
+        assert!(foobar.is_subset_of(bar) == FilterResponse::No);
     }
-    fn get(&self, scope_hash: u64, scopes: &Vec<&str>) -> Result<Option<Token>, Self::Error> {
-        let scopes: Vec<_> = scopes.iter().sorted().unique().collect();
 
-        for t in &self.tokens {
-            if let Some(token_scopes) = &t.scopes {
-                let matched = token_scopes
-                    .iter()
-                    .filter(|x| scopes.contains(&&&x[..]))
-                    .count();
-                // we may have some of the tokens as denormalized (many namespaces repeated)
-                if matched >= scopes.len() {
-                    return Result::Ok(Some(t.token.clone()));
-                }
-            } else if scope_hash == t.hash {
-                return Result::Ok(Some(t.token.clone()));
-            }
+    #[tokio::test]
+    async fn test_disk_storage() {
+        let new_token = |access_token: &str| TokenInfo {
+            access_token: access_token.to_owned(),
+            refresh_token: None,
+            expires_at: None,
+        };
+        let scope_set = ScopeSet::from(&["myscope"]);
+        let tempdir = tempfile::tempdir().unwrap();
+        {
+            let storage = DiskStorage::new(tempdir.path().join("tokenstorage.json"))
+                .await
+                .unwrap();
+            assert!(storage.get(scope_set).is_none());
+            storage
+                .set(scope_set, new_token("my_access_token"))
+                .await
+                .unwrap();
+            assert_eq!(storage.get(scope_set), Some(new_token("my_access_token")));
         }
-        Result::Ok(None)
+        {
+            // Create a new DiskStorage instance and verify the tokens were read from disk correctly.
+            let storage = DiskStorage::new(tempdir.path().join("tokenstorage.json"))
+                .await
+                .unwrap();
+            assert_eq!(storage.get(scope_set), Some(new_token("my_access_token")));
+        }
     }
 }

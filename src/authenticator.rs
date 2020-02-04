@@ -1,42 +1,429 @@
-use crate::authenticator_delegate::{AuthenticatorDelegate, DefaultAuthenticatorDelegate, Retry};
+//! Module contianing the core functionality for OAuth2 Authentication.
+use crate::authenticator_delegate::{DeviceFlowDelegate, InstalledFlowDelegate};
+use crate::device::DeviceFlow;
+use crate::error::Error;
+use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 use crate::refresh::RefreshFlow;
-use crate::storage::{hash_scopes, DiskTokenStorage, MemoryStorage, TokenStorage};
-use crate::types::{ApplicationSecret, GetToken, RefreshResult, RequestError, Token};
+use crate::service_account::{ServiceAccountFlow, ServiceAccountFlowOpts, ServiceAccountKey};
+use crate::storage::{self, Storage};
+use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
+use private::AuthFlow;
 
-use futures::{future, prelude::*};
-use tokio_timer;
-
-use std::error::Error;
+use std::borrow::Cow;
+use std::fmt;
 use std::io;
-use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
+use std::sync::Mutex;
 
-/// Authenticator abstracts different `GetToken` implementations behind one type and handles
-/// caching received tokens. It's important to use it (instead of the flows directly) because
-/// otherwise the user needs to be asked for new authorization every time a token is generated.
-///
-/// `ServiceAccountAccess` does not need (and does not work) with `Authenticator`, given that it
-/// does not require interaction and implements its own caching. Use it directly.
-///
-/// NOTE: It is recommended to use a client constructed like this in order to prevent functions
-/// like `hyper::run()` from hanging: `let client = hyper::Client::builder().keep_alive(false);`.
-/// Due to token requests being rare, this should not result in a too bad performance problem.
-struct AuthenticatorImpl<
-    T: GetToken,
-    S: TokenStorage,
-    AD: AuthenticatorDelegate,
-    C: hyper::client::connect::Connect,
-> {
-    client: hyper::Client<C>,
-    inner: Arc<Mutex<T>>,
-    store: Arc<Mutex<S>>,
-    delegate: AD,
+/// Authenticator is responsible for fetching tokens, handling refreshing tokens,
+/// and optionally persisting tokens to disk.
+pub struct Authenticator<C> {
+    hyper_client: hyper::Client<C>,
+    storage: Storage,
+    auth_flow: AuthFlow,
 }
 
-/// A trait implemented for any hyper::Client as well as teh DefaultHyperClient.
-pub trait HyperClientBuilder {
-    type Connector: hyper::client::connect::Connect;
+struct DisplayScopes<'a, T>(&'a [T]);
+impl<'a, T> fmt::Display for DisplayScopes<'a, T>
+where
+    T: AsRef<str>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("[")?;
+        let mut iter = self.0.iter();
+        if let Some(first) = iter.next() {
+            f.write_str(first.as_ref())?;
+            for scope in iter {
+                f.write_str(", ")?;
+                f.write_str(scope.as_ref())?;
+            }
+        }
+        f.write_str("]")
+    }
+}
 
+impl<C> Authenticator<C>
+where
+    C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+{
+    /// Return the current token for the provided scopes.
+    pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<AccessToken, Error>
+    where
+        T: AsRef<str>,
+    {
+        log::debug!(
+            "access token requested for scopes: {}",
+            DisplayScopes(scopes)
+        );
+        let hashed_scopes = storage::ScopeSet::from(scopes);
+        match (self.storage.get(hashed_scopes), self.auth_flow.app_secret()) {
+            (Some(t), _) if !t.is_expired() => {
+                // unexpired token found
+                log::debug!("found valid token in cache: {:?}", t);
+                Ok(t.into())
+            }
+            (
+                Some(TokenInfo {
+                    refresh_token: Some(refresh_token),
+                    ..
+                }),
+                Some(app_secret),
+            ) => {
+                // token is expired but has a refresh token.
+                let token_info =
+                    RefreshFlow::refresh_token(&self.hyper_client, app_secret, &refresh_token)
+                        .await?;
+                self.storage.set(hashed_scopes, token_info.clone()).await?;
+                Ok(token_info.into())
+            }
+            _ => {
+                // no token in the cache or the token returned can't be refreshed.
+                let token_info = self.auth_flow.token(&self.hyper_client, scopes).await?;
+                self.storage.set(hashed_scopes, token_info.clone()).await?;
+                Ok(token_info.into())
+            }
+        }
+    }
+}
+
+/// Configure an Authenticator using the builder pattern.
+pub struct AuthenticatorBuilder<C, F> {
+    hyper_client_builder: C,
+    storage_type: StorageType,
+    auth_flow: F,
+}
+
+/// Create an authenticator that uses the installed flow.
+/// ```
+/// # async fn foo() {
+/// # use yup_oauth2::InstalledFlowReturnMethod;
+/// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultInstalledFlowDelegate;
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
+///     let authenticator = yup_oauth2::InstalledFlowAuthenticator::builder(
+///         app_secret,
+///         InstalledFlowReturnMethod::HTTPRedirect,
+///     )
+///     .build()
+///     .await
+///     .expect("failed to create authenticator");
+/// # }
+/// ```
+pub struct InstalledFlowAuthenticator;
+impl InstalledFlowAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses the installed flow.
+    pub fn builder(
+        app_secret: ApplicationSecret,
+        method: InstalledFlowReturnMethod,
+    ) -> AuthenticatorBuilder<DefaultHyperClient, InstalledFlow> {
+        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(InstalledFlow::new(
+            app_secret, method,
+        ))
+    }
+}
+
+/// Create an authenticator that uses the device flow.
+/// ```
+/// # async fn foo() {
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
+///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
+pub struct DeviceFlowAuthenticator;
+impl DeviceFlowAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses the device flow.
+    pub fn builder(
+        app_secret: ApplicationSecret,
+    ) -> AuthenticatorBuilder<DefaultHyperClient, DeviceFlow> {
+        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(DeviceFlow::new(app_secret))
+    }
+}
+
+/// Create an authenticator that uses a service account.
+/// ```
+/// # async fn foo() {
+/// # let service_account_key = yup_oauth2::read_service_account_key("/tmp/foo").await.unwrap();
+///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(service_account_key)
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
+pub struct ServiceAccountAuthenticator;
+impl ServiceAccountAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses a service account.
+    pub fn builder(
+        service_account_key: ServiceAccountKey,
+    ) -> AuthenticatorBuilder<DefaultHyperClient, ServiceAccountFlowOpts> {
+        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(ServiceAccountFlowOpts {
+            key: service_account_key,
+            subject: None,
+        })
+    }
+}
+
+/// ## Methods available when building any Authenticator.
+/// ```
+/// # async fn foo() {
+/// # let custom_hyper_client = hyper::Client::new();
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
+///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
+///         .hyper_client(custom_hyper_client)
+///         .persist_tokens_to_disk("/tmp/tokenfile.json")
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
+impl<C, F> AuthenticatorBuilder<C, F> {
+    async fn common_build(
+        hyper_client_builder: C,
+        storage_type: StorageType,
+        auth_flow: AuthFlow,
+    ) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        let hyper_client = hyper_client_builder.build_hyper_client();
+        let storage = match storage_type {
+            StorageType::Memory => Storage::Memory {
+                tokens: Mutex::new(storage::JSONTokens::new()),
+            },
+            StorageType::Disk(path) => Storage::Disk(storage::DiskStorage::new(path).await?),
+        };
+
+        Ok(Authenticator {
+            hyper_client,
+            storage,
+            auth_flow,
+        })
+    }
+
+    fn with_auth_flow(auth_flow: F) -> AuthenticatorBuilder<DefaultHyperClient, F> {
+        AuthenticatorBuilder {
+            hyper_client_builder: DefaultHyperClient,
+            storage_type: StorageType::Memory,
+            auth_flow,
+        }
+    }
+
+    /// Use the provided hyper client.
+    pub fn hyper_client<NewC>(
+        self,
+        hyper_client: hyper::Client<NewC>,
+    ) -> AuthenticatorBuilder<hyper::Client<NewC>, F> {
+        AuthenticatorBuilder {
+            hyper_client_builder: hyper_client,
+            storage_type: self.storage_type,
+            auth_flow: self.auth_flow,
+        }
+    }
+
+    /// Persist tokens to disk in the provided filename.
+    pub fn persist_tokens_to_disk<P: Into<PathBuf>>(self, path: P) -> AuthenticatorBuilder<C, F> {
+        AuthenticatorBuilder {
+            storage_type: StorageType::Disk(path.into()),
+            ..self
+        }
+    }
+}
+
+/// ## Methods available when building a device flow Authenticator.
+/// ```
+/// # async fn foo() {
+/// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultDeviceFlowDelegate;
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
+///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
+///         .device_code_url("foo")
+///         .flow_delegate(Box::new(custom_flow_delegate))
+///         .grant_type("foo")
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
+impl<C> AuthenticatorBuilder<C, DeviceFlow> {
+    /// Use the provided device code url.
+    pub fn device_code_url(self, url: impl Into<Cow<'static, str>>) -> Self {
+        AuthenticatorBuilder {
+            auth_flow: DeviceFlow {
+                device_code_url: url.into(),
+                ..self.auth_flow
+            },
+            ..self
+        }
+    }
+
+    /// Use the provided DeviceFlowDelegate.
+    pub fn flow_delegate(self, flow_delegate: Box<dyn DeviceFlowDelegate>) -> Self {
+        AuthenticatorBuilder {
+            auth_flow: DeviceFlow {
+                flow_delegate,
+                ..self.auth_flow
+            },
+            ..self
+        }
+    }
+
+    /// Use the provided grant type.
+    pub fn grant_type(self, grant_type: impl Into<Cow<'static, str>>) -> Self {
+        AuthenticatorBuilder {
+            auth_flow: DeviceFlow {
+                grant_type: grant_type.into(),
+                ..self.auth_flow
+            },
+            ..self
+        }
+    }
+
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            AuthFlow::DeviceFlow(self.auth_flow),
+        )
+        .await
+    }
+}
+
+/// ## Methods available when building an installed flow Authenticator.
+/// ```
+/// # async fn foo() {
+/// # use yup_oauth2::InstalledFlowReturnMethod;
+/// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultInstalledFlowDelegate;
+/// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
+///     let authenticator = yup_oauth2::InstalledFlowAuthenticator::builder(
+///         app_secret,
+///         InstalledFlowReturnMethod::HTTPRedirect,
+///     )
+///     .flow_delegate(Box::new(custom_flow_delegate))
+///     .build()
+///     .await
+///     .expect("failed to create authenticator");
+/// # }
+/// ```
+impl<C> AuthenticatorBuilder<C, InstalledFlow> {
+    /// Use the provided InstalledFlowDelegate.
+    pub fn flow_delegate(self, flow_delegate: Box<dyn InstalledFlowDelegate>) -> Self {
+        AuthenticatorBuilder {
+            auth_flow: InstalledFlow {
+                flow_delegate,
+                ..self.auth_flow
+            },
+            ..self
+        }
+    }
+
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            AuthFlow::InstalledFlow(self.auth_flow),
+        )
+        .await
+    }
+}
+
+/// ## Methods available when building a service account authenticator.
+/// ```
+/// # async fn foo() {
+/// # let service_account_key = yup_oauth2::read_service_account_key("/tmp/foo").await.unwrap();
+///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(
+///         service_account_key,
+///     )
+///     .subject("mysubject")
+///     .build()
+///     .await
+///     .expect("failed to create authenticator");
+/// # }
+/// ```
+impl<C> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
+    /// Use the provided subject.
+    pub fn subject(self, subject: impl Into<String>) -> Self {
+        AuthenticatorBuilder {
+            auth_flow: ServiceAccountFlowOpts {
+                subject: Some(subject.into()),
+                ..self.auth_flow
+            },
+            ..self
+        }
+    }
+
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        let service_account_auth_flow = ServiceAccountFlow::new(self.auth_flow)?;
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            AuthFlow::ServiceAccountFlow(service_account_auth_flow),
+        )
+        .await
+    }
+}
+
+mod private {
+    use crate::device::DeviceFlow;
+    use crate::error::Error;
+    use crate::installed::InstalledFlow;
+    use crate::service_account::ServiceAccountFlow;
+    use crate::types::{ApplicationSecret, TokenInfo};
+
+    pub enum AuthFlow {
+        DeviceFlow(DeviceFlow),
+        InstalledFlow(InstalledFlow),
+        ServiceAccountFlow(ServiceAccountFlow),
+    }
+
+    impl AuthFlow {
+        pub(crate) fn app_secret(&self) -> Option<&ApplicationSecret> {
+            match self {
+                AuthFlow::DeviceFlow(device_flow) => Some(&device_flow.app_secret),
+                AuthFlow::InstalledFlow(installed_flow) => Some(&installed_flow.app_secret),
+                AuthFlow::ServiceAccountFlow(_) => None,
+            }
+        }
+
+        pub(crate) async fn token<'a, C, T>(
+            &'a self,
+            hyper_client: &'a hyper::Client<C>,
+            scopes: &'a [T],
+        ) -> Result<TokenInfo, Error>
+        where
+            T: AsRef<str>,
+            C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        {
+            match self {
+                AuthFlow::DeviceFlow(device_flow) => device_flow.token(hyper_client, scopes).await,
+                AuthFlow::InstalledFlow(installed_flow) => {
+                    installed_flow.token(hyper_client, scopes).await
+                }
+                AuthFlow::ServiceAccountFlow(service_account_flow) => {
+                    service_account_flow.token(hyper_client, scopes).await
+                }
+            }
+        }
+    }
+}
+
+/// A trait implemented for any hyper::Client as well as the DefaultHyperClient.
+pub trait HyperClientBuilder {
+    /// The hyper connector that the resulting hyper client will use.
+    type Connector: hyper::client::connect::Connect + Clone + Send + Sync + 'static;
+
+    /// Create a hyper::Client
     fn build_hyper_client(self) -> hyper::Client<Self::Connector>;
 }
 
@@ -48,13 +435,13 @@ impl HyperClientBuilder for DefaultHyperClient {
     fn build_hyper_client(self) -> hyper::Client<Self::Connector> {
         hyper::Client::builder()
             .keep_alive(false)
-            .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new(1))
+            .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new())
     }
 }
 
 impl<C> HyperClientBuilder for hyper::Client<C>
 where
-    C: hyper::client::connect::Connect,
+    C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
 {
     type Connector = C;
 
@@ -63,271 +450,18 @@ where
     }
 }
 
-/// An internal trait implemented by flows to be used by an authenticator.
-pub trait AuthFlow<C> {
-    type TokenGetter: GetToken;
-
-    fn build_token_getter(self, client: hyper::Client<C>) -> Self::TokenGetter;
+enum StorageType {
+    Memory,
+    Disk(PathBuf),
 }
 
-/// An authenticator can be used with `InstalledFlow`'s or `DeviceFlow`'s and
-/// will refresh tokens as they expire as well as optionally persist tokens to
-/// disk.
-pub struct Authenticator<
-    T: AuthFlow<C::Connector>,
-    S: TokenStorage,
-    AD: AuthenticatorDelegate,
-    C: HyperClientBuilder,
-> {
-    client: C,
-    token_getter: T,
-    store: io::Result<S>,
-    delegate: AD,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl<T> Authenticator<T, MemoryStorage, DefaultAuthenticatorDelegate, DefaultHyperClient>
-where
-    T: AuthFlow<<DefaultHyperClient as HyperClientBuilder>::Connector>,
-{
-    /// Create a new authenticator with the provided flow. By default a new
-    /// hyper::Client will be created the default authenticator delegate will be
-    /// used, and tokens will not be persisted to disk.
-    /// Accepted flow types are DeviceFlow and InstalledFlow.
-    ///
-    /// Examples
-    /// ```
-    /// use std::path::Path;
-    /// use yup_oauth2::{ApplicationSecret, Authenticator, DeviceFlow};
-    /// let creds = ApplicationSecret::default();
-    /// let auth = Authenticator::new(DeviceFlow::new(creds)).build().unwrap();
-    /// ```
-    pub fn new(
-        flow: T,
-    ) -> Authenticator<T, MemoryStorage, DefaultAuthenticatorDelegate, DefaultHyperClient> {
-        Authenticator {
-            client: DefaultHyperClient,
-            token_getter: flow,
-            store: Ok(MemoryStorage::new()),
-            delegate: DefaultAuthenticatorDelegate,
-        }
-    }
-}
-
-impl<T, S, AD, C> Authenticator<T, S, AD, C>
-where
-    T: AuthFlow<C::Connector>,
-    S: TokenStorage,
-    AD: AuthenticatorDelegate,
-    C: HyperClientBuilder,
-{
-    /// Use the provided hyper client.
-    pub fn hyper_client<NewC>(
-        self,
-        hyper_client: hyper::Client<NewC>,
-    ) -> Authenticator<T, S, AD, hyper::Client<NewC>>
-    where
-        NewC: hyper::client::connect::Connect,
-        T: AuthFlow<NewC>,
-    {
-        Authenticator {
-            client: hyper_client,
-            token_getter: self.token_getter,
-            store: self.store,
-            delegate: self.delegate,
-        }
-    }
-
-    /// Persist tokens to disk in the provided filename.
-    pub fn persist_tokens_to_disk<P: AsRef<Path>>(
-        self,
-        path: P,
-    ) -> Authenticator<T, DiskTokenStorage, AD, C> {
-        let disk_storage = DiskTokenStorage::new(path.as_ref().to_str().unwrap());
-        Authenticator {
-            client: self.client,
-            token_getter: self.token_getter,
-            store: disk_storage,
-            delegate: self.delegate,
-        }
-    }
-
-    /// Use the provided authenticator delegate.
-    pub fn delegate<NewAD: AuthenticatorDelegate>(
-        self,
-        delegate: NewAD,
-    ) -> Authenticator<T, S, NewAD, C> {
-        Authenticator {
-            client: self.client,
-            token_getter: self.token_getter,
-            store: self.store,
-            delegate: delegate,
-        }
-    }
-
-    /// Create the authenticator.
-    pub fn build(self) -> io::Result<impl GetToken>
-    where
-        T::TokenGetter: 'static + GetToken + Send,
-        S: 'static + Send,
-        AD: 'static + Send,
-        C::Connector: 'static + Clone + Send,
-    {
-        let client = self.client.build_hyper_client();
-        let store = Arc::new(Mutex::new(self.store?));
-        let inner = Arc::new(Mutex::new(
-            self.token_getter.build_token_getter(client.clone()),
-        ));
-
-        Ok(AuthenticatorImpl {
-            client,
-            inner,
-            store,
-            delegate: self.delegate,
-        })
-    }
-}
-
-impl<
-        GT: 'static + GetToken + Send,
-        S: 'static + TokenStorage + Send,
-        AD: 'static + AuthenticatorDelegate + Send,
-        C: 'static + hyper::client::connect::Connect + Clone + Send,
-    > GetToken for AuthenticatorImpl<GT, S, AD, C>
-{
-    /// Returns the API Key of the inner flow.
-    fn api_key(&mut self) -> Option<String> {
-        self.inner.lock().unwrap().api_key()
-    }
-    /// Returns the application secret of the inner flow.
-    fn application_secret(&self) -> ApplicationSecret {
-        self.inner.lock().unwrap().application_secret()
-    }
-
-    fn token<I, T>(
-        &mut self,
-        scopes: I,
-    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
-    where
-        T: Into<String>,
-        I: IntoIterator<Item = T>,
-    {
-        let (scope_key, scopes) = hash_scopes(scopes);
-        let store = self.store.clone();
-        let mut delegate = self.delegate.clone();
-        let client = self.client.clone();
-        let appsecret = self.inner.lock().unwrap().application_secret();
-        let gettoken = self.inner.clone();
-        let loopfn = move |()| -> Box<
-            dyn Future<Item = future::Loop<Token, ()>, Error = RequestError> + Send,
-        > {
-            // How well does this work with tokio?
-            match store.lock().unwrap().get(
-                scope_key.clone(),
-                &scopes.iter().map(|s| s.as_str()).collect(),
-            ) {
-                Ok(Some(t)) => {
-                    if !t.expired() {
-                        return Box::new(Ok(future::Loop::Break(t)).into_future());
-                    }
-                    // Implement refresh flow.
-                    let refresh_token = t.refresh_token.clone();
-                    let mut delegate = delegate.clone();
-                    let store = store.clone();
-                    let scopes = scopes.clone();
-                    let refresh_fut = RefreshFlow::refresh_token(
-                        client.clone(),
-                        appsecret.clone(),
-                        refresh_token.unwrap(),
-                    )
-                        .and_then(move |rr| -> Box<dyn Future<Item=future::Loop<Token, ()>, Error=RequestError> + Send> {
-                            match rr {
-                                RefreshResult::Error(ref e) => {
-                                    delegate.token_refresh_failed(
-                                        format!("{}", e.description().to_string()),
-                                        &Some("the request has likely timed out".to_string()),
-                                        );
-                                    Box::new(Err(RequestError::Refresh(rr)).into_future())
-                                }
-                                RefreshResult::RefreshError(ref s, ref ss) => {
-                                    delegate.token_refresh_failed(
-                                        format!("{} {}", s, ss.clone().map(|s| format!("({})", s)).unwrap_or("".to_string())),
-                                        &Some("the refresh token is likely invalid and your authorization has been revoked".to_string()),
-                                        );
-                                    Box::new(Err(RequestError::Refresh(rr)).into_future())
-                                }
-                                RefreshResult::Success(t) => {
-                                    if let Err(e) = store.lock().unwrap().set(scope_key, &scopes.iter().map(|s| s.as_str()).collect(), Some(t.clone())) {
-                                        match delegate.token_storage_failure(true, &e) {
-                                            Retry::Skip => Box::new(Ok(future::Loop::Break(t)).into_future()),
-                                            Retry::Abort => Box::new(Err(RequestError::Cache(Box::new(e))).into_future()),
-                                            Retry::After(d) => Box::new(
-                                                tokio_timer::sleep(d)
-                                                .then(|_| Ok(future::Loop::Continue(()))),
-                                                )
-                                                as Box<
-                                                dyn Future<
-                                                Item = future::Loop<Token, ()>,
-                                                Error = RequestError> + Send>,
-                                        }
-                                    } else {
-                                        Box::new(Ok(future::Loop::Break(t)).into_future())
-                                    }
-                                },
-                            }
-                        });
-                    Box::new(refresh_fut)
-                }
-                Ok(None) => {
-                    let store = store.clone();
-                    let scopes = scopes.clone();
-                    let mut delegate = delegate.clone();
-                    Box::new(
-                        gettoken
-                            .lock()
-                            .unwrap()
-                            .token(scopes.clone())
-                            .and_then(move |t| {
-                                if let Err(e) = store.lock().unwrap().set(
-                                    scope_key,
-                                    &scopes.iter().map(|s| s.as_str()).collect(),
-                                    Some(t.clone()),
-                                ) {
-                                    match delegate.token_storage_failure(true, &e) {
-                                        Retry::Skip => {
-                                            Box::new(Ok(future::Loop::Break(t)).into_future())
-                                        }
-                                        Retry::Abort => Box::new(
-                                            Err(RequestError::Cache(Box::new(e))).into_future(),
-                                        ),
-                                        Retry::After(d) => Box::new(
-                                            tokio_timer::sleep(d)
-                                                .then(|_| Ok(future::Loop::Continue(()))),
-                                        )
-                                            as Box<
-                                                dyn Future<
-                                                        Item = future::Loop<Token, ()>,
-                                                        Error = RequestError,
-                                                    > + Send,
-                                            >,
-                                    }
-                                } else {
-                                    Box::new(Ok(future::Loop::Break(t)).into_future())
-                                }
-                            }),
-                    )
-                }
-                Err(err) => match delegate.token_storage_failure(false, &err) {
-                    Retry::Abort | Retry::Skip => {
-                        return Box::new(Err(RequestError::Cache(Box::new(err))).into_future())
-                    }
-                    Retry::After(d) => {
-                        return Box::new(
-                            tokio_timer::sleep(d).then(|_| Ok(future::Loop::Continue(()))),
-                        )
-                    }
-                },
-            }
-        };
-        Box::new(future::loop_fn((), loopfn))
+    #[test]
+    fn ensure_send_sync() {
+        fn is_send_sync<T: Send + Sync>() {}
+        is_send_sync::<Authenticator<<DefaultHyperClient as HyperClientBuilder>::Connector>>()
     }
 }
