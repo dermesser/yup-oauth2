@@ -1,29 +1,18 @@
-use yup_oauth2;
+use yup_oauth2::ServiceAccountAuthenticator;
 
-use futures::prelude::*;
-use yup_oauth2::GetToken;
+#[tokio::main]
+async fn main() {
+    let creds = yup_oauth2::read_service_account_key("serviceaccount.json")
+        .await
+        .unwrap();
+    let sa = ServiceAccountAuthenticator::builder(creds)
+        .build()
+        .await
+        .unwrap();
+    let scopes = &["https://www.googleapis.com/auth/pubsub"];
 
-use tokio;
-
-use std::path;
-
-fn main() {
-    let creds =
-        yup_oauth2::service_account_key_from_file(path::Path::new("serviceaccount.json")).unwrap();
-    let mut sa = yup_oauth2::ServiceAccountAccess::new(creds).build();
-
-    let fut = sa
-        .token(vec!["https://www.googleapis.com/auth/pubsub"])
-        .and_then(|tok| {
-            println!("token is: {:?}", tok);
-            Ok(())
-        });
-    let fut2 = sa
-        .token(vec!["https://www.googleapis.com/auth/pubsub"])
-        .and_then(|tok| {
-            println!("cached token is {:?} and should be identical", tok);
-            Ok(())
-        });
-    let all = fut.join(fut2).then(|_| Ok(()));
-    tokio::run(all)
+    let tok = sa.token(scopes).await.unwrap();
+    println!("token is: {:?}", tok);
+    let tok = sa.token(scopes).await.unwrap();
+    println!("cached token is {:?} and should be identical", tok);
 }

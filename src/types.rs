@@ -1,258 +1,53 @@
-use chrono::{DateTime, TimeZone, Utc};
-use hyper;
-use std::error::Error;
-use std::fmt;
-use std::io;
-use std::str::FromStr;
+use crate::error::{AuthErrorOr, Error};
 
-use futures::prelude::*;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
-/// A marker trait for all Flows
-pub trait Flow {
-    fn type_id() -> FlowType;
+/// Represents an access token returned by oauth2 servers. All access tokens are
+/// Bearer tokens. Other types of tokens are not supported.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
+pub struct AccessToken {
+    value: String,
+    expires_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct JsonError {
-    pub error: String,
-    pub error_description: Option<String>,
-    pub error_uri: Option<String>,
-}
+impl AccessToken {
+    /// A string representation of the access token.
+    pub fn as_str(&self) -> &str {
+        &self.value
+    }
 
-/// All possible outcomes of the refresh flow
-#[derive(Debug)]
-pub enum RefreshResult {
-    /// Indicates connection failure
-    Error(hyper::Error),
-    /// The server did not answer with a new token, providing the server message
-    RefreshError(String, Option<String>),
-    /// The refresh operation finished successfully, providing a new `Token`
-    Success(Token),
-}
+    /// The time the access token will expire, if any.
+    pub fn expiration_time(&self) -> Option<DateTime<Utc>> {
+        self.expires_at
+    }
 
-/// Encapsulates all possible results of a `poll_token(...)` operation in the Device flow.
-#[derive(Debug)]
-pub enum PollError {
-    /// Connection failure - retry if you think it's worth it
-    HttpError(hyper::Error),
-    /// Indicates we are expired, including the expiration date
-    Expired(DateTime<Utc>),
-    /// Indicates that the user declined access. String is server response
-    AccessDenied,
-    /// Indicates that too many attempts failed.
-    TimedOut,
-    /// Other type of error.
-    Other(String),
-}
-
-/// Encapsulates all possible results of the `token(...)` operation
-#[derive(Debug)]
-pub enum RequestError {
-    /// Indicates connection failure
-    ClientError(hyper::Error),
-    /// The OAuth client was not found
-    InvalidClient,
-    /// Some requested scopes were invalid. String contains the scopes as part of
-    /// the server error message
-    InvalidScope(String),
-    /// A 'catch-all' variant containing the server error and description
-    /// First string is the error code, the second may be a more detailed description
-    NegativeServerResponse(String, Option<String>),
-    /// A malformed server response.
-    BadServerResponse(String),
-    /// Error while decoding a JSON response.
-    JSONError(serde_json::error::Error),
-    /// Error within user input.
-    UserError(String),
-    /// A lower level IO error.
-    LowLevelError(io::Error),
-    /// A poll error occurred in the DeviceFlow.
-    Poll(PollError),
-    /// An error occurred while refreshing tokens.
-    Refresh(RefreshResult),
-    /// Error in token cache layer
-    Cache(Box<dyn Error + Send + Sync>),
-}
-
-impl From<hyper::Error> for RequestError {
-    fn from(error: hyper::Error) -> RequestError {
-        RequestError::ClientError(error)
+    /// Determine if the access token is expired.
+    /// This will report that the token is expired 1 minute prior to the
+    /// expiration time to ensure that when the token is actually sent to the
+    /// server it's still valid.
+    pub fn is_expired(&self) -> bool {
+        // Consider the token expired if it's within 1 minute of it's expiration
+        // time.
+        self.expires_at
+            .map(|expiration_time| expiration_time - chrono::Duration::minutes(1) <= Utc::now())
+            .unwrap_or(false)
     }
 }
 
-impl From<JsonError> for RequestError {
-    fn from(value: JsonError) -> RequestError {
-        match &*value.error {
-            "invalid_client" => RequestError::InvalidClient,
-            "invalid_scope" => RequestError::InvalidScope(
-                value
-                    .error_description
-                    .unwrap_or("no description provided".to_string()),
-            ),
-            _ => RequestError::NegativeServerResponse(value.error, value.error_description),
+impl AsRef<str> for AccessToken {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl From<TokenInfo> for AccessToken {
+    fn from(value: TokenInfo) -> Self {
+        AccessToken {
+            value: value.access_token,
+            expires_at: value.expires_at,
         }
     }
-}
-
-impl fmt::Display for RequestError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match *self {
-            RequestError::ClientError(ref err) => err.fmt(f),
-            RequestError::InvalidClient => "Invalid Client".fmt(f),
-            RequestError::InvalidScope(ref scope) => writeln!(f, "Invalid Scope: '{}'", scope),
-            RequestError::NegativeServerResponse(ref error, ref desc) => {
-                error.fmt(f)?;
-                if let &Some(ref desc) = desc {
-                    write!(f, ": {}", desc)?;
-                }
-                "\n".fmt(f)
-            }
-            RequestError::BadServerResponse(ref s) => s.fmt(f),
-            RequestError::JSONError(ref e) => format!(
-                "JSON Error; this might be a bug with unexpected server responses! {}",
-                e
-            )
-            .fmt(f),
-            RequestError::UserError(ref s) => s.fmt(f),
-            RequestError::LowLevelError(ref e) => e.fmt(f),
-            RequestError::Poll(ref pe) => pe.fmt(f),
-            RequestError::Refresh(ref rr) => format!("{:?}", rr).fmt(f),
-            RequestError::Cache(ref e) => e.fmt(f),
-        }
-    }
-}
-
-impl Error for RequestError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match *self {
-            RequestError::ClientError(ref err) => Some(err),
-            RequestError::LowLevelError(ref err) => Some(err),
-            RequestError::JSONError(ref err) => Some(err),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct StringError {
-    error: String,
-}
-
-impl fmt::Display for StringError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        self.description().fmt(f)
-    }
-}
-
-impl StringError {
-    pub fn new<S: AsRef<str>>(error: S, desc: Option<S>) -> StringError {
-        let mut error = error.as_ref().to_string();
-        if let Some(d) = desc {
-            error.push_str(": ");
-            error.push_str(d.as_ref());
-        }
-
-        StringError { error: error }
-    }
-}
-
-impl<'a> From<&'a dyn Error> for StringError {
-    fn from(err: &'a dyn Error) -> StringError {
-        StringError::new(err.description().to_string(), None)
-    }
-}
-
-impl From<String> for StringError {
-    fn from(value: String) -> StringError {
-        StringError::new(value, None)
-    }
-}
-
-impl Error for StringError {
-    fn description(&self) -> &str {
-        &self.error
-    }
-}
-
-/// Represents all implemented token types
-#[derive(Clone, PartialEq, Debug)]
-pub enum TokenType {
-    /// Means that whoever bears the access token will be granted access
-    Bearer,
-}
-
-impl AsRef<str> for TokenType {
-    fn as_ref(&self) -> &'static str {
-        match *self {
-            TokenType::Bearer => "Bearer",
-        }
-    }
-}
-
-impl FromStr for TokenType {
-    type Err = ();
-    fn from_str(s: &str) -> Result<TokenType, ()> {
-        match s {
-            "Bearer" => Ok(TokenType::Bearer),
-            _ => Err(()),
-        }
-    }
-}
-
-/// A scheme for use in `hyper::header::Authorization`
-#[derive(Clone, PartialEq, Debug)]
-pub struct Scheme {
-    /// The type of our access token
-    pub token_type: TokenType,
-    /// The token returned by one of the Authorization Flows
-    pub access_token: String,
-}
-
-impl std::convert::Into<hyper::header::HeaderValue> for Scheme {
-    fn into(self) -> hyper::header::HeaderValue {
-        hyper::header::HeaderValue::from_str(&format!(
-            "{} {}",
-            self.token_type.as_ref(),
-            self.access_token
-        ))
-        .expect("Invalid Scheme header value")
-    }
-}
-
-impl FromStr for Scheme {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Scheme, &'static str> {
-        let parts: Vec<&str> = s.split(' ').collect();
-        if parts.len() != 2 {
-            return Err("Expected two parts: <token_type> <token>");
-        }
-        match <TokenType as FromStr>::from_str(parts[0]) {
-            Ok(t) => Ok(Scheme {
-                token_type: t,
-                access_token: parts[1].to_string(),
-            }),
-            Err(_) => Err("Couldn't parse token type"),
-        }
-    }
-}
-
-/// A provider for authorization tokens, yielding tokens valid for a given scope.
-/// The `api_key()` method is an alternative in case there are no scopes or
-/// if no user is involved.
-pub trait GetToken {
-    fn token<I, T>(
-        &mut self,
-        scopes: I,
-    ) -> Box<dyn Future<Item = Token, Error = RequestError> + Send>
-    where
-        T: Into<String>,
-        I: IntoIterator<Item = T>;
-
-    fn api_key(&mut self) -> Option<String>;
-
-    /// Return an application secret with at least token_uri, client_secret, and client_id filled
-    /// in. This is used for refreshing tokens without interaction from the flow.
-    fn application_secret(&self) -> ApplicationSecret;
 }
 
 /// Represents a token as returned by OAuth2 servers.
@@ -260,84 +55,61 @@ pub trait GetToken {
 /// It is produced by all authentication flows.
 /// It authenticates certain operations, and must be refreshed once
 /// it reached it's expiry date.
-///
-/// The type is tuned to be suitable for direct de-serialization from server
-/// replies, as well as for serialization for later reuse. This is the reason
-/// for the two fields dealing with expiry - once in relative in and once in
-/// absolute terms.
-///
-/// Utility methods make common queries easier, see `expired()`.
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct Token {
+pub(crate) struct TokenInfo {
     /// used when authenticating calls to oauth2 enabled services.
-    pub access_token: String,
+    pub(crate) access_token: String,
     /// used to refresh an expired access_token.
-    pub refresh_token: Option<String>,
-    /// The token type as string - usually 'Bearer'.
-    pub token_type: String,
-    /// access_token will expire after this amount of time.
-    /// Prefer using expiry_date()
-    pub expires_in: Option<i64>,
-    /// timestamp is seconds since epoch indicating when the token will expire in absolute terms.
-    /// use expiry_date() to convert to DateTime.
-    pub expires_in_timestamp: Option<i64>,
+    pub(crate) refresh_token: Option<String>,
+    /// The time when the token expires.
+    pub(crate) expires_at: Option<DateTime<Utc>>,
 }
 
-impl Token {
+impl TokenInfo {
+    pub(crate) fn from_json(json_data: &[u8]) -> Result<TokenInfo, Error> {
+        #[derive(Deserialize)]
+        struct RawToken {
+            access_token: String,
+            refresh_token: Option<String>,
+            token_type: String,
+            expires_in: Option<i64>,
+        }
+
+        let RawToken {
+            access_token,
+            refresh_token,
+            token_type,
+            expires_in,
+        } = serde_json::from_slice::<AuthErrorOr<RawToken>>(json_data)?.into_result()?;
+
+        if token_type.to_lowercase().as_str() != "bearer" {
+            use std::io;
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    r#"unknown token type returned; expected "bearer" found {}"#,
+                    token_type
+                ),
+            )
+            .into());
+        }
+
+        let expires_at = expires_in
+            .map(|seconds_from_now| Utc::now() + chrono::Duration::seconds(seconds_from_now));
+
+        Ok(TokenInfo {
+            access_token,
+            refresh_token,
+            expires_at,
+        })
+    }
+
     /// Returns true if we are expired.
-    ///
-    /// # Panics
-    /// * if our access_token is unset
-    pub fn expired(&self) -> bool {
-        if self.access_token.len() == 0 {
-            panic!("called expired() on unset token");
-        }
-        if let Some(expiry_date) = self.expiry_date() {
-            expiry_date - chrono::Duration::minutes(1) <= Utc::now()
-        } else {
-            false
-        }
+    pub fn is_expired(&self) -> bool {
+        self.expires_at
+            .map(|expiration_time| expiration_time - chrono::Duration::minutes(1) <= Utc::now())
+            .unwrap_or(false)
     }
-
-    /// Returns a DateTime object representing our expiry date.
-    pub fn expiry_date(&self) -> Option<DateTime<Utc>> {
-        let expires_in_timestamp = self.expires_in_timestamp?;
-
-        Utc.timestamp(expires_in_timestamp, 0).into()
-    }
-
-    /// Adjust our stored expiry format to be absolute, using the current time.
-    pub fn set_expiry_absolute(&mut self) -> &mut Token {
-        if self.expires_in_timestamp.is_some() {
-            assert!(self.expires_in.is_none());
-            return self;
-        }
-
-        if let Some(expires_in) = self.expires_in {
-            self.expires_in_timestamp = Some(Utc::now().timestamp() + expires_in);
-            self.expires_in = None;
-        }
-
-        self
-    }
-}
-
-/// All known authentication types, for suitable constants
-#[derive(Clone)]
-pub enum FlowType {
-    /// [device authentication](https://developers.google.com/youtube/v3/guides/authentication#devices). Only works
-    /// for certain scopes.
-    /// Contains the device token URL; for google, that is
-    /// https://accounts.google.com/o/oauth2/device/code (exported as `GOOGLE_DEVICE_CODE_URL`)
-    Device(String),
-    /// [installed app flow](https://developers.google.com/identity/protocols/OAuth2InstalledApp). Required
-    /// for Drive, Calendar, Gmail...; Requires user to paste a code from the browser.
-    InstalledInteractive,
-    /// Same as InstalledInteractive, but uses a redirect: The OAuth provider redirects the user's
-    /// browser to a web server that is running on localhost. This may not work as well with the
-    /// Windows Firewall, but is more comfortable otherwise. The integer describes which port to
-    /// bind to (default: 8080)
-    InstalledRedirect(u16),
 }
 
 /// Represents either 'installed' or 'web' applications in a json secrets file.
@@ -352,8 +124,8 @@ pub struct ApplicationSecret {
     pub token_uri: String,
     /// The authorization server endpoint URI.
     pub auth_uri: String,
+    /// The redirect uris.
     pub redirect_uris: Vec<String>,
-
     /// Name of the google project the credentials are associated with
     pub project_id: Option<String>,
     /// The service account email associated with the client.
@@ -369,14 +141,15 @@ pub struct ApplicationSecret {
 /// as returned by the [google developer console](https://code.google.com/apis/console)
 #[derive(Deserialize, Serialize, Default)]
 pub struct ConsoleApplicationSecret {
+    /// web app secret
     pub web: Option<ApplicationSecret>,
+    /// installed app secret
     pub installed: Option<ApplicationSecret>,
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use hyper;
 
     pub const SECRET: &'static str =
         "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\
@@ -393,26 +166,5 @@ pub mod tests {
             Ok(s) => assert!(s.installed.is_some() && s.web.is_none()),
             Err(err) => panic!(err),
         }
-    }
-
-    #[test]
-    fn schema() {
-        let s = Scheme {
-            token_type: TokenType::Bearer,
-            access_token: "foo".to_string(),
-        };
-        let mut headers = hyper::HeaderMap::new();
-        headers.insert(hyper::header::AUTHORIZATION, s.into());
-        assert_eq!(
-            format!("{:?}", headers),
-            "{\"authorization\": \"Bearer foo\"}".to_string()
-        );
-    }
-
-    #[test]
-    fn parse_schema() {
-        let auth = Scheme::from_str("Bearer foo").unwrap();
-        assert_eq!(auth.token_type, TokenType::Bearer);
-        assert_eq!(auth.access_token, "foo".to_string());
     }
 }
