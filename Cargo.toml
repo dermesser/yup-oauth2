@@ -1,7 +1,7 @@
 [package]
 
 name = "yup-oauth2"
-version = "3.1.1"
+version = "4.0.1"
 authors = ["Sebastian Thiel <byronimo@gmail.com>", "Lewin Bormann <lbo@spheniscida.de>"]
 repository = "https://github.com/dermesser/yup-oauth2"
 description = "An oauth2 implementation, providing the 'device', 'service account' and 'installed' authorization flows"
@@ -25,7 +25,7 @@ tokio = { version = "0.2", features = ["fs", "macros", "io-std", "time"] }
 url = "1"
 
 [dev-dependencies]
-httptest = "0.5"
+httptest = "0.11.1"
 env_logger = "0.6"
 tempfile = "3.1"
 
