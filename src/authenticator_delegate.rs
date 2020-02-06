@@ -86,6 +86,16 @@ pub trait DeviceFlowDelegate: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
         Box::pin(present_user_code(device_auth_resp))
     }
+
+    /// The name of the device code
+    fn device_code_name(&self) -> &str {
+        "code"
+    }
+
+    /// The URL for the Grant Type Check
+    fn grant_type_for_check(&self) -> &str {
+        "http://oauth.net/grant_type/device/1.0"
+    }
 }
 
 async fn present_user_code(device_auth_resp: &DeviceAuthResponse) {
@@ -143,14 +153,6 @@ async fn present_user_url(url: &str, need_code: bool) -> Result<String, String> 
             url
         );
         Ok(String::new())
-    }
-
-    fn device_code_name(&self) -> &str {
-        "code"
-    }
-
-    fn grant_type_for_check(&self) -> &str {
-        "http://oauth.net/grant_type/device/1.0"
     }
 }
 

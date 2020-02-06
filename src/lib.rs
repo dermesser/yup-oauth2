@@ -81,13 +81,9 @@ mod service_account;
 mod storage;
 mod types;
 
-// pub use crate::authenticator::{AuthFlow, Authenticator};
-// pub use crate::authenticator_delegate::{
-//     AuthenticatorDelegate, DefaultAuthenticatorDelegate, DefaultFlowDelegate, FlowDelegate,
-//     PollInformation, Retry
 #[doc(inline)]
 pub use crate::authenticator::{
-    DeviceFlowAuthenticator, InstalledFlowAuthenticator, ServiceAccountAuthenticator, AuthFlow, Retry,
+    DeviceFlowAuthenticator, InstalledFlowAuthenticator, ServiceAccountAuthenticator,
 };
 
 pub use crate::helper::*;
