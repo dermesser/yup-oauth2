@@ -11,18 +11,19 @@ license = "MIT OR Apache-2.0"
 edition = "2018"
 
 [dependencies]
-base64 = "0.10"
+base64 = "0.11"
 chrono = { version = "0.4", features = ["serde"] }
 http = "0.2"
 hyper = "0.13.1"
 hyper-rustls = "0.19"
 log = "0.4"
 rustls = "0.16"
-seahash = "3.0.6"
+seahash = "4"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 tokio = { version = "0.2", features = ["fs", "macros", "io-std", "time"] }
-url = "1"
+url = "2"
+percent-encoding = "2"
 
 [dev-dependencies]
 httptest = "0.11.1"

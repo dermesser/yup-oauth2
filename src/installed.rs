@@ -13,7 +13,9 @@ use std::sync::{Arc, Mutex};
 use hyper::header;
 use tokio::sync::oneshot;
 use url::form_urlencoded;
-use url::percent_encoding::{percent_encode, QUERY_ENCODE_SET};
+use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
+
+const QUERY_SET: AsciiSet = CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');
 
 const OOB_REDIRECT_URI: &str = "urn:ietf:wg:oauth:2.0:oob";
 
@@ -42,7 +44,7 @@ where
     ]
     .into_iter()
     .fold(url, |mut u, param| {
-        u.push_str(&percent_encode(param.as_ref(), QUERY_ENCODE_SET).to_string());
+        u.push_str(&percent_encode(param.as_ref(), &QUERY_SET).to_string());
         u
     })
 }
