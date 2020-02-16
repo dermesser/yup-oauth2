@@ -11,9 +11,9 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use hyper::header;
+use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
 use tokio::sync::oneshot;
 use url::form_urlencoded;
-use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
 
 const QUERY_SET: AsciiSet = CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');
 
