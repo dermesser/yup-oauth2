@@ -56,15 +56,24 @@ where
 
     /// Return a token for the provided scopes, but don't reuse cached tokens. Instead,
     /// always fetch a new token from the OAuth server.
-    pub async fn force_refreshed_token<'a, T>(&'a self, scopes: &'a [T]) -> Result<AccessToken, Error>
-        where T: AsRef<str>
+    pub async fn force_refreshed_token<'a, T>(
+        &'a self,
+        scopes: &'a [T],
+    ) -> Result<AccessToken, Error>
+    where
+        T: AsRef<str>,
     {
         self.find_token(scopes, /* force_refresh = */ true).await
     }
 
     /// Return a cached token or fetch a new one from the server.
-    async fn find_token<'a, T>(&'a self, scopes: &'a [T], force_refresh: bool) -> Result<AccessToken, Error>
-        where T: AsRef<str>
+    async fn find_token<'a, T>(
+        &'a self,
+        scopes: &'a [T],
+        force_refresh: bool,
+    ) -> Result<AccessToken, Error>
+    where
+        T: AsRef<str>,
     {
         log::debug!(
             "access token requested for scopes: {}",
