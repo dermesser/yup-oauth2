@@ -51,13 +51,37 @@ where
     where
         T: AsRef<str>,
     {
+        self.find_token(scopes, /* force_refresh = */ false).await
+    }
+
+    /// Return a token for the provided scopes, but don't reuse cached tokens. Instead,
+    /// always fetch a new token from the OAuth server.
+    pub async fn force_refreshed_token<'a, T>(
+        &'a self,
+        scopes: &'a [T],
+    ) -> Result<AccessToken, Error>
+    where
+        T: AsRef<str>,
+    {
+        self.find_token(scopes, /* force_refresh = */ true).await
+    }
+
+    /// Return a cached token or fetch a new one from the server.
+    async fn find_token<'a, T>(
+        &'a self,
+        scopes: &'a [T],
+        force_refresh: bool,
+    ) -> Result<AccessToken, Error>
+    where
+        T: AsRef<str>,
+    {
         log::debug!(
             "access token requested for scopes: {}",
             DisplayScopes(scopes)
         );
         let hashed_scopes = storage::ScopeSet::from(scopes);
         match (self.storage.get(hashed_scopes), self.auth_flow.app_secret()) {
-            (Some(t), _) if !t.is_expired() => {
+            (Some(t), _) if !t.is_expired() && !force_refresh => {
                 // unexpired token found
                 log::debug!("found valid token in cache: {:?}", t);
                 Ok(t.into())
