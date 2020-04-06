@@ -4,10 +4,10 @@
 //
 use crate::types::TokenInfo;
 
+use futures::lock::Mutex;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
@@ -120,18 +120,18 @@ impl Storage {
         T: AsRef<str>,
     {
         match self {
-            Storage::Memory { tokens } => tokens.lock().unwrap().set(scopes, token),
+            Storage::Memory { tokens } => tokens.lock().await.set(scopes, token),
             Storage::Disk(disk_storage) => disk_storage.set(scopes, token).await,
         }
     }
 
-    pub(crate) fn get<T>(&self, scopes: ScopeSet<T>) -> Option<TokenInfo>
+    pub(crate) async fn get<T>(&self, scopes: ScopeSet<'_, T>) -> Option<TokenInfo>
     where
         T: AsRef<str>,
     {
         match self {
-            Storage::Memory { tokens } => tokens.lock().unwrap().get(scopes),
-            Storage::Disk(disk_storage) => disk_storage.get(scopes),
+            Storage::Memory { tokens } => tokens.lock().await.get(scopes),
+            Storage::Disk(disk_storage) => disk_storage.get(scopes).await,
         }
     }
 }
@@ -334,7 +334,7 @@ impl DiskStorage {
         use tokio::io::AsyncWriteExt;
         let json = {
             use std::ops::Deref;
-            let mut lock = self.tokens.lock().unwrap();
+            let mut lock = self.tokens.lock().await;
             lock.set(scopes, token)?;
             serde_json::to_string(lock.deref())
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
@@ -344,11 +344,11 @@ impl DiskStorage {
         Ok(())
     }
 
-    pub(crate) fn get<T>(&self, scopes: ScopeSet<T>) -> Option<TokenInfo>
+    pub(crate) async fn get<T>(&self, scopes: ScopeSet<'_, T>) -> Option<TokenInfo>
     where
         T: AsRef<str>,
     {
-        self.tokens.lock().unwrap().get(scopes)
+        self.tokens.lock().await.get(scopes)
     }
 }
 
@@ -413,19 +413,25 @@ mod tests {
             let storage = DiskStorage::new(tempdir.path().join("tokenstorage.json"))
                 .await
                 .unwrap();
-            assert!(storage.get(scope_set).is_none());
+            assert!(storage.get(scope_set).await.is_none());
             storage
                 .set(scope_set, new_token("my_access_token"))
                 .await
                 .unwrap();
-            assert_eq!(storage.get(scope_set), Some(new_token("my_access_token")));
+            assert_eq!(
+                storage.get(scope_set).await,
+                Some(new_token("my_access_token"))
+            );
         }
         {
             // Create a new DiskStorage instance and verify the tokens were read from disk correctly.
             let storage = DiskStorage::new(tempdir.path().join("tokenstorage.json"))
                 .await
                 .unwrap();
-            assert_eq!(storage.get(scope_set), Some(new_token("my_access_token")));
+            assert_eq!(
+                storage.get(scope_set).await,
+                Some(new_token("my_access_token"))
+            );
         }
     }
 }

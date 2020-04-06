@@ -9,11 +9,11 @@ use crate::storage::{self, Storage};
 use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
 use private::AuthFlow;
 
+use futures::lock::Mutex;
 use std::borrow::Cow;
 use std::fmt;
 use std::io;
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 /// Authenticator is responsible for fetching tokens, handling refreshing tokens,
 /// and optionally persisting tokens to disk.
@@ -80,7 +80,10 @@ where
             DisplayScopes(scopes)
         );
         let hashed_scopes = storage::ScopeSet::from(scopes);
-        match (self.storage.get(hashed_scopes), self.auth_flow.app_secret()) {
+        match (
+            self.storage.get(hashed_scopes).await,
+            self.auth_flow.app_secret(),
+        ) {
             (Some(t), _) if !t.is_expired() && !force_refresh => {
                 // unexpired token found
                 log::debug!("found valid token in cache: {:?}", t);
