@@ -6,9 +6,10 @@ use crate::authenticator_delegate::{DefaultInstalledFlowDelegate, InstalledFlowD
 use crate::error::Error;
 use crate::types::{ApplicationSecret, TokenInfo};
 
+use futures::lock::Mutex;
 use std::convert::AsRef;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use hyper::header;
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
@@ -286,8 +287,9 @@ impl InstalledFlowServer {
 }
 
 mod installed_flow_server {
+    use futures::lock::Mutex;
     use hyper::{Body, Request, Response, StatusCode, Uri};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use tokio::sync::oneshot;
     use url::form_urlencoded;
 
@@ -312,7 +314,7 @@ mod installed_flow_server {
                         .body(hyper::Body::from("Unparseable URL")),
                     Ok(url) => match auth_code_from_url(url) {
                         Some(auth_code) => {
-                            if let Some(sender) = auth_code_tx.lock().unwrap().take() {
+                            if let Some(sender) = auth_code_tx.lock().await.take() {
                                 let _ = sender.send(auth_code);
                             }
                             hyper::Response::builder().status(StatusCode::OK).body(
