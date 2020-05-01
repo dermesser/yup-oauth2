@@ -454,6 +454,10 @@ pub trait HyperClientBuilder {
     fn build_hyper_client(self) -> hyper::Client<Self::Connector>;
 }
 
+/// Default authenticator type
+pub type DefaultAuthenticator =
+    Authenticator<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>;
+
 /// The builder value used when the default hyper client should be used.
 pub struct DefaultHyperClient;
 impl HyperClientBuilder for DefaultHyperClient {
