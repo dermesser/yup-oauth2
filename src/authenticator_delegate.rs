@@ -87,10 +87,10 @@ pub trait DeviceFlowDelegate: Send + Sync {
         Box::pin(present_user_code(device_auth_resp))
     }
 
-    /// The name of the device code
-    fn device_code_name(&self) -> &str {
-        "code"
-    }
+    // The name of the device code
+    // fn device_code_name(&self) -> &str {
+    //     "code"
+    // }
 
     // The URL for the Grant Type Check
     // fn grant_type_for_check(&self) -> &str {
