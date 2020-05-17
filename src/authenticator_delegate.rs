@@ -92,10 +92,11 @@ pub trait DeviceFlowDelegate: Send + Sync {
         "code"
     }
 
-    /// The URL for the Grant Type Check
-    fn grant_type_for_check(&self) -> &str {
-        "http://oauth.net/grant_type/device/1.0"
-    }
+    // The URL for the Grant Type Check
+    // fn grant_type_for_check(&self) -> &str {
+    //     //"http://oauth.net/grant_type/device/1.0"
+    //     crate::device::GOOGLE_GRANT_TYPE
+    // }
 }
 
 async fn present_user_code(device_auth_resp: &DeviceAuthResponse) {
