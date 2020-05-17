@@ -106,7 +106,7 @@ async fn present_user_code(device_auth_resp: &DeviceAuthResponse) {
     );
     println!("Do not close this application until you either denied or granted access.");
     println!(
-        "You have time until {}.",
+        "You have time until : {}.",
         device_auth_resp.expires_at.with_timezone(&Local)
     );
 }
