@@ -92,6 +92,7 @@ struct Claims<'a> {
     aud: &'a str,
     exp: i64,
     iat: i64,
+    #[serde(rename = "sub")]
     subject: Option<&'a str>,
     scope: String,
 }
