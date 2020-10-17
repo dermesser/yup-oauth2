@@ -8,6 +8,13 @@ Status](https://travis-ci.org/dermesser/yup-oauth2.svg)](https://travis-ci.org/d
 (However, you're able to use it with raw HTTP requests as well; the flows are implemented as token
 sources yielding HTTP Bearer tokens).
 
+**yup-oauth2** is `async`-first since some time ago. To also use asynchronous
+APIs, use the
+[`async-google-apis`](https://github.com/dermesser/async-google-apis) code
+generator, which generates asynchronous API stubs for Google APIs and other
+providers who provide Discovery documents for their REST APIs. (*WARNING*: that project is still
+*alpha*-quality)
+
 The provider we have been testing the code against is also Google. However, the code itself is
 generic, and any OAuth provider behaving like Google will work as well. If you find one that
 doesn't, please let us know and/or contribute a fix!
