@@ -6,14 +6,14 @@ Status](https://travis-ci.org/dermesser/yup-oauth2.svg)](https://travis-ci.org/d
 **yup-oauth2** is a utility library which implements several OAuth 2.0 flows. It's mainly used by
 [google-apis-rs](https://github.com/Byron/google-apis-rs), to authenticate against Google services.
 (However, you're able to use it with raw HTTP requests as well; the flows are implemented as token
-sources yielding HTTP Bearer tokens).
+sources yielding HTTP Bearer tokens). Note that the newer, asynchronous versions of this crate
+(version 4) are not compatible with `google-apis-rs` anymore/at the moment.
 
-**yup-oauth2** is `async`-first since some time ago. To also use asynchronous
-APIs, use the
+To use asynchronous APIs with the new yup-oauth2 (from version 4), use the
 [`async-google-apis`](https://github.com/dermesser/async-google-apis) code
 generator, which generates asynchronous API stubs for Google APIs and other
-providers who provide Discovery documents for their REST APIs. (*WARNING*: that project is still
-*alpha*-quality)
+providers who provide Discovery documents for their REST APIs. (*WARNING*: that
+project is still *alpha*-quality. Contributions are welcome)
 
 The provider we have been testing the code against is also Google. However, the code itself is
 generic, and any OAuth provider behaving like Google will work as well. If you find one that

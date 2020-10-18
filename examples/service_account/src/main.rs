@@ -1,3 +1,6 @@
+//! Warning: This example is outdated. It worked with yup-oauth2 version 1. To use the new
+//! asynchronous yup-oauth2, take a look at: https://github.com/dermesser/async-google-apis.
+//!
 //! Demonstrates the use of service accounts and the Google Cloud Pubsub API.
 //!
 //! Run this binary as .../service_account pub 'your message' in order to publish messages,
