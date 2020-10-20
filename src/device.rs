@@ -80,7 +80,7 @@ impl DeviceFlow {
         let mut interval = device_auth_resp.interval;
         log::debug!("Polling every {:?} for device token", interval);
         loop {
-            tokio::time::sleep(interval).await;
+            tokio::time::delay_for(interval).await;
             interval = match Self::poll_token(
                 &app_secret,
                 hyper_client,
