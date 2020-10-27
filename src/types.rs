@@ -114,7 +114,7 @@ impl TokenInfo {
 
 /// Represents either 'installed' or 'web' applications in a json secrets file.
 /// See `ConsoleApplicationSecret` for more information
-#[derive(Deserialize, Serialize, Clone, Default)]
+#[derive(Deserialize, Serialize, Clone, Default, Debug)]
 pub struct ApplicationSecret {
     /// The client ID.
     pub client_id: String,
@@ -139,7 +139,7 @@ pub struct ApplicationSecret {
 
 /// A type to facilitate reading and writing the json secret file
 /// as returned by the [google developer console](https://code.google.com/apis/console)
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, Default, Debug)]
 pub struct ConsoleApplicationSecret {
     /// web app secret
     pub web: Option<ApplicationSecret>,
