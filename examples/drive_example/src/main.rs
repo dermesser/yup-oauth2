@@ -11,7 +11,7 @@ use std::path::Path;
 use hyper::net::HttpsConnector;
 use hyper_native_tls::NativeTlsClient;
 
-use google_drive3::Drive;
+use google_drive3::DriveHub;
 use yup_oauth2::{
     read_application_secret, ApplicationSecret, Authenticator, DefaultAuthenticatorDelegate,
     DiskTokenStorage, FlowType,
@@ -37,7 +37,7 @@ fn main() {
     );
     let client =
         hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
-    let hub = Drive::new(client, authenticator);
+    let hub = DriveHub::new(client, authenticator);
 
     let (_resp, list_result) = hub
         .files()
