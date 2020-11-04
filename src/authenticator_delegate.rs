@@ -128,6 +128,9 @@ async fn present_user_url(url: &str, need_code: bool) -> Result<String, String> 
              code displayed here: ",
             url
         );
+        if webbrowser::open(url).is_ok() {
+            println!("webbrowser was successfully opened.");
+        }
         let mut user_input = String::new();
         tokio::io::BufReader::new(tokio::io::stdin())
             .read_line(&mut user_input)
@@ -142,6 +145,9 @@ async fn present_user_url(url: &str, need_code: bool) -> Result<String, String> 
              there.",
             url
         );
+        if webbrowser::open(url).is_ok() {
+            println!("webbrowser was successfully opened.");
+        }
         Ok(String::new())
     }
 }

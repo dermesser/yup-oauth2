@@ -25,6 +25,7 @@ tokio = { version = "0.2", features = ["fs", "macros", "io-std", "time"] }
 url = "2"
 percent-encoding = "2"
 futures = "0.3"
+webbrowser = "0.5"
 
 [dev-dependencies]
 httptest = "0.11.1"
