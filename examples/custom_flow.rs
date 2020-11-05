@@ -6,16 +6,17 @@
 //! paste needed to continue with the operation.
 use std::future::Future;
 use std::pin::Pin;
-use yup_oauth2::authenticator_delegate::{present_user_url, InstalledFlowDelegate};
+use yup_oauth2::authenticator_delegate::{DefaultInstalledFlowDelegate, InstalledFlowDelegate};
 
 /// async function to be pinned by the `present_user_url` method of the trait
-/// we use the existing `authenticator_delegate::present_user_url` function as a fallback for
+/// we use the existing `DefaultInstalledFlowDelegate::present_user_url` method as a fallback for
 /// when the browser did not open for example, the user still see's the URL.
 async fn browser_user_url(url: &str, need_code: bool) -> Result<String, String> {
     if webbrowser::open(url).is_ok() {
         println!("webbrowser was successfully opened.");
     }
-    present_user_url(url, need_code).await
+    let def_delegate = DefaultInstalledFlowDelegate;
+    def_delegate.present_user_url(url, need_code).await
 }
 
 /// our custom delegate struct we will implement a flow delegate trait for:

@@ -120,8 +120,7 @@ pub trait InstalledFlowDelegate: Send + Sync {
     }
 }
 
-/// Used for FlowDelegates to ask user to open URL.
-pub async fn present_user_url(url: &str, need_code: bool) -> Result<String, String> {
+async fn present_user_url(url: &str, need_code: bool) -> Result<String, String> {
     use tokio::io::AsyncBufReadExt;
     if need_code {
         println!(
