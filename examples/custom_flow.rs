@@ -48,6 +48,7 @@ async fn main() {
         yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect,
     )
     .persist_tokens_to_disk("tokencache.json")
+    // use our custom flow delegate instead of default
     .flow_delegate(Box::new(InstalledFlowBrowserDelegate))
     .build()
     .await
