@@ -10,7 +10,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 
-use httptest::{mappers::*, responders::json_encoded, Expectation, Server};
+use httptest::{matchers::*, responders::json_encoded, Expectation, Server};
 use hyper::client::connect::HttpConnector;
 use hyper::Uri;
 use hyper_rustls::HttpsConnector;
