@@ -30,6 +30,7 @@ futures = "0.3"
 httptest = "0.11.1"
 env_logger = "0.7"
 tempfile = "3.1"
+webbrowser = "0.5"
 
 [workspace]
 members = ["examples/test-installed/", "examples/test-svc-acct/", "examples/test-device/", "examples/service_account"]
