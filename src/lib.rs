@@ -6,9 +6,8 @@
 //! Google services) respectively the documentation of the API provider you want to connect to.
 //!
 //! # Device Flow Usage
-//! As the `DeviceFlow` involves polling, the `DeviceFlowHelper` should be used
-//! as means to adhere to the protocol, and remain resilient to all kinds of errors
-//! that can occur on the way.
+//! With an application secret you can get started right away, building a `DeviceFlowAuthenticator`
+//! and obtaining tokens from it.
 //!
 //! # Service account "flow"
 //! When using service account credentials, no user interaction is required. The access token
