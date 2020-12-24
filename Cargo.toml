@@ -27,7 +27,7 @@ percent-encoding = "2"
 futures = "0.3"
 
 [dev-dependencies]
-httptest = { git = "https://github.com/ggriffiniii/httptest" }
+httptest = "0.14"
 env_logger = "0.7"
 tempfile = "3.1"
 
