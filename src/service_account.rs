@@ -227,7 +227,7 @@ mod tests {
         let acc = ServiceAccountFlow::new(ServiceAccountFlowOpts { key, subject: None }).unwrap();
         let https = HttpsConnector::new();
         let client = hyper::Client::builder()
-            .keep_alive(false)
+            .pool_max_idle_per_host(0)
             .build::<_, hyper::Body>(https);
         println!(
             "{:?}",

@@ -14,20 +14,20 @@ edition = "2018"
 base64 = "0.12"
 chrono = { version = "0.4", features = ["serde"] }
 http = "0.2"
-hyper = { git = "https://github.com/hyperium/hyper" }
-hyper-rustls = { git = "https://github.com/messense/hyper-rustls", branch = "tokio-0-3" }
+hyper = { version = "0.14", features = ["client", "server", "tcp", "http2"] }
+hyper-rustls = { git = "https://github.com/ctz/hyper-rustls" }
 log = "0.4"
-rustls = "0.18"
+rustls = "0.19"
 seahash = "4"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
-tokio = { version = "0.3", features = ["fs", "macros", "io-std", "io-util", "time", "sync", "rt"] }
+tokio = { version = "1.0", features = ["fs", "macros", "io-std", "io-util", "time", "sync", "rt"] }
 url = "2"
 percent-encoding = "2"
 futures = "0.3"
 
 [dev-dependencies]
-httptest = { git = "https://github.com/maximebedard/httptest", branch = "bump-tokio-hyper" }
+httptest = { git = "https://github.com/ggriffiniii/httptest" }
 env_logger = "0.7"
 tempfile = "3.1"
 
