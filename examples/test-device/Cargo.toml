@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 yup-oauth2 = { path = "../../" }
-tokio = { version = "1.0", features = ["macros", "rt", "rt-multi-thread"] }
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
