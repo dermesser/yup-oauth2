@@ -466,7 +466,7 @@ impl HyperClientBuilder for DefaultHyperClient {
     fn build_hyper_client(self) -> hyper::Client<Self::Connector> {
         hyper::Client::builder()
             .pool_max_idle_per_host(0)
-            .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new())
+            .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::with_native_roots())
     }
 }
 
