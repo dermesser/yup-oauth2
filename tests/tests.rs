@@ -10,7 +10,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 
-use httptest::{mappers::*, responders::json_encoded, Expectation, Server};
+use httptest::{matchers::*, responders::json_encoded, Expectation, Server};
 use hyper::client::connect::HttpConnector;
 use hyper::Uri;
 use hyper_rustls::HttpsConnector;
@@ -215,9 +215,10 @@ async fn create_installed_flow_auth(
         }
     }
 
-    let mut builder = InstalledFlowAuthenticator::builder(app_secret, method).flow_delegate(
-        Box::new(FD(hyper::Client::builder().build(HttpsConnector::new()))),
-    );
+    let mut builder =
+        InstalledFlowAuthenticator::builder(app_secret, method).flow_delegate(Box::new(FD(
+            hyper::Client::builder().build(HttpsConnector::with_native_roots()),
+        )));
 
     builder = if let Some(filename) = filename {
         builder.persist_tokens_to_disk(filename)
