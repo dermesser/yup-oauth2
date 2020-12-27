@@ -215,9 +215,10 @@ async fn create_installed_flow_auth(
         }
     }
 
-    let mut builder = InstalledFlowAuthenticator::builder(app_secret, method).flow_delegate(
-        Box::new(FD(hyper::Client::builder().build(HttpsConnector::with_native_roots()))),
-    );
+    let mut builder =
+        InstalledFlowAuthenticator::builder(app_secret, method).flow_delegate(Box::new(FD(
+            hyper::Client::builder().build(HttpsConnector::with_native_roots()),
+        )));
 
     builder = if let Some(filename) = filename {
         builder.persist_tokens_to_disk(filename)
