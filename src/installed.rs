@@ -41,7 +41,7 @@ where
         url.push('?');
     } else {
         match url.chars().last() {
-            Some('?') | None => {},
+            Some('?') | None => {}
             Some(_) => url.push('&'),
         }
     }
