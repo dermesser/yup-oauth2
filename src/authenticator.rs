@@ -454,19 +454,32 @@ pub trait HyperClientBuilder {
     fn build_hyper_client(self) -> hyper::Client<Self::Connector>;
 }
 
+#[cfg(not(feature = "hyper-tls"))]
 /// Default authenticator type
 pub type DefaultAuthenticator =
     Authenticator<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>;
+#[cfg(feature = "hyper-tls")]
+/// Default authenticator type
+pub type DefaultAuthenticator =
+    Authenticator<hyper_tls::HttpsConnector<hyper::client::HttpConnector>>;
 
 /// The builder value used when the default hyper client should be used.
 pub struct DefaultHyperClient;
 impl HyperClientBuilder for DefaultHyperClient {
+    #[cfg(not(feature = "hyper-tls"))]
     type Connector = hyper_rustls::HttpsConnector<hyper::client::connect::HttpConnector>;
+    #[cfg(feature = "hyper-tls")]
+    type Connector = hyper_tls::HttpsConnector<hyper::client::connect::HttpConnector>;
 
     fn build_hyper_client(self) -> hyper::Client<Self::Connector> {
+        #[cfg(not(feature = "hyper-tls"))]
+        let connector = hyper_rustls::HttpsConnector::new();
+        #[cfg(feature = "hyper-tls")]
+        let connector = hyper_tls::HttpsConnector::new();
+
         hyper::Client::builder()
             .pool_max_idle_per_host(0)
-            .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new())
+            .build::<_, hyper::Body>(connector)
     }
 }
 
