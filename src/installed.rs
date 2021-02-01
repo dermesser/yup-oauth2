@@ -36,8 +36,18 @@ where
     let scopes_string = crate::helper::join(scopes, " ");
 
     url.push_str(auth_uri);
+
+    if !url.contains('?') {
+        url.push('?');
+    } else {
+        match url.chars().last() {
+            Some('?') | None => {}
+            Some(_) => url.push('&'),
+        }
+    }
+
     vec![
-        format!("?scope={}", scopes_string),
+        format!("scope={}", scopes_string),
         "&access_type=offline".to_string(),
         format!("&redirect_uri={}", redirect_uri.unwrap_or(OOB_REDIRECT_URI)),
         "&response_type=code".to_string(),
@@ -363,6 +373,23 @@ mod tests {
              f.apps.googleusercontent.com",
             build_authentication_request_url(
                 "https://accounts.google.com/o/oauth2/auth",
+                "812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5am\
+                 rf.apps.googleusercontent.com",
+                &["email", "profile"],
+                None
+            )
+        );
+    }
+
+    #[test]
+    fn test_request_url_builder_appends_queries() {
+        assert_eq!(
+            "https://accounts.google.\
+             com/o/oauth2/auth?unknown=testing&scope=email%20profile&access_type=offline&redirect_uri=urn:ietf:wg:oauth:2.0:\
+             oob&response_type=code&client_id=812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5amr\
+             f.apps.googleusercontent.com",
+            build_authentication_request_url(
+                "https://accounts.google.com/o/oauth2/auth?unknown=testing",
                 "812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5am\
                  rf.apps.googleusercontent.com",
                 &["email", "profile"],
