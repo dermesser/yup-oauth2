@@ -212,7 +212,10 @@ impl ServiceAccountFlow {
 mod tests {
     use super::*;
     use crate::helper::read_service_account_key;
+    #[cfg(not(feature = "hyper-tls"))]
     use hyper_rustls::HttpsConnector;
+    #[cfg(feature = "hyper-tls")]
+    use hyper_tls::HttpsConnector;
 
     // Valid but deactivated key.
     const TEST_PRIVATE_KEY_PATH: &'static str = "examples/Sanguine-69411a0c0eea.json";
@@ -225,7 +228,10 @@ mod tests {
             .await
             .unwrap();
         let acc = ServiceAccountFlow::new(ServiceAccountFlowOpts { key, subject: None }).unwrap();
+        #[cfg(not(feature = "hyper-tls"))]
         let https = HttpsConnector::with_native_roots();
+        #[cfg(feature = "hyper-tls")]
+        let https = HttpsConnector::new();
         let client = hyper::Client::builder()
             .pool_max_idle_per_host(0)
             .build::<_, hyper::Body>(https);

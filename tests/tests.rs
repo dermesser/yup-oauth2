@@ -13,7 +13,10 @@ use std::pin::Pin;
 use httptest::{matchers::*, responders::json_encoded, Expectation, Server};
 use hyper::client::connect::HttpConnector;
 use hyper::Uri;
+#[cfg(not(feature = "hyper-tls"))]
 use hyper_rustls::HttpsConnector;
+#[cfg(feature = "hyper-tls")]
+use hyper_tls::HttpsConnector;
 use url::form_urlencoded;
 
 /// Utility function for parsing json. Useful in unit tests. Simply wrap the
@@ -217,7 +220,10 @@ async fn create_installed_flow_auth(
 
     let mut builder =
         InstalledFlowAuthenticator::builder(app_secret, method).flow_delegate(Box::new(FD(
+            #[cfg(not(feature = "hyper-tls"))]
             hyper::Client::builder().build(HttpsConnector::with_native_roots()),
+            #[cfg(feature = "hyper-tls")]
+            hyper::Client::builder().build(HttpsConnector::new()),
         )));
 
     builder = if let Some(filename) = filename {
