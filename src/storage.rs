@@ -2,12 +2,15 @@
 //
 // See project root for licensing information.
 //
-use crate::types::TokenInfo;
+pub use crate::types::TokenInfo;
 
 use futures::lock::Mutex;
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
+
+use async_trait::async_trait;
 
 use serde::{Deserialize, Serialize};
 
@@ -49,8 +52,9 @@ impl ScopeFilter {
     }
 }
 
+/// A set of scopes
 #[derive(Debug)]
-pub(crate) struct ScopeSet<'a, T> {
+pub struct ScopeSet<'a, T> {
     hash: ScopeHash,
     filter: ScopeFilter,
     scopes: &'a [T],
@@ -73,6 +77,8 @@ impl<'a, T> ScopeSet<'a, T>
 where
     T: AsRef<str>,
 {
+    /// Convert from an array into a ScopeSet. Automatically invoked by the compiler when
+    /// an array reference is passed.
     // implement an inherent from method even though From is implemented. This
     // is because passing an array ref like &[&str; 1] (&["foo"]) will be auto
     // deref'd to a slice on function boundaries, but it will not implement the
@@ -103,25 +109,72 @@ where
             scopes,
         }
     }
+
+    /// Get the scopes for storage when implementing TokenStorage.set().
+    /// Returned scope strings are unique and sorted.
+    pub fn scopes(&self) -> Vec<String> {
+        self.scopes
+            .iter()
+            .map(|scope| scope.as_ref().to_string())
+            .sorted()
+            .unique()
+            .collect()
+    }
+
+    /// Is this set of scopes covered by the other? Returns true if the other
+    /// set is a superset of this one. Use this when implementing TokenStorage.get()
+    pub fn is_covered_by(&self, other_scopes: &[String]) -> bool {
+        self.scopes
+            .iter()
+            .all(|s| other_scopes.iter().any(|t| t.as_str() == s.as_ref()))
+    }
+}
+
+/// Implement your own token storage solution by implementing this trait. You need a way to
+/// store and retrieve tokens, each keyed by a set of scopes.
+#[async_trait]
+pub trait TokenStorage: Send + Sync {
+    /// Store a token for the given set of scopes so that it can be retrieved later by get()
+    /// ScopeSet implements Hash so that you can easily serialize and store it.
+    /// TokenInfo can be serialized with serde.
+    async fn set(&mut self, scopes: ScopeSet<'_, &str>, token: TokenInfo) -> anyhow::Result<()>;
+
+    /// Retrieve a token stored by set for the given set of scopes
+    async fn get(&self, scopes: ScopeSet<'_, &str>) -> Option<TokenInfo>;
 }
 
 pub(crate) enum Storage {
     Memory { tokens: Mutex<JSONTokens> },
     Disk(DiskStorage),
+    Custom(Box<dyn TokenStorage>),
 }
 
 impl Storage {
     pub(crate) async fn set<T>(
-        &self,
+        &mut self,
         scopes: ScopeSet<'_, T>,
         token: TokenInfo,
-    ) -> Result<(), io::Error>
+    ) -> anyhow::Result<()>
     where
         T: AsRef<str>,
     {
         match self {
-            Storage::Memory { tokens } => tokens.lock().await.set(scopes, token),
-            Storage::Disk(disk_storage) => disk_storage.set(scopes, token).await,
+            Storage::Memory { tokens } => Ok(tokens.lock().await.set(scopes, token)?),
+            Storage::Disk(disk_storage) => Ok(disk_storage.set(scopes, token).await?),
+            Storage::Custom(custom_storage) => {
+                let str_scopes: Vec<_> = scopes.scopes.iter().map(|scope| scope.as_ref()).collect();
+
+                (*custom_storage)
+                    .set(
+                        ScopeSet {
+                            hash: scopes.hash,
+                            filter: scopes.filter,
+                            scopes: &str_scopes[..],
+                        },
+                        token,
+                    )
+                    .await
+            }
         }
     }
 
@@ -132,6 +185,17 @@ impl Storage {
         match self {
             Storage::Memory { tokens } => tokens.lock().await.get(scopes),
             Storage::Disk(disk_storage) => disk_storage.get(scopes).await,
+            Storage::Custom(custom_storage) => {
+                let str_scopes: Vec<_> = scopes.scopes.iter().map(|scope| scope.as_ref()).collect();
+
+                (*custom_storage)
+                    .get(ScopeSet {
+                        hash: scopes.hash,
+                        filter: scopes.filter,
+                        scopes: &str_scopes[..],
+                    })
+                    .await
+            }
         }
     }
 }

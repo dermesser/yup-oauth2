@@ -56,7 +56,7 @@ impl From<TokenInfo> for AccessToken {
 /// It authenticates certain operations, and must be refreshed once
 /// it reached it's expiry date.
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub(crate) struct TokenInfo {
+pub struct TokenInfo {
     /// used when authenticating calls to oauth2 enabled services.
     pub(crate) access_token: String,
     /// used to refresh an expired access_token.

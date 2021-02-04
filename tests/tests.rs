@@ -92,7 +92,7 @@ async fn test_device_success() {
         }))),
     );
 
-    let auth = create_device_flow_auth(&server).await;
+    let mut auth = create_device_flow_auth(&server).await;
     let token = auth
         .token(&["https://www.googleapis.com/scope/1"])
         .await
@@ -117,7 +117,7 @@ async fn test_device_no_code() {
             "error_description": "description"
         }))),
     );
-    let auth = create_device_flow_auth(&server).await;
+    let mut auth = create_device_flow_auth(&server).await;
     let res = auth.token(&["https://www.googleapis.com/scope/1"]).await;
     assert!(res.is_err());
     assert!(format!("{}", res.unwrap_err()).contains("invalid_client_id"));
@@ -155,7 +155,7 @@ async fn test_device_no_token() {
             "error": "access_denied"
         }))),
     );
-    let auth = create_device_flow_auth(&server).await;
+    let mut auth = create_device_flow_auth(&server).await;
     let res = auth.token(&["https://www.googleapis.com/scope/1"]).await;
     assert!(res.is_err());
     assert!(format!("{}", res.unwrap_err()).contains("access_denied"));
@@ -239,7 +239,7 @@ async fn create_installed_flow_auth(
 async fn test_installed_interactive_success() {
     let _ = env_logger::try_init();
     let server = Server::run();
-    let auth =
+    let mut auth =
         create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
     server.expect(
         Expectation::matching(all_of![
@@ -268,7 +268,7 @@ async fn test_installed_interactive_success() {
 async fn test_installed_redirect_success() {
     let _ = env_logger::try_init();
     let server = Server::run();
-    let auth =
+    let mut auth =
         create_installed_flow_auth(&server, InstalledFlowReturnMethod::HTTPRedirect, None).await;
     server.expect(
         Expectation::matching(all_of![
@@ -297,7 +297,7 @@ async fn test_installed_redirect_success() {
 async fn test_installed_error() {
     let _ = env_logger::try_init();
     let server = Server::run();
-    let auth =
+    let mut auth =
         create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
     server.expect(
         Expectation::matching(all_of![
@@ -347,7 +347,7 @@ async fn test_service_account_success() {
     use chrono::Utc;
     let _ = env_logger::try_init();
     let server = Server::run();
-    let auth = create_service_account_auth(&server).await;
+    let mut auth = create_service_account_auth(&server).await;
 
     server.expect(
         Expectation::matching(request::method_path("POST", "/token"))
@@ -369,7 +369,7 @@ async fn test_service_account_success() {
 async fn test_service_account_error() {
     let _ = env_logger::try_init();
     let server = Server::run();
-    let auth = create_service_account_auth(&server).await;
+    let mut auth = create_service_account_auth(&server).await;
     server.expect(
         Expectation::matching(request::method_path("POST", "/token")).respond_with(json_encoded(
             serde_json::json!({
@@ -388,7 +388,7 @@ async fn test_service_account_error() {
 async fn test_refresh() {
     let _ = env_logger::try_init();
     let server = Server::run();
-    let auth =
+    let mut auth =
         create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
     // We refresh a token whenever it's within 1 minute of expiring. So
     // acquiring a token that expires in 59 seconds will force a refresh on
@@ -486,7 +486,7 @@ async fn test_refresh() {
 async fn test_memory_storage() {
     let _ = env_logger::try_init();
     let server = Server::run();
-    let auth =
+    let mut auth =
         create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
     server.expect(
         Expectation::matching(all_of![
@@ -519,7 +519,7 @@ async fn test_memory_storage() {
 
     // Create a new authenticator. This authenticator does not share a cache
     // with the previous one. Validate that it receives a different token.
-    let auth2 =
+    let mut auth2 =
         create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
     server.expect(
         Expectation::matching(all_of![
@@ -565,7 +565,7 @@ async fn test_disk_storage() {
         }))),
     );
     {
-        let auth = create_installed_flow_auth(
+        let mut auth = create_installed_flow_auth(
             &server,
             InstalledFlowReturnMethod::Interactive,
             Some(storage_path.clone()),
@@ -589,7 +589,7 @@ async fn test_disk_storage() {
     // Create a new authenticator. This authenticator uses the same token
     // storage file as the previous one so should receive a token without
     // making any http requests.
-    let auth = create_installed_flow_auth(
+    let mut auth = create_installed_flow_auth(
         &server,
         InstalledFlowReturnMethod::Interactive,
         Some(storage_path.clone()),

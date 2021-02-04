@@ -153,6 +153,8 @@ pub enum Error {
     UserError(String),
     /// A lower level IO error.
     LowLevelError(io::Error),
+    /// Other errors produced by a storage provider
+    OtherError(anyhow::Error),
 }
 
 impl From<hyper::Error> for Error {
@@ -179,6 +181,15 @@ impl From<io::Error> for Error {
     }
 }
 
+impl From<anyhow::Error> for Error {
+    fn from(value: anyhow::Error) -> Error {
+        match value.downcast::<io::Error>() {
+            Ok(io_error) => Error::LowLevelError(io_error),
+            Err(err) => Error::OtherError(err),
+        }
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
@@ -194,6 +205,7 @@ impl fmt::Display for Error {
             }
             Error::UserError(ref s) => s.fmt(f),
             Error::LowLevelError(ref e) => e.fmt(f),
+            Error::OtherError(ref e) => e.fmt(f),
         }
     }
 }

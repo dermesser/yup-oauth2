@@ -5,7 +5,7 @@ use crate::error::Error;
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 use crate::refresh::RefreshFlow;
 use crate::service_account::{ServiceAccountFlow, ServiceAccountFlowOpts, ServiceAccountKey};
-use crate::storage::{self, Storage};
+use crate::storage::{self, Storage, TokenStorage};
 use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
 use private::AuthFlow;
 
@@ -47,7 +47,7 @@ where
     C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
 {
     /// Return the current token for the provided scopes.
-    pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<AccessToken, Error>
+    pub async fn token<'a, T>(&'a mut self, scopes: &'a [T]) -> Result<AccessToken, Error>
     where
         T: AsRef<str>,
     {
@@ -57,7 +57,7 @@ where
     /// Return a token for the provided scopes, but don't reuse cached tokens. Instead,
     /// always fetch a new token from the OAuth server.
     pub async fn force_refreshed_token<'a, T>(
-        &'a self,
+        &'a mut self,
         scopes: &'a [T],
     ) -> Result<AccessToken, Error>
     where
@@ -68,7 +68,7 @@ where
 
     /// Return a cached token or fetch a new one from the server.
     async fn find_token<'a, T>(
-        &'a self,
+        &'a mut self,
         scopes: &'a [T],
         force_refresh: bool,
     ) -> Result<AccessToken, Error>
@@ -219,6 +219,7 @@ impl<C, F> AuthenticatorBuilder<C, F> {
                 tokens: Mutex::new(storage::JSONTokens::new()),
             },
             StorageType::Disk(path) => Storage::Disk(storage::DiskStorage::new(path).await?),
+            StorageType::Custom(custom_store) => Storage::Custom(custom_store),
         };
 
         Ok(Authenticator {
@@ -233,6 +234,14 @@ impl<C, F> AuthenticatorBuilder<C, F> {
             hyper_client_builder: DefaultHyperClient,
             storage_type: StorageType::Memory,
             auth_flow,
+        }
+    }
+
+    /// Use the provided token storage mechanism
+    pub fn with_storage(self, storage_type: StorageType) -> Self {
+        AuthenticatorBuilder {
+            storage_type: storage_type,
+            ..self
         }
     }
 
@@ -494,9 +503,14 @@ where
     }
 }
 
-enum StorageType {
+/// How should the acquired tokens be stored?
+pub enum StorageType {
+    /// Store tokens in memory (and always log in again to acquire a new token on startup)
     Memory,
+    /// Store tokens to disk in the given file. Warning, this may be insecure unless you configure your operating system to restrict read access to the file.
     Disk(PathBuf),
+    /// Implement your own storage provider
+    Custom(Box<dyn TokenStorage>),
 }
 
 #[cfg(test)]
