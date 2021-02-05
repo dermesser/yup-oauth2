@@ -1,7 +1,7 @@
 [package]
 
 name = "yup-oauth2"
-version = "5.0.2"
+version = "5.0.3"
 authors = ["Sebastian Thiel <byronimo@gmail.com>", "Lewin Bormann <lbo@spheniscida.de>"]
 repository = "https://github.com/dermesser/yup-oauth2"
 description = "An oauth2 implementation, providing the 'device', 'service account' and 'installed' authorization flows"
