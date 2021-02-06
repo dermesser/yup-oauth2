@@ -137,7 +137,7 @@ pub trait TokenStorage: Send + Sync {
     /// Store a token for the given set of scopes so that it can be retrieved later by get()
     /// ScopeSet implements Hash so that you can easily serialize and store it.
     /// TokenInfo can be serialized with serde.
-    async fn set(&mut self, scopes: ScopeSet<'_, &str>, token: TokenInfo) -> anyhow::Result<()>;
+    async fn set(&self, scopes: ScopeSet<'_, &str>, token: TokenInfo) -> anyhow::Result<()>;
 
     /// Retrieve a token stored by set for the given set of scopes
     async fn get(&self, scopes: ScopeSet<'_, &str>) -> Option<TokenInfo>;
@@ -151,7 +151,7 @@ pub(crate) enum Storage {
 
 impl Storage {
     pub(crate) async fn set<T>(
-        &mut self,
+        &self,
         scopes: ScopeSet<'_, T>,
         token: TokenInfo,
     ) -> anyhow::Result<()>

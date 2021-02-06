@@ -1,9 +1,11 @@
 //! Demonstrating how to create a custom token store
+use anyhow::anyhow;
 use async_trait::async_trait;
+use std::sync::RwLock;
 use yup_oauth2::storage::{ScopeSet, TokenInfo, TokenStorage};
 
 struct ExampleTokenStore {
-    store: Vec<StoredToken>,
+    store: RwLock<Vec<StoredToken>>,
 }
 
 struct StoredToken {
@@ -15,12 +17,17 @@ struct StoredToken {
 /// to disk, an OS keychain, a database or whatever suits your use-case
 #[async_trait]
 impl TokenStorage for ExampleTokenStore {
-    async fn set(&mut self, scopes: ScopeSet<'_, &str>, token: TokenInfo) -> anyhow::Result<()> {
+    async fn set(&self, scopes: ScopeSet<'_, &str>, token: TokenInfo) -> anyhow::Result<()> {
         let data = serde_json::to_string(&token).unwrap();
 
         println!("Storing token for scopes {:?}", scopes);
 
-        self.store.push(StoredToken {
+        let mut store = self
+            .store
+            .write()
+            .map_err(|_| anyhow!("Unable to lock store for writing"))?;
+
+        store.push(StoredToken {
             scopes: scopes.scopes(),
             serialized_token: data,
         });
@@ -30,13 +37,15 @@ impl TokenStorage for ExampleTokenStore {
 
     async fn get(&self, target_scopes: ScopeSet<'_, &str>) -> Option<TokenInfo> {
         // Retrieve the token data
-        for stored_token in self.store.iter() {
-            if target_scopes.is_covered_by(&stored_token.scopes) {
-                return serde_json::from_str(&stored_token.serialized_token).ok();
+        self.store.read().ok().and_then(|store| {
+            for stored_token in store.iter() {
+                if target_scopes.is_covered_by(&stored_token.scopes) {
+                    return serde_json::from_str(&stored_token.serialized_token).ok();
+                }
             }
-        }
 
-        None
+            None
+        })
     }
 }
 
@@ -46,12 +55,14 @@ async fn main() {
     let sec = yup_oauth2::read_application_secret("client_secret.json")
         .await
         .expect("client secret couldn't be read.");
-    let mut auth = yup_oauth2::InstalledFlowAuthenticator::builder(
+    let auth = yup_oauth2::InstalledFlowAuthenticator::builder(
         sec,
         yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect,
     )
     .with_storage(yup_oauth2::authenticator::StorageType::Custom(Box::new(
-        ExampleTokenStore { store: vec![] },
+        ExampleTokenStore {
+            store: RwLock::new(vec![]),
+        },
     )))
     .build()
     .await

@@ -47,7 +47,7 @@ where
     C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
 {
     /// Return the current token for the provided scopes.
-    pub async fn token<'a, T>(&'a mut self, scopes: &'a [T]) -> Result<AccessToken, Error>
+    pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<AccessToken, Error>
     where
         T: AsRef<str>,
     {
@@ -57,7 +57,7 @@ where
     /// Return a token for the provided scopes, but don't reuse cached tokens. Instead,
     /// always fetch a new token from the OAuth server.
     pub async fn force_refreshed_token<'a, T>(
-        &'a mut self,
+        &'a self,
         scopes: &'a [T],
     ) -> Result<AccessToken, Error>
     where
@@ -68,7 +68,7 @@ where
 
     /// Return a cached token or fetch a new one from the server.
     async fn find_token<'a, T>(
-        &'a mut self,
+        &'a self,
         scopes: &'a [T],
         force_refresh: bool,
     ) -> Result<AccessToken, Error>

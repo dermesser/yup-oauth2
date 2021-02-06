@@ -44,7 +44,7 @@ async fn main() {
     let sec = yup_oauth2::read_application_secret("client_secret.json")
         .await
         .expect("client secret couldn't be read.");
-    let mut auth = yup_oauth2::InstalledFlowAuthenticator::builder(
+    let auth = yup_oauth2::InstalledFlowAuthenticator::builder(
         sec,
         yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect,
     )
