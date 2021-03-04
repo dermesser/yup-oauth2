@@ -41,8 +41,11 @@ server communication and improve protocol compliance.
 
 ## Versions
 
-Version 1.x for Hyper versions bellow 12
-Version 2.x for Hyper versions 12 and above
+* Version 1.x for Hyper versions below 12
+* Version 2.x for Hyper versions 12 and above
+* Version 3.x for historical interest
+* Version 4.x for tokio 0.2/0.3
+* Version 5.x for tokio 1.0
 
 ## License
 
