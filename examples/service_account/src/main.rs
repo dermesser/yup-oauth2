@@ -54,6 +54,7 @@ fn check_or_create_topic(methods: &PubsubMethods) -> Topic {
         let topic = pubsub::Topic {
             name: Some(TOPIC_NAME.to_string()),
             labels: None,
+            ..Default::default()
         };
         let result = methods.topics_create(topic, TOPIC_NAME).doit().unwrap();
         result.1
@@ -71,11 +72,8 @@ fn check_or_create_subscription(methods: &PubsubMethods) -> Subscription {
         let sub = pubsub::Subscription {
             topic: Some(TOPIC_NAME.to_string()),
             ack_deadline_seconds: Some(30),
-            push_config: None,
-            message_retention_duration: None,
-            retain_acked_messages: None,
             name: Some(SUBSCRIPTION_NAME.to_string()),
-            labels: None,
+            ..Default::default()
         };
         let (_resp, sub) = methods
             .subscriptions_create(sub, SUBSCRIPTION_NAME)
@@ -181,13 +179,15 @@ fn publish_stuff(methods: &PubsubMethods, message: &str) {
 fn main() {
     let client_secret =
         oauth::service_account_key_from_file(&"pubsub-auth.json".to_string()).unwrap();
-    let mut access = oauth::ServiceAccountAccess::new(client_secret).build();
+    let client =
+        hyper::Client::with_connector(HttpsConnector::new(NativeTlsClient::new().unwrap()));
+    let mut access = oauth::ServiceAccountAccess::new(client_secret, client);
 
     use yup_oauth2::GetToken;
     println!(
         "{:?}",
         access
-            .token(vec!["https://www.googleapis.com/auth/pubsub"])
+            .token(vec![&"https://www.googleapis.com/auth/pubsub"])
             .unwrap()
     );
 
