@@ -26,7 +26,7 @@ struct InnerAuthenticator<C> {
 /// and optionally persisting tokens to disk.
 #[derive(Clone)]
 pub struct Authenticator<C> {
-    inner: Arc<InnerAuthenticator<C>>
+    inner: Arc<InnerAuthenticator<C>>,
 }
 
 struct DisplayScopes<'a, T>(&'a [T]);
@@ -103,16 +103,29 @@ where
                 Some(app_secret),
             ) => {
                 // token is expired but has a refresh token.
-                let token_info =
-                    RefreshFlow::refresh_token(&self.inner.hyper_client, app_secret, &refresh_token)
-                        .await?;
-                self.inner.storage.set(hashed_scopes, token_info.clone()).await?;
+                let token_info = RefreshFlow::refresh_token(
+                    &self.inner.hyper_client,
+                    app_secret,
+                    &refresh_token,
+                )
+                .await?;
+                self.inner
+                    .storage
+                    .set(hashed_scopes, token_info.clone())
+                    .await?;
                 Ok(token_info.into())
             }
             _ => {
                 // no token in the cache or the token returned can't be refreshed.
-                let token_info = self.inner.auth_flow.token(&self.inner.hyper_client, scopes).await?;
-                self.inner.storage.set(hashed_scopes, token_info.clone()).await?;
+                let token_info = self
+                    .inner
+                    .auth_flow
+                    .token(&self.inner.hyper_client, scopes)
+                    .await?;
+                self.inner
+                    .storage
+                    .set(hashed_scopes, token_info.clone())
+                    .await?;
                 Ok(token_info.into())
             }
         }
@@ -227,11 +240,13 @@ impl<C, F> AuthenticatorBuilder<C, F> {
             StorageType::Disk(path) => Storage::Disk(storage::DiskStorage::new(path).await?),
         };
 
-        Ok(Authenticator{ inner: Arc::new(InnerAuthenticator {
-            hyper_client,
-            storage,
-            auth_flow,
-        })})
+        Ok(Authenticator {
+            inner: Arc::new(InnerAuthenticator {
+                hyper_client,
+                storage,
+                auth_flow,
+            }),
+        })
     }
 
     fn with_auth_flow(auth_flow: F) -> AuthenticatorBuilder<DefaultHyperClient, F> {
