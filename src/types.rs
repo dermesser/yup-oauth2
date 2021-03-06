@@ -164,7 +164,10 @@ pub mod tests {
         use serde_json as json;
         match json::from_str::<ConsoleApplicationSecret>(SECRET) {
             Ok(s) => assert!(s.installed.is_some() && s.web.is_none()),
-            Err(err) => panic!("Encountered error parsing ConsoleApplicationSecret: {}", err),
+            Err(err) => panic!(
+                "Encountered error parsing ConsoleApplicationSecret: {}",
+                err
+            ),
         }
     }
 }
