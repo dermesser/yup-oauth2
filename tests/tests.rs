@@ -118,6 +118,7 @@ async fn test_device_no_code() {
         }))),
     );
     let auth = create_device_flow_auth(&server).await;
+    let auth = auth.clone();
     let res = auth.token(&["https://www.googleapis.com/scope/1"]).await;
     assert!(res.is_err());
     assert!(format!("{}", res.unwrap_err()).contains("invalid_client_id"));

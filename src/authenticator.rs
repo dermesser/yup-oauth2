@@ -14,13 +14,19 @@ use std::borrow::Cow;
 use std::fmt;
 use std::io;
 use std::path::PathBuf;
+use std::sync::Arc;
 
-/// Authenticator is responsible for fetching tokens, handling refreshing tokens,
-/// and optionally persisting tokens to disk.
-pub struct Authenticator<C> {
+struct InnerAuthenticator<C> {
     hyper_client: hyper::Client<C>,
     storage: Storage,
     auth_flow: AuthFlow,
+}
+
+/// Authenticator is responsible for fetching tokens, handling refreshing tokens,
+/// and optionally persisting tokens to disk.
+#[derive(Clone)]
+pub struct Authenticator<C> {
+    inner: Arc<InnerAuthenticator<C>>,
 }
 
 struct DisplayScopes<'a, T>(&'a [T]);
@@ -81,8 +87,8 @@ where
         );
         let hashed_scopes = storage::ScopeSet::from(scopes);
         match (
-            self.storage.get(hashed_scopes).await,
-            self.auth_flow.app_secret(),
+            self.inner.storage.get(hashed_scopes).await,
+            self.inner.auth_flow.app_secret(),
         ) {
             (Some(t), _) if !t.is_expired() && !force_refresh => {
                 // unexpired token found
@@ -97,16 +103,29 @@ where
                 Some(app_secret),
             ) => {
                 // token is expired but has a refresh token.
-                let token_info =
-                    RefreshFlow::refresh_token(&self.hyper_client, app_secret, &refresh_token)
-                        .await?;
-                self.storage.set(hashed_scopes, token_info.clone()).await?;
+                let token_info = RefreshFlow::refresh_token(
+                    &self.inner.hyper_client,
+                    app_secret,
+                    &refresh_token,
+                )
+                .await?;
+                self.inner
+                    .storage
+                    .set(hashed_scopes, token_info.clone())
+                    .await?;
                 Ok(token_info.into())
             }
             _ => {
                 // no token in the cache or the token returned can't be refreshed.
-                let token_info = self.auth_flow.token(&self.hyper_client, scopes).await?;
-                self.storage.set(hashed_scopes, token_info.clone()).await?;
+                let token_info = self
+                    .inner
+                    .auth_flow
+                    .token(&self.inner.hyper_client, scopes)
+                    .await?;
+                self.inner
+                    .storage
+                    .set(hashed_scopes, token_info.clone())
+                    .await?;
                 Ok(token_info.into())
             }
         }
@@ -222,9 +241,11 @@ impl<C, F> AuthenticatorBuilder<C, F> {
         };
 
         Ok(Authenticator {
-            hyper_client,
-            storage,
-            auth_flow,
+            inner: Arc::new(InnerAuthenticator {
+                hyper_client,
+                storage,
+                auth_flow,
+            }),
         })
     }
 
