@@ -69,6 +69,8 @@
 //! ```
 //!
 #![deny(missing_docs)]
+#![cfg_attr(yup_oauth2_docsrs, feature(doc_cfg))]
+
 pub mod authenticator;
 pub mod authenticator_delegate;
 mod device;

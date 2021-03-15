@@ -1,5 +1,5 @@
 use yup_oauth2::{
-    authenticator::Authenticator,
+    authenticator::{DefaultAuthenticator, DefaultHyperClient, HyperClientBuilder},
     authenticator_delegate::{DeviceAuthResponse, DeviceFlowDelegate, InstalledFlowDelegate},
     error::{AuthError, AuthErrorCode},
     ApplicationSecret, DeviceFlowAuthenticator, Error, InstalledFlowAuthenticator,
@@ -11,12 +11,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 
 use httptest::{matchers::*, responders::json_encoded, Expectation, Server};
-use hyper::client::connect::HttpConnector;
 use hyper::Uri;
-#[cfg(not(feature = "hyper-tls"))]
-use hyper_rustls::HttpsConnector;
-#[cfg(feature = "hyper-tls")]
-use hyper_tls::HttpsConnector;
 use url::form_urlencoded;
 
 /// Utility function for parsing json. Useful in unit tests. Simply wrap the
@@ -27,7 +22,7 @@ macro_rules! parse_json {
     }
 }
 
-async fn create_device_flow_auth(server: &Server) -> Authenticator<HttpsConnector<HttpConnector>> {
+async fn create_device_flow_auth(server: &Server) -> DefaultAuthenticator {
     let app_secret: ApplicationSecret = parse_json!({
         "client_id": "902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com",
         "project_id": "yup-test-243420",
@@ -166,7 +161,7 @@ async fn create_installed_flow_auth(
     server: &Server,
     method: InstalledFlowReturnMethod,
     filename: Option<PathBuf>,
-) -> Authenticator<HttpsConnector<HttpConnector>> {
+) -> DefaultAuthenticator {
     let app_secret: ApplicationSecret = parse_json!({
         "client_id": "902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com",
         "project_id": "yup-test-243420",
@@ -176,7 +171,7 @@ async fn create_installed_flow_auth(
         "client_secret": "iuMPN6Ne1PD7cos29Tk9rlqH",
         "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob","http://localhost"],
     });
-    struct FD(hyper::Client<HttpsConnector<HttpConnector>>);
+    struct FD(hyper::Client<<DefaultHyperClient as HyperClientBuilder>::Connector>);
     impl InstalledFlowDelegate for FD {
         /// Depending on need_code, return the pre-set code or send the code to the server at
         /// the redirect_uri given in the url.
@@ -219,13 +214,8 @@ async fn create_installed_flow_auth(
         }
     }
 
-    let mut builder =
-        InstalledFlowAuthenticator::builder(app_secret, method).flow_delegate(Box::new(FD(
-            #[cfg(not(feature = "hyper-tls"))]
-            hyper::Client::builder().build(HttpsConnector::with_native_roots()),
-            #[cfg(feature = "hyper-tls")]
-            hyper::Client::builder().build(HttpsConnector::new()),
-        )));
+    let mut builder = InstalledFlowAuthenticator::builder(app_secret, method)
+        .flow_delegate(Box::new(FD(DefaultHyperClient.build_hyper_client())));
 
     builder = if let Some(filename) = filename {
         builder.persist_tokens_to_disk(filename)
@@ -321,9 +311,7 @@ async fn test_installed_error() {
     assert!(format!("{}", tokr.unwrap_err()).contains("invalid_code"));
 }
 
-async fn create_service_account_auth(
-    server: &Server,
-) -> Authenticator<HttpsConnector<HttpConnector>> {
+async fn create_service_account_auth(server: &Server) -> DefaultAuthenticator {
     let key: ServiceAccountKey = parse_json!({
         "type": "service_account",
         "project_id": "yup-test-243420",

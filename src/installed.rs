@@ -60,7 +60,9 @@ where
     })
 }
 
-/// cf. https://developers.google.com/identity/protocols/OAuth2InstalledApp#choosingredirecturi
+/// Method by which the user agent return token to this application.
+///
+/// cf. <https://developers.google.com/identity/protocols/OAuth2InstalledApp#choosingredirecturi>
 pub enum InstalledFlowReturnMethod {
     /// Involves showing a URL to the user and asking to copy a code from their browser
     /// (default)
@@ -71,8 +73,8 @@ pub enum InstalledFlowReturnMethod {
 }
 
 /// InstalledFlowImpl provides tokens for services that follow the "Installed" OAuth flow. (See
-/// https://www.oauth.com/oauth2-servers/authorization/,
-/// https://developers.google.com/identity/protocols/OAuth2InstalledApp).
+/// <https://www.oauth.com/oauth2-servers/authorization/>,
+/// <https://developers.google.com/identity/protocols/OAuth2InstalledApp>).
 pub struct InstalledFlow {
     pub(crate) app_secret: ApplicationSecret,
     pub(crate) method: InstalledFlowReturnMethod,
