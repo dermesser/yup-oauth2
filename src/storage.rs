@@ -54,7 +54,7 @@ impl ScopeFilter {
 
 /// A set of scopes
 #[derive(Debug)]
-pub struct ScopeSet<'a, T> {
+pub(crate) struct ScopeSet<'a, T> {
     hash: ScopeHash,
     filter: ScopeFilter,
     scopes: &'a [T],
@@ -109,25 +109,6 @@ where
             scopes,
         }
     }
-
-    /// Get the scopes for storage when implementing TokenStorage.set().
-    /// Returned scope strings are unique and sorted.
-    pub fn scopes(&self) -> Vec<String> {
-        self.scopes
-            .iter()
-            .map(|scope| scope.as_ref().to_string())
-            .sorted()
-            .unique()
-            .collect()
-    }
-
-    /// Is this set of scopes covered by the other? Returns true if the other
-    /// set is a superset of this one. Use this when implementing TokenStorage.get()
-    pub fn is_covered_by(&self, other_scopes: &[String]) -> bool {
-        self.scopes
-            .iter()
-            .all(|s| other_scopes.iter().any(|t| t.as_str() == s.as_ref()))
-    }
 }
 
 /// Implement your own token storage solution by implementing this trait. You need a way to
@@ -137,10 +118,10 @@ pub trait TokenStorage: Send + Sync {
     /// Store a token for the given set of scopes so that it can be retrieved later by get()
     /// ScopeSet implements Hash so that you can easily serialize and store it.
     /// TokenInfo can be serialized with serde.
-    async fn set(&self, scopes: ScopeSet<'_, &str>, token: TokenInfo) -> anyhow::Result<()>;
+    async fn set(&self, scopes: &[&str], token: TokenInfo) -> anyhow::Result<()>;
 
     /// Retrieve a token stored by set for the given set of scopes
-    async fn get(&self, scopes: ScopeSet<'_, &str>) -> Option<TokenInfo>;
+    async fn get(&self, scopes: &[&str]) -> Option<TokenInfo>;
 }
 
 pub(crate) enum Storage {
@@ -162,15 +143,17 @@ impl Storage {
             Storage::Memory { tokens } => Ok(tokens.lock().await.set(scopes, token)?),
             Storage::Disk(disk_storage) => Ok(disk_storage.set(scopes, token).await?),
             Storage::Custom(custom_storage) => {
-                let str_scopes: Vec<_> = scopes.scopes.iter().map(|scope| scope.as_ref()).collect();
+                let str_scopes: Vec<_> = scopes
+                    .scopes
+                    .iter()
+                    .map(|scope| scope.as_ref())
+                    .sorted()
+                    .unique()
+                    .collect();
 
                 (*custom_storage)
                     .set(
-                        ScopeSet {
-                            hash: scopes.hash,
-                            filter: scopes.filter,
-                            scopes: &str_scopes[..],
-                        },
+                        &str_scopes[..], // TODO: sorted, unique
                         token,
                     )
                     .await
@@ -186,15 +169,15 @@ impl Storage {
             Storage::Memory { tokens } => tokens.lock().await.get(scopes),
             Storage::Disk(disk_storage) => disk_storage.get(scopes).await,
             Storage::Custom(custom_storage) => {
-                let str_scopes: Vec<_> = scopes.scopes.iter().map(|scope| scope.as_ref()).collect();
+                let str_scopes: Vec<_> = scopes
+                    .scopes
+                    .iter()
+                    .map(|scope| scope.as_ref())
+                    .sorted()
+                    .unique()
+                    .collect();
 
-                (*custom_storage)
-                    .get(ScopeSet {
-                        hash: scopes.hash,
-                        filter: scopes.filter,
-                        scopes: &str_scopes[..],
-                    })
-                    .await
+                (*custom_storage).get(&str_scopes[..]).await
             }
         }
     }
