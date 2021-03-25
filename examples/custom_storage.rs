@@ -74,11 +74,9 @@ async fn main() {
         sec,
         yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect,
     )
-    .with_storage(yup_oauth2::authenticator::StorageType::Custom(Box::new(
-        ExampleTokenStore {
-            store: RwLock::new(vec![]),
-        },
-    )))
+    .with_storage(Box::new(ExampleTokenStore {
+        store: RwLock::new(vec![]),
+    }))
     .build()
     .await
     .expect("InstalledFlowAuthenticator failed to build");

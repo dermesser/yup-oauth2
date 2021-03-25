@@ -238,9 +238,9 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     }
 
     /// Use the provided token storage mechanism
-    pub fn with_storage(self, storage_type: StorageType) -> Self {
+    pub fn with_storage(self, storage: Box<dyn TokenStorage>) -> Self {
         AuthenticatorBuilder {
-            storage_type: storage_type,
+            storage_type: StorageType::Custom(storage),
             ..self
         }
     }
@@ -504,7 +504,7 @@ where
 }
 
 /// How should the acquired tokens be stored?
-pub enum StorageType {
+enum StorageType {
     /// Store tokens in memory (and always log in again to acquire a new token on startup)
     Memory,
     /// Store tokens to disk in the given file. Warning, this may be insecure unless you configure your operating system to restrict read access to the file.
