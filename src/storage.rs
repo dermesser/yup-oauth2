@@ -151,7 +151,7 @@ impl Storage {
                     .unique()
                     .collect();
 
-                (*custom_storage)
+                custom_storage
                     .set(
                         &str_scopes[..], // TODO: sorted, unique
                         token,
@@ -177,7 +177,7 @@ impl Storage {
                     .unique()
                     .collect();
 
-                (*custom_storage).get(&str_scopes[..]).await
+                custom_storage.get(&str_scopes[..]).await
             }
         }
     }
