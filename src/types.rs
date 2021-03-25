@@ -58,11 +58,11 @@ impl From<TokenInfo> for AccessToken {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct TokenInfo {
     /// used when authenticating calls to oauth2 enabled services.
-    pub(crate) access_token: String,
+    pub access_token: String,
     /// used to refresh an expired access_token.
-    pub(crate) refresh_token: Option<String>,
+    pub refresh_token: Option<String>,
     /// The time when the token expires.
-    pub(crate) expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 impl TokenInfo {
