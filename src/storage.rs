@@ -116,7 +116,6 @@ where
 #[async_trait]
 pub trait TokenStorage: Send + Sync {
     /// Store a token for the given set of scopes so that it can be retrieved later by get()
-    /// ScopeSet implements Hash so that you can easily serialize and store it.
     /// TokenInfo can be serialized with serde.
     async fn set(&self, scopes: &[&str], token: TokenInfo) -> anyhow::Result<()>;
 
