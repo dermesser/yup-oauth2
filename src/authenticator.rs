@@ -5,7 +5,7 @@ use crate::error::Error;
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 use crate::refresh::RefreshFlow;
 use crate::service_account::{ServiceAccountFlow, ServiceAccountFlowOpts, ServiceAccountKey};
-use crate::storage::{self, Storage};
+use crate::storage::{self, Storage, TokenStorage};
 use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
 use private::AuthFlow;
 
@@ -238,6 +238,7 @@ impl<C, F> AuthenticatorBuilder<C, F> {
                 tokens: Mutex::new(storage::JSONTokens::new()),
             },
             StorageType::Disk(path) => Storage::Disk(storage::DiskStorage::new(path).await?),
+            StorageType::Custom(custom_store) => Storage::Custom(custom_store),
         };
 
         Ok(Authenticator {
@@ -254,6 +255,14 @@ impl<C, F> AuthenticatorBuilder<C, F> {
             hyper_client_builder: DefaultHyperClient,
             storage_type: StorageType::Memory,
             auth_flow,
+        }
+    }
+
+    /// Use the provided token storage mechanism
+    pub fn with_storage(self, storage: Box<dyn TokenStorage>) -> Self {
+        AuthenticatorBuilder {
+            storage_type: StorageType::Custom(storage),
+            ..self
         }
     }
 
@@ -515,9 +524,14 @@ where
     }
 }
 
+/// How should the acquired tokens be stored?
 enum StorageType {
+    /// Store tokens in memory (and always log in again to acquire a new token on startup)
     Memory,
+    /// Store tokens to disk in the given file. Warning, this may be insecure unless you configure your operating system to restrict read access to the file.
     Disk(PathBuf),
+    /// Implement your own storage provider
+    Custom(Box<dyn TokenStorage>),
 }
 
 #[cfg(test)]

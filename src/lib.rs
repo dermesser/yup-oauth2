@@ -77,7 +77,11 @@ mod helper;
 mod installed;
 mod refresh;
 mod service_account;
-mod storage;
+
+/// Interface for storing tokens so that they can be re-used. There are built-in memory and
+/// file-based storage providers. You can implement your own by implementing the TokenStorage trait.
+pub mod storage;
+
 mod types;
 
 #[doc(inline)]

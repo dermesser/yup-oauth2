@@ -2,12 +2,15 @@
 //
 // See project root for licensing information.
 //
-use crate::types::TokenInfo;
+pub use crate::types::TokenInfo;
 
 use futures::lock::Mutex;
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
+
+use async_trait::async_trait;
 
 use serde::{Deserialize, Serialize};
 
@@ -49,6 +52,7 @@ impl ScopeFilter {
     }
 }
 
+/// A set of scopes
 #[derive(Debug)]
 pub(crate) struct ScopeSet<'a, T> {
     hash: ScopeHash,
@@ -73,6 +77,8 @@ impl<'a, T> ScopeSet<'a, T>
 where
     T: AsRef<str>,
 {
+    /// Convert from an array into a ScopeSet. Automatically invoked by the compiler when
+    /// an array reference is passed.
     // implement an inherent from method even though From is implemented. This
     // is because passing an array ref like &[&str; 1] (&["foo"]) will be auto
     // deref'd to a slice on function boundaries, but it will not implement the
@@ -105,9 +111,22 @@ where
     }
 }
 
+/// Implement your own token storage solution by implementing this trait. You need a way to
+/// store and retrieve tokens, each keyed by a set of scopes.
+#[async_trait]
+pub trait TokenStorage: Send + Sync {
+    /// Store a token for the given set of scopes so that it can be retrieved later by get()
+    /// TokenInfo can be serialized with serde.
+    async fn set(&self, scopes: &[&str], token: TokenInfo) -> anyhow::Result<()>;
+
+    /// Retrieve a token stored by set for the given set of scopes
+    async fn get(&self, scopes: &[&str]) -> Option<TokenInfo>;
+}
+
 pub(crate) enum Storage {
     Memory { tokens: Mutex<JSONTokens> },
     Disk(DiskStorage),
+    Custom(Box<dyn TokenStorage>),
 }
 
 impl Storage {
@@ -115,13 +134,29 @@ impl Storage {
         &self,
         scopes: ScopeSet<'_, T>,
         token: TokenInfo,
-    ) -> Result<(), io::Error>
+    ) -> anyhow::Result<()>
     where
         T: AsRef<str>,
     {
         match self {
-            Storage::Memory { tokens } => tokens.lock().await.set(scopes, token),
-            Storage::Disk(disk_storage) => disk_storage.set(scopes, token).await,
+            Storage::Memory { tokens } => Ok(tokens.lock().await.set(scopes, token)?),
+            Storage::Disk(disk_storage) => Ok(disk_storage.set(scopes, token).await?),
+            Storage::Custom(custom_storage) => {
+                let str_scopes: Vec<_> = scopes
+                    .scopes
+                    .iter()
+                    .map(|scope| scope.as_ref())
+                    .sorted()
+                    .unique()
+                    .collect();
+
+                custom_storage
+                    .set(
+                        &str_scopes[..], // TODO: sorted, unique
+                        token,
+                    )
+                    .await
+            }
         }
     }
 
@@ -132,6 +167,17 @@ impl Storage {
         match self {
             Storage::Memory { tokens } => tokens.lock().await.get(scopes),
             Storage::Disk(disk_storage) => disk_storage.get(scopes).await,
+            Storage::Custom(custom_storage) => {
+                let str_scopes: Vec<_> = scopes
+                    .scopes
+                    .iter()
+                    .map(|scope| scope.as_ref())
+                    .sorted()
+                    .unique()
+                    .collect();
+
+                custom_storage.get(&str_scopes[..]).await
+            }
         }
     }
 }
