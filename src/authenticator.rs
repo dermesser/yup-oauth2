@@ -1,5 +1,6 @@
 //! Module contianing the core functionality for OAuth2 Authentication.
 use crate::authenticator_delegate::{DeviceFlowDelegate, InstalledFlowDelegate};
+use crate::authorized_user::{AuthorizedUserFlow, AuthorizedUserFlowOpts, AuthorizedUserSecret};
 use crate::device::DeviceFlow;
 use crate::error::Error;
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
@@ -206,6 +207,19 @@ impl ServiceAccountAuthenticator {
         AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(ServiceAccountFlowOpts {
             key: service_account_key,
             subject: None,
+        })
+    }
+}
+
+/// Create an authenticator that uses an authorized user.
+pub struct AuthorizedUserAuthenticator;
+impl AuthorizedUserAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses an authorized user.
+    pub fn builder(
+        authorized_user_secret: AuthorizedUserSecret,
+    ) -> AuthenticatorBuilder<DefaultHyperClient, AuthorizedUserFlowOpts> {
+        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(AuthorizedUserFlowOpts {
+            secret: authorized_user_secret,
         })
     }
 }
@@ -431,7 +445,24 @@ impl<C> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
     }
 }
 
+impl<C> AuthenticatorBuilder<C, AuthorizedUserFlowOpts> {
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        let authorized_user_auth_flow = AuthorizedUserFlow::new(self.auth_flow)?;
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            AuthFlow::AuthorizedUserFlow(authorized_user_auth_flow),
+        )
+        .await
+    }
+}
+
 mod private {
+    use crate::authorized_user::AuthorizedUserFlow;
     use crate::device::DeviceFlow;
     use crate::error::Error;
     use crate::installed::InstalledFlow;
@@ -442,6 +473,7 @@ mod private {
         DeviceFlow(DeviceFlow),
         InstalledFlow(InstalledFlow),
         ServiceAccountFlow(ServiceAccountFlow),
+        AuthorizedUserFlow(AuthorizedUserFlow),
     }
 
     impl AuthFlow {
@@ -450,6 +482,7 @@ mod private {
                 AuthFlow::DeviceFlow(device_flow) => Some(&device_flow.app_secret),
                 AuthFlow::InstalledFlow(installed_flow) => Some(&installed_flow.app_secret),
                 AuthFlow::ServiceAccountFlow(_) => None,
+                AuthFlow::AuthorizedUserFlow(_) => None,
             }
         }
 
@@ -469,6 +502,9 @@ mod private {
                 }
                 AuthFlow::ServiceAccountFlow(service_account_flow) => {
                     service_account_flow.token(hyper_client, scopes).await
+                }
+                AuthFlow::AuthorizedUserFlow(authorized_user_flow) => {
+                    authorized_user_flow.token(hyper_client, scopes).await
                 }
             }
         }

@@ -4,7 +4,7 @@
 // Copyright (c) 2016 Google Inc (lewinb@google.com).
 //
 // Refer to the project root for licensing information.
-use crate::service_account::ServiceAccountKey;
+use crate::{authorized_user::AuthorizedUserSecret, service_account::ServiceAccountKey};
 use crate::types::{ApplicationSecret, ConsoleApplicationSecret};
 
 use std::io;
@@ -45,6 +45,17 @@ pub async fn read_service_account_key<P: AsRef<Path>>(path: P) -> io::Result<Ser
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("Bad service account key: {}", e),
+        )
+    })
+}
+
+/// Read an authorized user secret json file
+pub async fn read_authorized_user_secret<P: AsRef<Path>>(path: P) -> io::Result<AuthorizedUserSecret> {
+    let key = tokio::fs::read(path).await?;
+    serde_json::from_slice(&key).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Bad authorized user secret: {}", e),
         )
     })
 }
