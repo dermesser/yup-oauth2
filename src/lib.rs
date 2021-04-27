@@ -87,15 +87,15 @@ mod types;
 
 #[doc(inline)]
 pub use crate::authenticator::{
-    DeviceFlowAuthenticator, InstalledFlowAuthenticator, ServiceAccountAuthenticator,
-    AuthorizedUserAuthenticator,
+    AuthorizedUserAuthenticator, DeviceFlowAuthenticator, InstalledFlowAuthenticator,
+    ServiceAccountAuthenticator,
 };
 
 pub use crate::helper::*;
 pub use crate::installed::InstalledFlowReturnMethod;
 
-pub use crate::service_account::ServiceAccountKey;
 pub use crate::authorized_user::AuthorizedUserSecret;
+pub use crate::service_account::ServiceAccountKey;
 
 #[doc(inline)]
 pub use crate::error::Error;
