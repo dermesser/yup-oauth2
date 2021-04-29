@@ -49,7 +49,10 @@ pub async fn read_service_account_key<P: AsRef<Path>>(path: P) -> io::Result<Ser
     })
 }
 
-/// Read an authorized user secret json file
+/// Read an authorized user secret from a JSON file. You can obtain it by running on the client:
+/// `gcloud auth application-default login`.
+/// The file should be on Windows in: `%APPDATA%/gcloud/application_default_credentials.json`
+/// for other systems: `$HOME/.config/gcloud/application_default_credentials.json`.
 pub async fn read_authorized_user_secret<P: AsRef<Path>>(
     path: P,
 ) -> io::Result<AuthorizedUserSecret> {

@@ -211,7 +211,16 @@ impl ServiceAccountAuthenticator {
     }
 }
 
-/// Create an authenticator that uses an authorized user.
+/// Create an authenticator that uses an authorized user credentials.
+/// ```
+/// # async fn foo() {
+/// # let secret = yup_oauth2::helper::read_authorized_user_secret("/tmp/foo").await.unwrap();
+///     let authenticator = yup_oauth2::AuthorizedUserAuthenticator::builder(secret)
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
 pub struct AuthorizedUserAuthenticator;
 impl AuthorizedUserAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses an authorized user.
@@ -445,6 +454,7 @@ impl<C> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
     }
 }
 
+/// ## Methods available when building an authorized user flow Authenticator.
 impl<C> AuthenticatorBuilder<C, AuthorizedUserFlowOpts> {
     /// Create the authenticator.
     pub async fn build(self) -> io::Result<Authenticator<C::Connector>>

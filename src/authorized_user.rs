@@ -1,3 +1,9 @@
+//! This module provides a token source (`GetToken`) that obtains tokens using user credentials
+//! for use by software (i.e., non-human actors) to get access to Google services.
+//!
+//! Resources:
+//! - [gcloud auth application-default login](https://cloud.google.com/sdk/gcloud/reference/auth/application-default/login)
+//!
 use crate::error::Error;
 use crate::types::TokenInfo;
 use hyper::header;
@@ -7,13 +13,11 @@ use url::form_urlencoded;
 
 const TOKEN_URI: &'static str = "https://accounts.google.com/o/oauth2/token";
 
-/// gcloud auth application-default login
-// {
-//     "client_id": "",
-//     "client_secret": "",
-//     "refresh_token": "",
-//     "type": "authorized_user"
-// }
+/// JSON schema of authorized user secret. You can obtain it by
+/// running on the client: `gcloud auth application-default login`.
+///
+/// You can use `helpers::read_authorized_user_secret()` to read a JSON file
+/// into a `AuthorizedUserSecret`.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AuthorizedUserSecret {
     /// client_id
@@ -31,7 +35,7 @@ pub struct AuthorizedUserFlowOpts {
     pub(crate) secret: AuthorizedUserSecret,
 }
 
-/// AuthorizedUserFlow can fetch oauth tokens using a service account.
+/// AuthorizedUserFlow can fetch oauth tokens using an authorized user secret.
 pub struct AuthorizedUserFlow {
     secret: AuthorizedUserSecret,
 }
