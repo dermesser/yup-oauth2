@@ -214,7 +214,7 @@ impl ServiceAccountAuthenticator {
 /// Create an authenticator that uses an authorized user credentials.
 /// ```
 /// # async fn foo() {
-/// # let secret = yup_oauth2::helper::read_authorized_user_secret("/tmp/foo").await.unwrap();
+/// # let secret = yup_oauth2::read_authorized_user_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::AuthorizedUserAuthenticator::builder(secret)
 ///         .build()
 ///         .await
