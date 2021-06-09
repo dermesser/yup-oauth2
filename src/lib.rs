@@ -72,6 +72,7 @@
 #![deny(missing_docs)]
 #![cfg_attr(yup_oauth2_docsrs, feature(doc_cfg))]
 
+mod application_default_credentials;
 pub mod authenticator;
 pub mod authenticator_delegate;
 mod device;
@@ -89,7 +90,8 @@ mod types;
 
 #[doc(inline)]
 pub use crate::authenticator::{
-    DeviceFlowAuthenticator, InstalledFlowAuthenticator, ServiceAccountAuthenticator,
+    ApplicationDefaultCredentialsAuthenticator, DeviceFlowAuthenticator,
+    InstalledFlowAuthenticator, ServiceAccountAuthenticator,
 };
 
 pub use crate::helper::*;

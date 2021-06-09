@@ -2,8 +2,9 @@ use yup_oauth2::{
     authenticator::{DefaultAuthenticator, DefaultHyperClient, HyperClientBuilder},
     authenticator_delegate::{DeviceAuthResponse, DeviceFlowDelegate, InstalledFlowDelegate},
     error::{AuthError, AuthErrorCode},
-    ApplicationSecret, DeviceFlowAuthenticator, Error, InstalledFlowAuthenticator,
-    InstalledFlowReturnMethod, ServiceAccountAuthenticator, ServiceAccountKey,
+    ApplicationDefaultCredentialsAuthenticator, ApplicationSecret, DeviceFlowAuthenticator, Error,
+    InstalledFlowAuthenticator, InstalledFlowReturnMethod, ServiceAccountAuthenticator,
+    ServiceAccountKey,
 };
 
 use std::future::Future;
@@ -595,4 +596,36 @@ async fn test_disk_storage() {
         .expect("failed to get token");
     assert_eq!(token1.as_str(), "accesstoken");
     assert_eq!(token1, token2);
+}
+
+#[tokio::test]
+async fn test_default_application_credentials() {
+    let _ = env_logger::try_init();
+    let server = Server::run();
+    server.expect(
+        // TODO: this does not work.
+        Expectation::matching(all_of![
+            request::method_path("GET", "/token"),
+            request::query(url_decoded(all_of![contains((
+                "scopes",
+                "https://googleapis.com/some/scope"
+            ))]))
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "access_token": "accesstoken",
+            "refresh_token": "refreshtoken",
+            "token_type": "Bearer",
+            "expires_in": 12345678,
+        }))),
+    );
+    let authenticator = ApplicationDefaultCredentialsAuthenticator::builder()
+        .await
+        .build()
+        .await
+        .unwrap();
+    let token = authenticator
+        .token(&["https://googleapis.com/some/scope"])
+        .await
+        .unwrap();
+    assert_ne!(token.as_str(), "accesstoken");
 }

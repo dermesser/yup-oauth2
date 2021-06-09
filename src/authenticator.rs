@@ -1,4 +1,7 @@
 //! Module contianing the core functionality for OAuth2 Authentication.
+use crate::application_default_credentials::{
+    ApplicationDefaultCredentialsFlow, ApplicationDefaultCredentialsFlowOpts,
+};
 use crate::authenticator_delegate::{DeviceFlowDelegate, InstalledFlowDelegate};
 use crate::device::DeviceFlow;
 use crate::error::Error;
@@ -254,6 +257,40 @@ impl ServiceAccountAuthenticator {
     }
 }
 
+/// Create an authenticator that uses a application default credentials.
+/// ```
+/// # async fn foo() {
+///     let authenticator = yup_oauth2::ApplicationDefaultCredentialsAuthenticator::builder()
+///         .await
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
+pub struct ApplicationDefaultCredentialsAuthenticator;
+impl ApplicationDefaultCredentialsAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses a service account.
+    pub async fn builder(
+    ) -> AuthenticatorBuilder<DefaultHyperClient, ApplicationDefaultCredentialsFlowOpts> {
+        match std::env::var("GOOGLE_APPLICATION_CREDENTIALS") {
+            Ok(_path) => {
+                todo!()
+                // # here we would need to do something like this:
+                // let service_account_key = crate::read_service_account_key(path).await.unwrap();
+                // AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(
+                //     ServiceAccountFlowOpts {
+                //         key: service_account_key,
+                //         subject: None,
+                //     },
+                // )
+            }
+            Err(_e) => AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(
+                ApplicationDefaultCredentialsFlowOpts {},
+            ),
+        }
+    }
+}
+
 /// ## Methods available when building any Authenticator.
 /// ```
 /// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
@@ -479,7 +516,25 @@ impl<C> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
     }
 }
 
+impl<C> AuthenticatorBuilder<C, ApplicationDefaultCredentialsFlowOpts> {
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        let application_default_credential_flow =
+            ApplicationDefaultCredentialsFlow::new(self.auth_flow);
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            AuthFlow::ApplicationDefaultCredentialsFlow(application_default_credential_flow),
+        )
+        .await
+    }
+}
+
 mod private {
+    use crate::application_default_credentials::ApplicationDefaultCredentialsFlow;
     use crate::device::DeviceFlow;
     use crate::error::Error;
     use crate::installed::InstalledFlow;
@@ -490,6 +545,7 @@ mod private {
         DeviceFlow(DeviceFlow),
         InstalledFlow(InstalledFlow),
         ServiceAccountFlow(ServiceAccountFlow),
+        ApplicationDefaultCredentialsFlow(ApplicationDefaultCredentialsFlow),
     }
 
     impl AuthFlow {
@@ -498,6 +554,7 @@ mod private {
                 AuthFlow::DeviceFlow(device_flow) => Some(&device_flow.app_secret),
                 AuthFlow::InstalledFlow(installed_flow) => Some(&installed_flow.app_secret),
                 AuthFlow::ServiceAccountFlow(_) => None,
+                AuthFlow::ApplicationDefaultCredentialsFlow(_) => None,
             }
         }
 
@@ -516,6 +573,9 @@ mod private {
                     installed_flow.token(hyper_client, scopes).await
                 }
                 AuthFlow::ServiceAccountFlow(service_account_flow) => {
+                    service_account_flow.token(hyper_client, scopes).await
+                }
+                AuthFlow::ApplicationDefaultCredentialsFlow(service_account_flow) => {
                     service_account_flow.token(hyper_client, scopes).await
                 }
             }
