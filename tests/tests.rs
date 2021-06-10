@@ -611,7 +611,8 @@ async fn test_disk_storage() {
 }
 
 #[tokio::test]
-async fn test_default_application_credentials() {
+async fn test_default_application_credentials_from_metadata_server() {
+    use yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
     let _ = env_logger::try_init();
     let server = Server::run();
     server.expect(
@@ -630,11 +631,10 @@ async fn test_default_application_credentials() {
             "expires_in": 12345678,
         }))),
     );
-    let authenticator = ApplicationDefaultCredentialsAuthenticator::builder()
-        .await
-        .build()
-        .await
-        .unwrap();
+    let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder().await {
+        ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth.build().await.unwrap(),
+        _ => panic!("We are not testing service account adc model"),
+    };
     let token = authenticator
         .token(&["https://googleapis.com/some/scope"])
         .await

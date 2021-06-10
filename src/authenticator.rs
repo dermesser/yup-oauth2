@@ -216,35 +216,65 @@ impl ServiceAccountAuthenticator {
 /// Create an authenticator that uses a application default credentials.
 /// ```
 /// # async fn foo() {
-///     let authenticator = yup_oauth2::ApplicationDefaultCredentialsAuthenticator::builder()
-///         .await
-///         .build()
-///         .await
-///         .expect("failed to create authenticator");
+///     let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder().await {
+///         ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth
+///             .build()
+///             .await
+///             .expect("Unable to create instance metadata authenticator"),
+///         ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => auth
+///             .build()
+///             .await
+///             .expect("Unable to create service account authenticator"),
+///     };
 /// # }
 /// ```
 pub struct ApplicationDefaultCredentialsAuthenticator;
 impl ApplicationDefaultCredentialsAuthenticator {
-    /// Use the builder pattern to create an Authenticator that uses a service account.
-    pub async fn builder(
+    /// Use modified builder pattern to create an Authenticator that uses GCE instance metadata server
+    /// to provide tokens.
+    pub fn from_instance_metadata(
     ) -> AuthenticatorBuilder<DefaultHyperClient, ApplicationDefaultCredentialsFlowOpts> {
-        match std::env::var("GOOGLE_APPLICATION_CREDENTIALS") {
-            Ok(_path) => {
-                todo!()
-                // # here we would need to do something like this:
-                // let service_account_key = crate::read_service_account_key(path).await.unwrap();
-                // AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(
-                //     ServiceAccountFlowOpts {
-                //         key: service_account_key,
-                //         subject: None,
-                //     },
-                // )
-            }
-            Err(_e) => AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(
-                ApplicationDefaultCredentialsFlowOpts {},
+        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(
+            ApplicationDefaultCredentialsFlowOpts {},
+        )
+    }
+
+    /// Use modified builder pattern to create an Authenticator that pulls default application credentials
+    /// service account file name from os environment variable.
+    pub async fn from_environment(
+    ) -> Result<AuthenticatorBuilder<DefaultHyperClient, ServiceAccountFlowOpts>, std::env::VarError>
+    {
+        let service_account_key =
+            crate::read_service_account_key(std::env::var("GOOGLE_APPLICATION_CREDENTIALS")?)
+                .await
+                .unwrap();
+        Ok(
+            AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(ServiceAccountFlowOpts {
+                key: service_account_key,
+                subject: None,
+            }),
+        )
+    }
+
+    /// Use the builder pattern to deduce which model of authenticator should be used:
+    /// Service account one or GCE instance metadata kind
+    pub async fn builder() -> ApplicationDefaultCredentialsTypes {
+        match ApplicationDefaultCredentialsAuthenticator::from_environment().await {
+            Ok(builder) => ApplicationDefaultCredentialsTypes::ServiceAccount(builder),
+            Err(_) => ApplicationDefaultCredentialsTypes::InstanceMetadata(
+                ApplicationDefaultCredentialsAuthenticator::from_instance_metadata(),
             ),
         }
     }
+}
+/// Types of authenticators provided by ApplicationDefaultCredentialsAuthenticator
+pub enum ApplicationDefaultCredentialsTypes {
+    /// Service account based authenticator signature
+    ServiceAccount(AuthenticatorBuilder<DefaultHyperClient, ServiceAccountFlowOpts>),
+    /// GCE Instance Metadata based authenticator signature
+    InstanceMetadata(
+        AuthenticatorBuilder<DefaultHyperClient, ApplicationDefaultCredentialsFlowOpts>,
+    ),
 }
 
 /// ## Methods available when building any Authenticator.
