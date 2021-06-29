@@ -39,6 +39,7 @@
 //! ```test_harness,no_run
 //! use yup_oauth2::{InstalledFlowAuthenticator, InstalledFlowReturnMethod};
 //!
+//! # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 //! #[tokio::main]
 //! async fn main() {
 //!     // Read application secret from a file. Sometimes it's easier to compile it directly into

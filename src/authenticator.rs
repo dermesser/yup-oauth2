@@ -141,6 +141,7 @@ pub struct AuthenticatorBuilder<C, F> {
 
 /// Create an authenticator that uses the installed flow.
 /// ```
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 /// # async fn foo() {
 /// # use yup_oauth2::InstalledFlowReturnMethod;
 /// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultInstalledFlowDelegate;
@@ -181,6 +182,7 @@ impl InstalledFlowAuthenticator {
 
 /// Create an authenticator that uses the device flow.
 /// ```
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 /// # async fn foo() {
 /// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
@@ -214,6 +216,7 @@ impl DeviceFlowAuthenticator {
 
 /// Create an authenticator that uses a service account.
 /// ```
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 /// # async fn foo() {
 /// # let service_account_key = yup_oauth2::read_service_account_key("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(service_account_key)
@@ -253,6 +256,7 @@ impl ServiceAccountAuthenticator {
 
 /// ## Methods available when building any Authenticator.
 /// ```
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 /// # async fn foo() {
 /// # let custom_hyper_client = hyper::Client::new();
 /// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
@@ -330,6 +334,7 @@ impl<C, F> AuthenticatorBuilder<C, F> {
 
 /// ## Methods available when building a device flow Authenticator.
 /// ```
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 /// # async fn foo() {
 /// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultDeviceFlowDelegate;
 /// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
@@ -392,6 +397,7 @@ impl<C> AuthenticatorBuilder<C, DeviceFlow> {
 
 /// ## Methods available when building an installed flow Authenticator.
 /// ```
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 /// # async fn foo() {
 /// # use yup_oauth2::InstalledFlowReturnMethod;
 /// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultInstalledFlowDelegate;
@@ -434,6 +440,7 @@ impl<C> AuthenticatorBuilder<C, InstalledFlow> {
 
 /// ## Methods available when building a service account authenticator.
 /// ```
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 /// # async fn foo() {
 /// # let service_account_key = yup_oauth2::read_service_account_key("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(
@@ -597,10 +604,10 @@ enum StorageType {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     #[test]
     #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
     fn ensure_send_sync() {
+        use super::*;
         fn is_send_sync<T: Send + Sync>() {}
         is_send_sync::<Authenticator<<DefaultHyperClient as HyperClientBuilder>::Connector>>()
     }

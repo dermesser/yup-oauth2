@@ -14,6 +14,10 @@ edition = "2018"
 name = "custom_flow"
 required-features = ["hyper-rustls"]
 
+[[example]]
+name = "custom_storage"
+required-features = ["hyper-rustls"]
+
 [[test]]
 name = "tests"
 required-features = ["hyper-rustls"]
