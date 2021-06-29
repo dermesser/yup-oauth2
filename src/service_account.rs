@@ -211,9 +211,7 @@ impl ServiceAccountFlow {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
-    use crate::authenticator::HyperClientBuilder;
     use crate::helper::read_service_account_key;
 
     // Valid but deactivated key.
@@ -222,13 +220,13 @@ mod tests {
     // Uncomment this test to verify that we can successfully obtain tokens.
     //#[tokio::test]
     #[allow(dead_code)]
-    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
     async fn test_service_account_e2e() {
         let key = read_service_account_key(TEST_PRIVATE_KEY_PATH)
             .await
             .unwrap();
         let acc = ServiceAccountFlow::new(ServiceAccountFlowOpts { key, subject: None }).unwrap();
-        let client = crate::authenticator::DefaultHyperClient.build_hyper_client();
+        let client =
+            hyper::Client::builder().build(hyper_rustls::HttpsConnector::with_native_roots());
         println!(
             "{:?}",
             acc.token(&client, &["https://www.googleapis.com/auth/pubsub"])

@@ -132,11 +132,6 @@ where
     }
 }
 
-enum StorageType {
-    Memory,
-    Disk(PathBuf),
-}
-
 /// Configure an Authenticator using the builder pattern.
 pub struct AuthenticatorBuilder<C, F> {
     hyper_client_builder: C,
@@ -171,9 +166,16 @@ impl InstalledFlowAuthenticator {
         app_secret: ApplicationSecret,
         method: InstalledFlowReturnMethod,
     ) -> AuthenticatorBuilder<DefaultHyperClient, InstalledFlow> {
-        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(InstalledFlow::new(
-            app_secret, method,
-        ))
+        Self::with_client(app_secret, method, DefaultHyperClient)
+    }
+
+    /// Construct a new Authenticator that uses the installed flow and the provided http client.
+    pub fn with_client<C>(
+        app_secret: ApplicationSecret,
+        method: InstalledFlowReturnMethod,
+        client: C,
+    ) -> AuthenticatorBuilder<C, InstalledFlow> {
+        AuthenticatorBuilder::new(InstalledFlow::new(app_secret, method), client)
     }
 }
 
@@ -198,7 +200,15 @@ impl DeviceFlowAuthenticator {
     pub fn builder(
         app_secret: ApplicationSecret,
     ) -> AuthenticatorBuilder<DefaultHyperClient, DeviceFlow> {
-        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(DeviceFlow::new(app_secret))
+        Self::with_client(app_secret, DefaultHyperClient)
+    }
+
+    /// Construct a new Authenticator that uses the installed flow and the provided http client.
+    pub fn with_client<C>(
+        app_secret: ApplicationSecret,
+        client: C,
+    ) -> AuthenticatorBuilder<C, DeviceFlow> {
+        AuthenticatorBuilder::new(DeviceFlow::new(app_secret), client)
     }
 }
 
@@ -223,10 +233,21 @@ impl ServiceAccountAuthenticator {
     pub fn builder(
         service_account_key: ServiceAccountKey,
     ) -> AuthenticatorBuilder<DefaultHyperClient, ServiceAccountFlowOpts> {
-        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(ServiceAccountFlowOpts {
-            key: service_account_key,
-            subject: None,
-        })
+        Self::with_client(service_account_key, DefaultHyperClient)
+    }
+
+    /// Construct a new Authenticator that uses the installed flow and the provided http client.
+    pub fn with_client<C>(
+        service_account_key: ServiceAccountKey,
+        client: C,
+    ) -> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
+        AuthenticatorBuilder::new(
+            ServiceAccountFlowOpts {
+                key: service_account_key,
+                subject: None,
+            },
+            client,
+        )
     }
 }
 
@@ -270,14 +291,9 @@ impl<C, F> AuthenticatorBuilder<C, F> {
         })
     }
 
-    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(
-        yup_oauth2_docsrs,
-        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
-    )]
-    fn with_auth_flow(auth_flow: F) -> AuthenticatorBuilder<DefaultHyperClient, F> {
+    fn new(auth_flow: F, hyper_client_builder: C) -> AuthenticatorBuilder<C, F> {
         AuthenticatorBuilder {
-            hyper_client_builder: DefaultHyperClient,
+            hyper_client_builder,
             storage_type: StorageType::Memory,
             auth_flow,
         }
@@ -507,17 +523,6 @@ pub trait HyperClientBuilder {
 
     /// Create a hyper::Client
     fn build_hyper_client(self) -> hyper::Client<Self::Connector>;
-}
-
-impl<C> HyperClientBuilder for hyper::Client<C>
-where
-    C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
-{
-    type Connector = C;
-
-    fn build_hyper_client(self) -> hyper::Client<C> {
-        self
-    }
 }
 
 #[cfg(feature = "hyper-rustls")]
