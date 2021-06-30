@@ -1,7 +1,8 @@
-//! This module provides a token source (`GetToken`) that obtains tokens for service accounts.
+//! This module provides a flow that obtains tokens for service accounts.
+//!
 //! Service accounts are usually used by software (i.e., non-human actors) to get access to
-//! resources. Currently, this module only works with RS256 JWTs, which makes it at least suitable for
-//! authentication with Google services.
+//! resources. Currently, this module only works with RS256 JWTs, which makes it at least suitable
+//! for authentication with Google services.
 //!
 //! Resources:
 //! - [Using OAuth 2.0 for Server to Server
@@ -9,7 +10,6 @@
 //! - [JSON Web Tokens](https://jwt.io/)
 //!
 //! Copyright (c) 2016 Google Inc (lewinb@google.com).
-//!
 
 use crate::error::Error;
 use crate::types::TokenInfo;
@@ -54,8 +54,9 @@ fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, io::Error> {
     }
 }
 
-/// JSON schema of secret service account key. You can obtain the key from
-/// the Cloud Console at https://console.cloud.google.com/.
+/// JSON schema of secret service account key.
+///
+/// You can obtain the key from the [Cloud Console](https://console.cloud.google.com/).
 ///
 /// You can use `helpers::read_service_account_key()` as a quick way to read a JSON client
 /// secret into a ServiceAccountKey.
@@ -212,10 +213,6 @@ impl ServiceAccountFlow {
 mod tests {
     use super::*;
     use crate::helper::read_service_account_key;
-    #[cfg(not(feature = "hyper-tls"))]
-    use hyper_rustls::HttpsConnector;
-    #[cfg(feature = "hyper-tls")]
-    use hyper_tls::HttpsConnector;
 
     // Valid but deactivated key.
     const TEST_PRIVATE_KEY_PATH: &'static str = "examples/Sanguine-69411a0c0eea.json";
@@ -228,13 +225,8 @@ mod tests {
             .await
             .unwrap();
         let acc = ServiceAccountFlow::new(ServiceAccountFlowOpts { key, subject: None }).unwrap();
-        #[cfg(not(feature = "hyper-tls"))]
-        let https = HttpsConnector::with_native_roots();
-        #[cfg(feature = "hyper-tls")]
-        let https = HttpsConnector::new();
-        let client = hyper::Client::builder()
-            .pool_max_idle_per_host(0)
-            .build::<_, hyper::Body>(https);
+        let client =
+            hyper::Client::builder().build(hyper_rustls::HttpsConnector::with_native_roots());
         println!(
             "{:?}",
             acc.token(&client, &["https://www.googleapis.com/auth/pubsub"])

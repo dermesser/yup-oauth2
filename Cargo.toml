@@ -10,6 +10,18 @@ keywords = ["google", "oauth", "v2"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
 
+[[example]]
+name = "custom_flow"
+required-features = ["hyper-rustls"]
+
+[[example]]
+name = "custom_storage"
+required-features = ["hyper-rustls"]
+
+[[test]]
+name = "tests"
+required-features = ["hyper-rustls"]
+
 [features]
 default = ["hyper-rustls"]
 
@@ -38,6 +50,11 @@ httptest = "0.14"
 env_logger = "0.7"
 tempfile = "3.1"
 webbrowser = "0.5"
+hyper-rustls = "0.22.1"
 
 [workspace]
 members = ["examples/test-installed/", "examples/test-svc-acct/", "examples/test-device/", "examples/service_account", "examples/drive_example"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "yup_oauth2_docsrs"]

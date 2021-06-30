@@ -4,17 +4,37 @@ name: Actions CI
 
 jobs:
   build_and_test:
-    name: yup-oauth2 
+    name: yup-oauth2
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features: ["hyper-rustls", "hyper-tls", "hyper-rustls,hyper-tls", ""]
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          profile: minimal
+          default: true
       - uses: actions-rs/cargo@v1
         with:
           command: test
+          args: --no-default-features --features=${{ matrix.features }}
+
+  doc:
+    name: yup-oauth2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          profile: minimal
+          default: true
       - uses: actions-rs/cargo@v1
         with:
-          command: build
-          args: --examples
+          command: doc
+          args: --all-features
+        env:
+          RUSTDOCFLAGS: --cfg yup_oauth2_docsrs

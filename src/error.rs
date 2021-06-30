@@ -8,8 +8,9 @@ use std::io;
 use serde::Deserialize;
 
 /// Error returned by the authorization server.
-/// https://tools.ietf.org/html/rfc6749#section-5.2
-/// https://tools.ietf.org/html/rfc8628#section-3.5
+///
+/// <https://tools.ietf.org/html/rfc6749#section-5.2>
+/// <https://tools.ietf.org/html/rfc8628#section-3.5>
 #[derive(Deserialize, Debug, PartialEq, Eq)]
 pub struct AuthError {
     /// Error code from the server.
