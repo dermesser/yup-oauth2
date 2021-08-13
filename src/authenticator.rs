@@ -3,6 +3,7 @@ use crate::authenticator_delegate::{DeviceFlowDelegate, InstalledFlowDelegate};
 use crate::device::DeviceFlow;
 use crate::error::Error;
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
+use crate::noninteractive::{NoninteractiveFlow, NoninteractiveTokens};
 use crate::refresh::RefreshFlow;
 use crate::service_account::{ServiceAccountFlow, ServiceAccountFlowOpts, ServiceAccountKey};
 use crate::storage::{self, Storage};
@@ -207,6 +208,19 @@ impl ServiceAccountAuthenticator {
             key: service_account_key,
             subject: None,
         })
+    }
+}
+
+/// Create an authenticator that uses a pre-constructed `NoninteractiveTokens` to authenticate.
+/// This authenticator is guaranteed to be non-interactive, the tokens can be created in advance.
+pub struct NoninteractiveAuthenticator;
+impl NoninteractiveAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses previously constructed
+    /// `NoninteractiveTokens`.
+    pub fn builder(
+        tokens: NoninteractiveTokens,
+    ) -> AuthenticatorBuilder<DefaultHyperClient, NoninteractiveFlow> {
+        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(NoninteractiveFlow(tokens))
     }
 }
 
@@ -422,10 +436,27 @@ impl<C> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
     }
 }
 
+/// ## Methods available when building an installed flow Authenticator.
+impl<C> AuthenticatorBuilder<C, NoninteractiveFlow> {
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            AuthFlow::NoninteractiveFlow(self.auth_flow),
+        )
+        .await
+    }
+}
+
 mod private {
     use crate::device::DeviceFlow;
     use crate::error::Error;
     use crate::installed::InstalledFlow;
+    use crate::noninteractive::NoninteractiveFlow;
     use crate::service_account::ServiceAccountFlow;
     use crate::types::{ApplicationSecret, TokenInfo};
 
@@ -433,6 +464,7 @@ mod private {
         DeviceFlow(DeviceFlow),
         InstalledFlow(InstalledFlow),
         ServiceAccountFlow(ServiceAccountFlow),
+        NoninteractiveFlow(NoninteractiveFlow),
     }
 
     impl AuthFlow {
@@ -441,6 +473,9 @@ mod private {
                 AuthFlow::DeviceFlow(device_flow) => Some(&device_flow.app_secret),
                 AuthFlow::InstalledFlow(installed_flow) => Some(&installed_flow.app_secret),
                 AuthFlow::ServiceAccountFlow(_) => None,
+                AuthFlow::NoninteractiveFlow(noninteractive_flow) => {
+                    Some(noninteractive_flow.app_secret())
+                }
             }
         }
 
@@ -460,6 +495,9 @@ mod private {
                 }
                 AuthFlow::ServiceAccountFlow(service_account_flow) => {
                     service_account_flow.token(hyper_client, scopes).await
+                }
+                AuthFlow::NoninteractiveFlow(noninteractive_flow) => {
+                    noninteractive_flow.token(hyper_client, scopes).await
                 }
             }
         }

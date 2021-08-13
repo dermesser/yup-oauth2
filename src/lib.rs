@@ -75,6 +75,7 @@ mod device;
 pub mod error;
 mod helper;
 mod installed;
+pub mod noninteractive;
 mod refresh;
 mod service_account;
 mod storage;
@@ -82,7 +83,8 @@ mod types;
 
 #[doc(inline)]
 pub use crate::authenticator::{
-    DeviceFlowAuthenticator, InstalledFlowAuthenticator, ServiceAccountAuthenticator,
+    DeviceFlowAuthenticator, InstalledFlowAuthenticator, NoninteractiveAuthenticator,
+    ServiceAccountAuthenticator,
 };
 
 pub use crate::helper::*;
