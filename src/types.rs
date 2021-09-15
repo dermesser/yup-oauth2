@@ -75,12 +75,15 @@ impl TokenInfo {
             expires_in: Option<i64>,
         }
 
+        // Serialize first to a `serde_json::Value` then to `AuthErrorOr<RawToken>` to work around this bug in
+        // serde_json: https://github.com/serde-rs/json/issues/559
+        let raw_token = serde_json::from_slice::<serde_json::Value>(json_data)?;
         let RawToken {
             access_token,
             refresh_token,
             token_type,
             expires_in,
-        } = serde_json::from_slice::<AuthErrorOr<RawToken>>(json_data)?.into_result()?;
+        } = <AuthErrorOr<RawToken>>::deserialize(raw_token)?.into_result()?;
 
         if token_type.to_lowercase().as_str() != "bearer" {
             use std::io;
