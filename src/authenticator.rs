@@ -257,10 +257,16 @@ impl ServiceAccountAuthenticator {
     }
 }
 
+// TODO: Can those use statements be cleaned up?
 /// Create an authenticator that uses a application default credentials.
 /// ```
 /// # async fn foo() {
-///     let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder().await {
+///     use yup_oauth2::ApplicationDefaultCredentialsAuthenticator;
+///     use yup_oauth2::ApplicationDefaultCredentialsFlowOpts;
+///     use yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
+///
+///     let opts = ApplicationDefaultCredentialsFlowOpts::default();
+///     let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts).await {
 ///         ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth
 ///             .build()
 ///             .await
