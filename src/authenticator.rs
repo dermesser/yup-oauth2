@@ -276,49 +276,59 @@ pub struct ApplicationDefaultCredentialsAuthenticator;
 impl ApplicationDefaultCredentialsAuthenticator {
     /// Use modified builder pattern to create an Authenticator that uses GCE instance metadata server
     /// to provide tokens.
-    pub fn from_instance_metadata(
-    ) -> AuthenticatorBuilder<DefaultHyperClient, ApplicationDefaultCredentialsFlowOpts> {
-        AuthenticatorBuilder::new(ApplicationDefaultCredentialsFlowOpts {}, DefaultHyperClient)
+    pub fn from_instance_metadata() -> ApplicationDefaultCredentialsFlowOpts {
+        ApplicationDefaultCredentialsFlowOpts {}
     }
 
     /// Use modified builder pattern to create an Authenticator that pulls default application credentials
     /// service account file name from os environment variable.
-    pub async fn from_environment(
-    ) -> Result<AuthenticatorBuilder<DefaultHyperClient, ServiceAccountFlowOpts>, std::env::VarError>
-    {
+    pub async fn from_environment() -> Result<ServiceAccountFlowOpts, std::env::VarError> {
         let service_account_key =
             crate::read_service_account_key(std::env::var("GOOGLE_APPLICATION_CREDENTIALS")?)
                 .await
                 .unwrap();
 
-        Ok(AuthenticatorBuilder::new(
-            ServiceAccountFlowOpts {
-                key: service_account_key,
-                subject: None,
-            },
-            DefaultHyperClient,
-        ))
+        Ok(ServiceAccountFlowOpts {
+            key: service_account_key,
+            subject: None,
+        })
     }
 
     /// Use the builder pattern to deduce which model of authenticator should be used:
     /// Service account one or GCE instance metadata kind
-    pub async fn builder() -> ApplicationDefaultCredentialsTypes {
+    pub async fn builder() -> ApplicationDefaultCredentialsTypes<DefaultHyperClient> {
+        Self::with_client(DefaultHyperClient).await
+    }
+
+    /// Use the builder pattern to deduce which model of authenticator should be used and allow providing a hyper client
+    pub async fn with_client<C>(client: C) -> ApplicationDefaultCredentialsTypes<C>
+    where
+        C: HyperClientBuilder,
+    {
         match ApplicationDefaultCredentialsAuthenticator::from_environment().await {
-            Ok(builder) => ApplicationDefaultCredentialsTypes::ServiceAccount(builder),
-            Err(_) => ApplicationDefaultCredentialsTypes::InstanceMetadata(
-                ApplicationDefaultCredentialsAuthenticator::from_instance_metadata(),
-            ),
+            Ok(flow_opts) => {
+                let builder = AuthenticatorBuilder::new(flow_opts, client);
+
+                ApplicationDefaultCredentialsTypes::ServiceAccount(builder)
+            }
+            Err(_) => {
+                ApplicationDefaultCredentialsTypes::InstanceMetadata(AuthenticatorBuilder::new(
+                    ApplicationDefaultCredentialsAuthenticator::from_instance_metadata(),
+                    client,
+                ))
+            }
         }
     }
 }
 /// Types of authenticators provided by ApplicationDefaultCredentialsAuthenticator
-pub enum ApplicationDefaultCredentialsTypes {
+pub enum ApplicationDefaultCredentialsTypes<C>
+where
+    C: HyperClientBuilder,
+{
     /// Service account based authenticator signature
-    ServiceAccount(AuthenticatorBuilder<DefaultHyperClient, ServiceAccountFlowOpts>),
+    ServiceAccount(AuthenticatorBuilder<C, ServiceAccountFlowOpts>),
     /// GCE Instance Metadata based authenticator signature
-    InstanceMetadata(
-        AuthenticatorBuilder<DefaultHyperClient, ApplicationDefaultCredentialsFlowOpts>,
-    ),
+    InstanceMetadata(AuthenticatorBuilder<C, ApplicationDefaultCredentialsFlowOpts>),
 }
 
 /// ## Methods available when building any Authenticator.
