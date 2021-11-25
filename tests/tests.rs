@@ -2,9 +2,9 @@ use yup_oauth2::{
     authenticator::{DefaultAuthenticator, DefaultHyperClient, HyperClientBuilder},
     authenticator_delegate::{DeviceAuthResponse, DeviceFlowDelegate, InstalledFlowDelegate},
     error::{AuthError, AuthErrorCode},
-    ApplicationDefaultCredentialsAuthenticator, ApplicationSecret, DeviceFlowAuthenticator, Error,
-    InstalledFlowAuthenticator, InstalledFlowReturnMethod, ServiceAccountAuthenticator,
-    ServiceAccountKey,
+    ApplicationDefaultCredentialsAuthenticator, ApplicationDefaultCredentialsFlowOpts,
+    ApplicationSecret, DeviceFlowAuthenticator, Error, InstalledFlowAuthenticator,
+    InstalledFlowReturnMethod, ServiceAccountAuthenticator, ServiceAccountKey,
 };
 
 use std::future::Future;
@@ -619,7 +619,11 @@ async fn test_default_application_credentials_from_metadata_server() {
             "expires_in": 12345678,
         }))),
     );
-    let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder().await {
+
+    let opts = ApplicationDefaultCredentialsFlowOpts {
+        metadata_url: Some(server.url("/token").to_string()),
+    };
+    let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts).await {
         ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth.build().await.unwrap(),
         _ => panic!("We are not testing service account adc model"),
     };
@@ -627,5 +631,5 @@ async fn test_default_application_credentials_from_metadata_server() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .unwrap();
-    assert_ne!(token.as_str(), "accesstoken");
+    assert_eq!(token.as_str(), "accesstoken");
 }

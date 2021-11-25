@@ -1,9 +1,11 @@
 use yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
 use yup_oauth2::ApplicationDefaultCredentialsAuthenticator;
+use yup_oauth2::ApplicationDefaultCredentialsFlowOpts;
 
 #[tokio::main]
 async fn main() {
-    let auth = match ApplicationDefaultCredentialsAuthenticator::builder().await {
+    let opts = ApplicationDefaultCredentialsFlowOpts::default();
+    let auth = match ApplicationDefaultCredentialsAuthenticator::builder(opts).await {
         ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth
             .build()
             .await

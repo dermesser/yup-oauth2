@@ -97,6 +97,7 @@ pub use crate::authenticator::{
 pub use crate::helper::*;
 pub use crate::installed::InstalledFlowReturnMethod;
 
+pub use crate::application_default_credentials::ApplicationDefaultCredentialsFlowOpts;
 pub use crate::service_account::ServiceAccountKey;
 
 #[doc(inline)]

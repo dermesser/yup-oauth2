@@ -274,14 +274,7 @@ impl ServiceAccountAuthenticator {
 /// ```
 pub struct ApplicationDefaultCredentialsAuthenticator;
 impl ApplicationDefaultCredentialsAuthenticator {
-    /// Use modified builder pattern to create an Authenticator that uses GCE instance metadata server
-    /// to provide tokens.
-    pub fn from_instance_metadata() -> ApplicationDefaultCredentialsFlowOpts {
-        ApplicationDefaultCredentialsFlowOpts {}
-    }
-
-    /// Use modified builder pattern to create an Authenticator that pulls default application credentials
-    /// service account file name from os environment variable.
+    /// Try to build ServiceAccountFlowOpts from the environment
     pub async fn from_environment() -> Result<ServiceAccountFlowOpts, std::env::VarError> {
         let service_account_key =
             crate::read_service_account_key(std::env::var("GOOGLE_APPLICATION_CREDENTIALS")?)
@@ -296,12 +289,17 @@ impl ApplicationDefaultCredentialsAuthenticator {
 
     /// Use the builder pattern to deduce which model of authenticator should be used:
     /// Service account one or GCE instance metadata kind
-    pub async fn builder() -> ApplicationDefaultCredentialsTypes<DefaultHyperClient> {
-        Self::with_client(DefaultHyperClient).await
+    pub async fn builder(
+        opts: ApplicationDefaultCredentialsFlowOpts,
+    ) -> ApplicationDefaultCredentialsTypes<DefaultHyperClient> {
+        Self::with_client(DefaultHyperClient, opts).await
     }
 
     /// Use the builder pattern to deduce which model of authenticator should be used and allow providing a hyper client
-    pub async fn with_client<C>(client: C) -> ApplicationDefaultCredentialsTypes<C>
+    pub async fn with_client<C>(
+        client: C,
+        opts: ApplicationDefaultCredentialsFlowOpts,
+    ) -> ApplicationDefaultCredentialsTypes<C>
     where
         C: HyperClientBuilder,
     {
@@ -311,12 +309,9 @@ impl ApplicationDefaultCredentialsAuthenticator {
 
                 ApplicationDefaultCredentialsTypes::ServiceAccount(builder)
             }
-            Err(_) => {
-                ApplicationDefaultCredentialsTypes::InstanceMetadata(AuthenticatorBuilder::new(
-                    ApplicationDefaultCredentialsAuthenticator::from_instance_metadata(),
-                    client,
-                ))
-            }
+            Err(_) => ApplicationDefaultCredentialsTypes::InstanceMetadata(
+                AuthenticatorBuilder::new(opts, client),
+            ),
         }
     }
 }

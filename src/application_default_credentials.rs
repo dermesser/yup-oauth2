@@ -1,13 +1,25 @@
 use crate::error::Error;
 use crate::types::TokenInfo;
 
-pub struct ApplicationDefaultCredentialsFlowOpts;
+/// Provide options for the Application Default Credential Flow, mostly used for testing
+pub struct ApplicationDefaultCredentialsFlowOpts {
+    /// Used as base to build the url during token request from GCP metadata server
+    pub metadata_url: Option<String>,
+}
+impl Default for ApplicationDefaultCredentialsFlowOpts {
+    fn default() -> Self {
+        Self { metadata_url: None }
+    }
+}
 
-/// ServiceAccountFlow can fetch oauth tokens using a service account.
-pub struct ApplicationDefaultCredentialsFlow;
+pub struct ApplicationDefaultCredentialsFlow {
+    metadata_url: String,
+}
+
 impl ApplicationDefaultCredentialsFlow {
-    pub(crate) fn new(_opts: ApplicationDefaultCredentialsFlowOpts) -> Self {
-        ApplicationDefaultCredentialsFlow {}
+    pub(crate) fn new(opts: ApplicationDefaultCredentialsFlowOpts) -> Self {
+        let metadata_url = opts.metadata_url.unwrap_or_else(|| "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token".to_string());
+        ApplicationDefaultCredentialsFlow { metadata_url }
     }
 
     pub(crate) async fn token<C, T>(
@@ -20,7 +32,7 @@ impl ApplicationDefaultCredentialsFlow {
         C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
     {
         let scope = crate::helper::join(scopes, ",");
-        let token_uri = format!("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token?scopes={}", scope);
+        let token_uri = format!("{}?scopes={}", self.metadata_url, scope); // TODO: This feels jank, can it be done better?
         let request = hyper::Request::get(token_uri)
             .header("Metadata-Flavor", "Google")
             .body(hyper::Body::from(String::new())) // why body is needed?
