@@ -278,9 +278,7 @@ impl ApplicationDefaultCredentialsAuthenticator {
     /// to provide tokens.
     pub fn from_instance_metadata(
     ) -> AuthenticatorBuilder<DefaultHyperClient, ApplicationDefaultCredentialsFlowOpts> {
-        AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(
-            ApplicationDefaultCredentialsFlowOpts {},
-        )
+        AuthenticatorBuilder::new(ApplicationDefaultCredentialsFlowOpts {}, DefaultHyperClient)
     }
 
     /// Use modified builder pattern to create an Authenticator that pulls default application credentials
@@ -292,12 +290,14 @@ impl ApplicationDefaultCredentialsAuthenticator {
             crate::read_service_account_key(std::env::var("GOOGLE_APPLICATION_CREDENTIALS")?)
                 .await
                 .unwrap();
-        Ok(
-            AuthenticatorBuilder::<DefaultHyperClient, _>::with_auth_flow(ServiceAccountFlowOpts {
+
+        Ok(AuthenticatorBuilder::new(
+            ServiceAccountFlowOpts {
                 key: service_account_key,
                 subject: None,
-            }),
-        )
+            },
+            DefaultHyperClient,
+        ))
     }
 
     /// Use the builder pattern to deduce which model of authenticator should be used:
