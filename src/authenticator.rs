@@ -260,10 +260,11 @@ impl ServiceAccountAuthenticator {
 // TODO: Can those use statements be cleaned up?
 /// Create an authenticator that uses a application default credentials.
 /// ```
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 /// # async fn foo() {
-///     use yup_oauth2::ApplicationDefaultCredentialsAuthenticator;
-///     use yup_oauth2::ApplicationDefaultCredentialsFlowOpts;
-///     use yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
+/// #    use yup_oauth2::ApplicationDefaultCredentialsAuthenticator;
+/// #    use yup_oauth2::ApplicationDefaultCredentialsFlowOpts;
+/// #    use yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
 ///
 ///     let opts = ApplicationDefaultCredentialsFlowOpts::default();
 ///     let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts).await {
@@ -295,6 +296,11 @@ impl ApplicationDefaultCredentialsAuthenticator {
 
     /// Use the builder pattern to deduce which model of authenticator should be used:
     /// Service account one or GCE instance metadata kind
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+    #[cfg_attr(
+        yup_oauth2_docsrs,
+        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
+    )]
     pub async fn builder(
         opts: ApplicationDefaultCredentialsFlowOpts,
     ) -> ApplicationDefaultCredentialsTypes<DefaultHyperClient> {
