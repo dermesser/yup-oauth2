@@ -257,7 +257,6 @@ impl ServiceAccountAuthenticator {
     }
 }
 
-// TODO: Can those use statements be cleaned up?
 /// Create an authenticator that uses a application default credentials.
 /// ```
 /// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]

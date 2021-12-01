@@ -32,7 +32,7 @@ impl ApplicationDefaultCredentialsFlow {
         C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
     {
         let scope = crate::helper::join(scopes, ",");
-        let token_uri = format!("{}?scopes={}", self.metadata_url, scope); // TODO: This feels jank, can it be done better?
+        let token_uri = format!("{}?scopes={}", self.metadata_url, scope);
         let request = hyper::Request::get(token_uri)
             .header("Metadata-Flavor", "Google")
             .body(hyper::Body::from(String::new())) // why body is needed?

@@ -604,7 +604,6 @@ async fn test_default_application_credentials_from_metadata_server() {
     let _ = env_logger::try_init();
     let server = Server::run();
     server.expect(
-        // TODO: this does not work.
         Expectation::matching(all_of![
             request::method_path("GET", "/token"),
             request::query(url_decoded(all_of![contains((
