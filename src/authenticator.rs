@@ -60,7 +60,9 @@ where
     where
         T: AsRef<str>,
     {
-        self.find_token(scopes, /* force_refresh = */ false).await
+        self.find_token_info(scopes, /* force_refresh = */ false)
+            .await
+            .map(|info| info.into())
     }
 
     /// Return a token for the provided scopes, but don't reuse cached tokens. Instead,
@@ -72,15 +74,27 @@ where
     where
         T: AsRef<str>,
     {
-        self.find_token(scopes, /* force_refresh = */ true).await
+        self.find_token_info(scopes, /* force_refresh = */ true)
+            .await
+            .map(|info| info.into())
+    }
+
+    /// Return the current ID token for the provided scopes, if any
+    pub async fn id_token<'a, T>(&'a self, scopes: &'a [T]) -> Result<Option<String>, Error>
+    where
+        T: AsRef<str>,
+    {
+        self.find_token_info(scopes, /* force_refresh = */ false)
+            .await
+            .map(|info| info.id_token)
     }
 
     /// Return a cached token or fetch a new one from the server.
-    async fn find_token<'a, T>(
+    async fn find_token_info<'a, T>(
         &'a self,
         scopes: &'a [T],
         force_refresh: bool,
-    ) -> Result<AccessToken, Error>
+    ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
     {
@@ -116,7 +130,7 @@ where
                     .storage
                     .set(hashed_scopes, token_info.clone())
                     .await?;
-                Ok(token_info.into())
+                Ok(token_info)
             }
             _ => {
                 // no token in the cache or the token returned can't be refreshed.
@@ -129,7 +143,7 @@ where
                     .storage
                     .set(hashed_scopes, token_info.clone())
                     .await?;
-                Ok(token_info.into())
+                Ok(token_info)
             }
         }
     }
