@@ -452,6 +452,7 @@ mod tests {
             access_token: access_token.to_owned(),
             refresh_token: None,
             expires_at: None,
+            id_token: None,
         };
         let scope_set = ScopeSet::from(&["myscope"]);
         let tempdir = tempfile::tempdir().unwrap();
