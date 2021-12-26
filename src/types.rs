@@ -63,6 +63,11 @@ pub struct TokenInfo {
     pub refresh_token: Option<String>,
     /// The time when the token expires.
     pub expires_at: Option<DateTime<Utc>>,
+    /// Optionally included by the OAuth2 server and may contain information to verify the identity
+    /// used to obtain the access token.
+    /// Specifically Google API:s include this if the additional scopes "email" and/or "profile"
+    /// are used. In that case the content is an JWT token.
+    pub id_token: Option<String>,
 }
 
 impl TokenInfo {
@@ -73,6 +78,7 @@ impl TokenInfo {
             refresh_token: Option<String>,
             token_type: String,
             expires_in: Option<i64>,
+            id_token: Option<String>,
         }
 
         // Serialize first to a `serde_json::Value` then to `AuthErrorOr<RawToken>` to work around this bug in
@@ -83,6 +89,7 @@ impl TokenInfo {
             refresh_token,
             token_type,
             expires_in,
+            id_token,
         } = <AuthErrorOr<RawToken>>::deserialize(raw_token)?.into_result()?;
 
         if token_type.to_lowercase().as_str() != "bearer" {
@@ -104,6 +111,7 @@ impl TokenInfo {
             access_token,
             refresh_token,
             expires_at,
+            id_token,
         })
     }
 
