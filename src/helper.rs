@@ -41,7 +41,12 @@ pub fn parse_application_secret<S: AsRef<[u8]>>(secret: S) -> io::Result<Applica
 /// Cloud Console or the respective console of your service provider.
 pub async fn read_service_account_key<P: AsRef<Path>>(path: P) -> io::Result<ServiceAccountKey> {
     let key = tokio::fs::read(path).await?;
-    serde_json::from_slice(&key).map_err(|e| {
+    parse_service_account_key(key)
+}
+
+/// Read a service account key from a JSON string.
+pub fn parse_service_account_key<S: AsRef<[u8]>>(key: S) -> io::Result<ServiceAccountKey> {
+    serde_json::from_slice(key.as_ref()).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("Bad service account key: {}", e),
