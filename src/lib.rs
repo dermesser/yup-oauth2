@@ -80,6 +80,8 @@ pub mod error;
 mod helper;
 mod installed;
 mod refresh;
+
+#[cfg(feature = "service_account")]
 mod service_account;
 
 /// Interface for storing tokens so that they can be re-used. There are built-in memory and
@@ -91,13 +93,16 @@ mod types;
 #[doc(inline)]
 pub use crate::authenticator::{
     ApplicationDefaultCredentialsAuthenticator, DeviceFlowAuthenticator,
-    InstalledFlowAuthenticator, ServiceAccountAuthenticator,
+    InstalledFlowAuthenticator
 };
+#[cfg(feature = "service_account")]
+pub use crate::authenticator::ServiceAccountAuthenticator;
 
 pub use crate::helper::*;
 pub use crate::installed::InstalledFlowReturnMethod;
 
 pub use crate::application_default_credentials::ApplicationDefaultCredentialsFlowOpts;
+#[cfg(feature = "service_account")]
 pub use crate::service_account::ServiceAccountKey;
 
 #[doc(inline)]

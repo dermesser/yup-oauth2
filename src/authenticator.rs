@@ -7,6 +7,8 @@ use crate::device::DeviceFlow;
 use crate::error::Error;
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 use crate::refresh::RefreshFlow;
+
+#[cfg(feature = "service_account")]
 use crate::service_account::{ServiceAccountFlow, ServiceAccountFlowOpts, ServiceAccountKey};
 use crate::storage::{self, Storage, TokenStorage};
 use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
@@ -242,7 +244,10 @@ impl DeviceFlowAuthenticator {
 ///         .expect("failed to create authenticator");
 /// # }
 /// ```
+#[cfg(feature = "service_account")]
 pub struct ServiceAccountAuthenticator;
+
+#[cfg(feature = "service_account")]
 impl ServiceAccountAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses a service account.
     #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
@@ -549,6 +554,7 @@ impl<C> AuthenticatorBuilder<C, InstalledFlow> {
 ///     .expect("failed to create authenticator");
 /// # }
 /// ```
+#[cfg(feature = "service_account")]
 impl<C> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
     /// Use the provided subject.
     pub fn subject(self, subject: impl Into<String>) -> Self {
@@ -598,12 +604,14 @@ mod private {
     use crate::device::DeviceFlow;
     use crate::error::Error;
     use crate::installed::InstalledFlow;
+    #[cfg(feature = "service_account")]
     use crate::service_account::ServiceAccountFlow;
     use crate::types::{ApplicationSecret, TokenInfo};
 
     pub enum AuthFlow {
         DeviceFlow(DeviceFlow),
         InstalledFlow(InstalledFlow),
+        #[cfg(feature = "service_account")]
         ServiceAccountFlow(ServiceAccountFlow),
         ApplicationDefaultCredentialsFlow(ApplicationDefaultCredentialsFlow),
     }
@@ -613,6 +621,7 @@ mod private {
             match self {
                 AuthFlow::DeviceFlow(device_flow) => Some(&device_flow.app_secret),
                 AuthFlow::InstalledFlow(installed_flow) => Some(&installed_flow.app_secret),
+                #[cfg(feature = "service_account")]
                 AuthFlow::ServiceAccountFlow(_) => None,
                 AuthFlow::ApplicationDefaultCredentialsFlow(_) => None,
             }
@@ -632,6 +641,7 @@ mod private {
                 AuthFlow::InstalledFlow(installed_flow) => {
                     installed_flow.token(hyper_client, scopes).await
                 }
+                #[cfg(feature = "service_account")]
                 AuthFlow::ServiceAccountFlow(service_account_flow) => {
                     service_account_flow.token(hyper_client, scopes).await
                 }

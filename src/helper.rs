@@ -4,6 +4,7 @@
 // Copyright (c) 2016 Google Inc (lewinb@google.com).
 //
 // Refer to the project root for licensing information.
+#[cfg(feature = "service_account")]
 use crate::service_account::ServiceAccountKey;
 use crate::types::{ApplicationSecret, ConsoleApplicationSecret};
 
@@ -39,6 +40,7 @@ pub fn parse_application_secret<S: AsRef<[u8]>>(secret: S) -> io::Result<Applica
 
 /// Read a service account key from a JSON file. You can download the JSON keys from the Google
 /// Cloud Console or the respective console of your service provider.
+#[cfg(feature = "service_account")]
 pub async fn read_service_account_key<P: AsRef<Path>>(path: P) -> io::Result<ServiceAccountKey> {
     let key = tokio::fs::read(path).await?;
     parse_service_account_key(key)
