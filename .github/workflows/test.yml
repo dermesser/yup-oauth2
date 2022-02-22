@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        features: ["hyper-rustls", "hyper-tls", "hyper-rustls,hyper-tls", ""]
+        features: ["service_accounts,hyper-rustls", "service_accounts,hyper-tls", "service_accounts,hyper-rustls,hyper-tls", "service_accounts"]
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
