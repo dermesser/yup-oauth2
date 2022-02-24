@@ -278,7 +278,7 @@ impl ServiceAccountAuthenticator {
 
 /// Create an authenticator that uses a application default credentials.
 /// ```
-/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # #[cfg(all(any(feature = "hyper-rustls", feature = "hyper-tls"), feature = "service_account"))]
 /// # async fn foo() {
 /// #    use yup_oauth2::ApplicationDefaultCredentialsAuthenticator;
 /// #    use yup_oauth2::ApplicationDefaultCredentialsFlowOpts;
