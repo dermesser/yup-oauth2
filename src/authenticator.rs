@@ -300,6 +300,7 @@ impl ServiceAccountAuthenticator {
 pub struct ApplicationDefaultCredentialsAuthenticator;
 impl ApplicationDefaultCredentialsAuthenticator {
     /// Try to build ServiceAccountFlowOpts from the environment
+    #[cfg(feature = "service_account")]
     pub async fn from_environment() -> Result<ServiceAccountFlowOpts, std::env::VarError> {
         let service_account_key =
             crate::read_service_account_key(std::env::var("GOOGLE_APPLICATION_CREDENTIALS")?)
@@ -314,6 +315,7 @@ impl ApplicationDefaultCredentialsAuthenticator {
 
     /// Use the builder pattern to deduce which model of authenticator should be used:
     /// Service account one or GCE instance metadata kind
+    #[cfg(feature = "service_account")]
     #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
     #[cfg_attr(
         yup_oauth2_docsrs,
@@ -326,6 +328,7 @@ impl ApplicationDefaultCredentialsAuthenticator {
     }
 
     /// Use the builder pattern to deduce which model of authenticator should be used and allow providing a hyper client
+    #[cfg(feature = "service_account")]
     pub async fn with_client<C>(
         client: C,
         opts: ApplicationDefaultCredentialsFlowOpts,
@@ -351,6 +354,7 @@ where
     C: HyperClientBuilder,
 {
     /// Service account based authenticator signature
+    #[cfg(feature = "service_account")]
     ServiceAccount(AuthenticatorBuilder<C, ServiceAccountFlowOpts>),
     /// GCE Instance Metadata based authenticator signature
     InstanceMetadata(AuthenticatorBuilder<C, ApplicationDefaultCredentialsFlowOpts>),
