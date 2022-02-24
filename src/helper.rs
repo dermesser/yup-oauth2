@@ -46,6 +46,7 @@ pub async fn read_service_account_key<P: AsRef<Path>>(path: P) -> io::Result<Ser
     parse_service_account_key(key)
 }
 
+#[cfg(feature = "service_account")]
 /// Read a service account key from a JSON string.
 pub fn parse_service_account_key<S: AsRef<[u8]>>(key: S) -> io::Result<ServiceAccountKey> {
     serde_json::from_slice(key.as_ref()).map_err(|e| {
