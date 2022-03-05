@@ -5,8 +5,8 @@
 //
 // Refer to the project root for licensing information.
 #[cfg(feature = "service_account")]
-use crate::service_account::ServiceAccountKey;
 use crate::types::{ApplicationSecret, ConsoleApplicationSecret};
+use crate::{authorized_user::AuthorizedUserSecret, service_account::ServiceAccountKey};
 
 use std::io;
 use std::path::Path;
@@ -53,6 +53,22 @@ pub fn parse_service_account_key<S: AsRef<[u8]>>(key: S) -> io::Result<ServiceAc
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("Bad service account key: {}", e),
+        )
+    })
+}
+
+/// Read an authorized user secret from a JSON file. You can obtain it by running on the client:
+/// `gcloud auth application-default login`.
+/// The file should be on Windows in: `%APPDATA%/gcloud/application_default_credentials.json`
+/// for other systems: `$HOME/.config/gcloud/application_default_credentials.json`.
+pub async fn read_authorized_user_secret<P: AsRef<Path>>(
+    path: P,
+) -> io::Result<AuthorizedUserSecret> {
+    let key = tokio::fs::read(path).await?;
+    serde_json::from_slice(&key).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Bad authorized user secret: {}", e),
         )
     })
 }

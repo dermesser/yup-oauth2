@@ -3,6 +3,7 @@ use crate::application_default_credentials::{
     ApplicationDefaultCredentialsFlow, ApplicationDefaultCredentialsFlowOpts,
 };
 use crate::authenticator_delegate::{DeviceFlowDelegate, InstalledFlowDelegate};
+use crate::authorized_user::{AuthorizedUserFlow, AuthorizedUserSecret};
 use crate::device::DeviceFlow;
 use crate::error::Error;
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
@@ -360,6 +361,35 @@ where
     InstanceMetadata(AuthenticatorBuilder<C, ApplicationDefaultCredentialsFlowOpts>),
 }
 
+/// Create an authenticator that uses an authorized user credentials.
+/// ```
+/// # async fn foo() {
+/// # use yup_oauth2::authenticator::AuthorizedUserAuthenticator;
+/// # let secret = yup_oauth2::read_authorized_user_secret("/tmp/foo").await.unwrap();
+///     let authenticator = yup_oauth2::AuthorizedUserAuthenticator::builder(secret)
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
+pub struct AuthorizedUserAuthenticator;
+impl AuthorizedUserAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses an authorized user.
+    pub fn builder(
+        authorized_user_secret: AuthorizedUserSecret,
+    ) -> AuthenticatorBuilder<DefaultHyperClient, AuthorizedUserFlow> {
+        Self::with_client(authorized_user_secret, DefaultHyperClient)
+    }
+
+    /// Construct a new Authenticator that uses the installed flow and the provided http client.
+    pub fn with_client<C>(
+        authorized_user_secret: AuthorizedUserSecret,
+        client: C,
+    ) -> AuthenticatorBuilder<C, AuthorizedUserFlow> {
+        AuthenticatorBuilder::new(AuthorizedUserFlow { secret: authorized_user_secret }, client)
+    }
+}
+
 /// ## Methods available when building any Authenticator.
 /// ```
 /// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
@@ -603,8 +633,25 @@ impl<C> AuthenticatorBuilder<C, ApplicationDefaultCredentialsFlowOpts> {
     }
 }
 
+/// ## Methods available when building an authorized user flow Authenticator.
+impl<C> AuthenticatorBuilder<C, AuthorizedUserFlow> {
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            AuthFlow::AuthorizedUserFlow(self.auth_flow),
+        )
+        .await
+    }
+}
+
 mod private {
     use crate::application_default_credentials::ApplicationDefaultCredentialsFlow;
+    use crate::authorized_user::AuthorizedUserFlow;
     use crate::device::DeviceFlow;
     use crate::error::Error;
     use crate::installed::InstalledFlow;
@@ -618,6 +665,7 @@ mod private {
         #[cfg(feature = "service_account")]
         ServiceAccountFlow(ServiceAccountFlow),
         ApplicationDefaultCredentialsFlow(ApplicationDefaultCredentialsFlow),
+        AuthorizedUserFlow(AuthorizedUserFlow),
     }
 
     impl AuthFlow {
@@ -628,6 +676,7 @@ mod private {
                 #[cfg(feature = "service_account")]
                 AuthFlow::ServiceAccountFlow(_) => None,
                 AuthFlow::ApplicationDefaultCredentialsFlow(_) => None,
+                AuthFlow::AuthorizedUserFlow(_) => None,
             }
         }
 
@@ -651,6 +700,9 @@ mod private {
                 }
                 AuthFlow::ApplicationDefaultCredentialsFlow(service_account_flow) => {
                     service_account_flow.token(hyper_client, scopes).await
+                }
+                AuthFlow::AuthorizedUserFlow(authorized_user_flow) => {
+                    authorized_user_flow.token(hyper_client, scopes).await
                 }
             }
         }
