@@ -91,13 +91,13 @@ pub mod storage;
 
 mod types;
 
+#[cfg(feature = "service_account")]
+pub use crate::authenticator::ServiceAccountAuthenticator;
 #[doc(inline)]
 pub use crate::authenticator::{
     ApplicationDefaultCredentialsAuthenticator, AuthorizedUserAuthenticator,
-    DeviceFlowAuthenticator, InstalledFlowAuthenticator
+    DeviceFlowAuthenticator, InstalledFlowAuthenticator,
 };
-#[cfg(feature = "service_account")]
-pub use crate::authenticator::ServiceAccountAuthenticator;
 
 pub use crate::helper::*;
 pub use crate::installed::InstalledFlowReturnMethod;

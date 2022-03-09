@@ -4,9 +4,11 @@
 // Copyright (c) 2016 Google Inc (lewinb@google.com).
 //
 // Refer to the project root for licensing information.
-#[cfg(feature = "service_account")]
+use crate::authorized_user::AuthorizedUserSecret;
 use crate::types::{ApplicationSecret, ConsoleApplicationSecret};
-use crate::{authorized_user::AuthorizedUserSecret, service_account::ServiceAccountKey};
+
+#[cfg(feature = "service_account")]
+use crate::service_account::ServiceAccountKey;
 
 use std::io;
 use std::path::Path;

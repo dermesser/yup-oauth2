@@ -386,7 +386,12 @@ impl AuthorizedUserAuthenticator {
         authorized_user_secret: AuthorizedUserSecret,
         client: C,
     ) -> AuthenticatorBuilder<C, AuthorizedUserFlow> {
-        AuthenticatorBuilder::new(AuthorizedUserFlow { secret: authorized_user_secret }, client)
+        AuthenticatorBuilder::new(
+            AuthorizedUserFlow {
+                secret: authorized_user_secret,
+            },
+            client,
+        )
     }
 }
 
