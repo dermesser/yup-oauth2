@@ -1,6 +1,6 @@
 use crate::error::{AuthErrorOr, Error};
 
-use chrono::{DateTime, Utc};
+use time::OffsetDateTime;
 use serde::{Deserialize, Serialize};
 
 /// Represents an access token returned by oauth2 servers. All access tokens are
@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 pub struct AccessToken {
     value: String,
-    expires_at: Option<DateTime<Utc>>,
+    expires_at: Option<OffsetDateTime>,
 }
 
 impl AccessToken {
@@ -18,7 +18,7 @@ impl AccessToken {
     }
 
     /// The time the access token will expire, if any.
-    pub fn expiration_time(&self) -> Option<DateTime<Utc>> {
+    pub fn expiration_time(&self) -> Option<OffsetDateTime> {
         self.expires_at
     }
 
@@ -30,7 +30,7 @@ impl AccessToken {
         // Consider the token expired if it's within 1 minute of it's expiration
         // time.
         self.expires_at
-            .map(|expiration_time| expiration_time - chrono::Duration::minutes(1) <= Utc::now())
+            .map(|expiration_time| expiration_time - time::Duration::minutes(1) <= OffsetDateTime::now_utc())
             .unwrap_or(false)
     }
 }
@@ -62,7 +62,7 @@ pub struct TokenInfo {
     /// used to refresh an expired access_token.
     pub refresh_token: Option<String>,
     /// The time when the token expires.
-    pub expires_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<OffsetDateTime>,
     /// Optionally included by the OAuth2 server and may contain information to verify the identity
     /// used to obtain the access token.
     /// Specifically Google API:s include this if the additional scopes "email" and/or "profile"
@@ -105,7 +105,7 @@ impl TokenInfo {
         }
 
         let expires_at = expires_in
-            .map(|seconds_from_now| Utc::now() + chrono::Duration::seconds(seconds_from_now));
+            .map(|seconds_from_now| OffsetDateTime::now_utc() + time::Duration::seconds(seconds_from_now));
 
         Ok(TokenInfo {
             access_token,
@@ -118,7 +118,7 @@ impl TokenInfo {
     /// Returns true if we are expired.
     pub fn is_expired(&self) -> bool {
         self.expires_at
-            .map(|expiration_time| expiration_time - chrono::Duration::minutes(1) <= Utc::now())
+            .map(|expiration_time| expiration_time - time::Duration::minutes(1) <= OffsetDateTime::now_utc())
             .unwrap_or(false)
     }
 }

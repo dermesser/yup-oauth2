@@ -26,6 +26,7 @@ use rustls::{
     PrivateKey,
 };
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use url::form_urlencoded;
 
 const GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
@@ -105,7 +106,7 @@ impl<'a> Claims<'a> {
     where
         T: AsRef<str>,
     {
-        let iat = chrono::Utc::now().timestamp();
+        let iat = OffsetDateTime::now_utc().unix_timestamp();
         let expiry = iat + 3600 - 5; // Max validity is 1h.
 
         let scope = crate::helper::join(scopes, " ");

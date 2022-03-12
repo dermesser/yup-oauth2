@@ -4,8 +4,8 @@ use crate::error::{AuthErrorOr, Error};
 use std::pin::Pin;
 use std::time::Duration;
 
-use chrono::{DateTime, Local, Utc};
 use std::future::Future;
+use time::{OffsetDateTime, UtcOffset};
 
 /// Contains state of pending authentication requests
 #[derive(Clone, Debug, PartialEq)]
@@ -18,7 +18,7 @@ pub struct DeviceAuthResponse {
     pub verification_uri: String,
     /// The `user_code` expires at the given time
     /// It's the time the user has left to authenticate your application
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: OffsetDateTime,
     /// The interval in which we may poll for a status change
     /// The server responds with errors of we poll too fast.
     pub interval: Duration,
@@ -61,7 +61,7 @@ impl<'de> serde::Deserialize<'de> for DeviceAuthResponse {
         let verification_uri = verification_uri.or(verification_url).ok_or_else(|| {
             serde::de::Error::custom("neither verification_uri nor verification_url specified")
         })?;
-        let expires_at = Utc::now() + chrono::Duration::seconds(expires_in);
+        let expires_at = OffsetDateTime::now_utc() + time::Duration::seconds(expires_in);
         let interval = Duration::from_secs(interval.unwrap_or(5));
         Ok(DeviceAuthResponse {
             device_code,
@@ -94,10 +94,11 @@ async fn present_user_code(device_auth_resp: &DeviceAuthResponse) {
         device_auth_resp.user_code, device_auth_resp.verification_uri
     );
     println!("Do not close this application until you either denied or granted access.");
-    println!(
-        "You have time until {}.",
-        device_auth_resp.expires_at.with_timezone(&Local)
-    );
+    let printable_time = match UtcOffset::current_local_offset() {
+        Ok(offset) => device_auth_resp.expires_at.to_offset(offset),
+        Err(_) => device_auth_resp.expires_at,  // Fallback to printing in UTC
+    };
+    println!("You have time until {}.", printable_time);
 }
 
 /// InstalledFlowDelegate methods are called when an installed flow needs to ask
