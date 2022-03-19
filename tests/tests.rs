@@ -334,7 +334,7 @@ async fn create_service_account_auth(server: &Server) -> DefaultAuthenticator {
 
 #[tokio::test]
 async fn test_service_account_success() {
-    use chrono::Utc;
+    use time::OffsetDateTime;
     let _ = env_logger::try_init();
     let server = Server::run();
     let auth = create_service_account_auth(&server).await;
@@ -352,7 +352,7 @@ async fn test_service_account_success() {
         .await
         .expect("token failed");
     assert!(tok.as_str().contains("ya29.c.ElouBywiys0Ly"));
-    assert!(Utc::now() + chrono::Duration::seconds(3600) >= tok.expiration_time().unwrap());
+    assert!(OffsetDateTime::now_utc() + time::Duration::seconds(3600) >= tok.expiration_time().unwrap());
 }
 
 #[tokio::test]
