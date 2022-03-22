@@ -75,6 +75,7 @@
 mod application_default_credentials;
 pub mod authenticator;
 pub mod authenticator_delegate;
+mod authorized_user;
 mod device;
 pub mod error;
 mod helper;
@@ -90,13 +91,13 @@ pub mod storage;
 
 mod types;
 
-#[doc(inline)]
-pub use crate::authenticator::{
-    ApplicationDefaultCredentialsAuthenticator, DeviceFlowAuthenticator,
-    InstalledFlowAuthenticator
-};
 #[cfg(feature = "service_account")]
 pub use crate::authenticator::ServiceAccountAuthenticator;
+#[doc(inline)]
+pub use crate::authenticator::{
+    ApplicationDefaultCredentialsAuthenticator, AuthorizedUserAuthenticator,
+    DeviceFlowAuthenticator, InstalledFlowAuthenticator,
+};
 
 pub use crate::helper::*;
 pub use crate::installed::InstalledFlowReturnMethod;
