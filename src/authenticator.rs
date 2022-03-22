@@ -375,6 +375,11 @@ where
 pub struct AuthorizedUserAuthenticator;
 impl AuthorizedUserAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses an authorized user.
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+    #[cfg_attr(
+        yup_oauth2_docsrs,
+        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
+    )]
     pub fn builder(
         authorized_user_secret: AuthorizedUserSecret,
     ) -> AuthenticatorBuilder<DefaultHyperClient, AuthorizedUserFlow> {
