@@ -363,6 +363,7 @@ where
 
 /// Create an authenticator that uses an authorized user credentials.
 /// ```
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 /// # async fn foo() {
 /// # use yup_oauth2::authenticator::AuthorizedUserAuthenticator;
 /// # let secret = yup_oauth2::read_authorized_user_secret("/tmp/foo").await.unwrap();
