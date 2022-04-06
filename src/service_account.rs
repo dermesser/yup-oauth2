@@ -21,7 +21,6 @@ use std::io;
 use hyper::header;
 use rustls::{
     self,
-    internal::pemfile,
     sign::{self, SigningKey},
     PrivateKey,
 };
@@ -39,12 +38,12 @@ fn append_base64<T: AsRef<[u8]> + ?Sized>(s: &T, out: &mut String) {
 
 /// Decode a PKCS8 formatted RSA key.
 fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKey, io::Error> {
-    let private_keys = pemfile::pkcs8_private_keys(&mut pem_pkcs8.as_bytes());
+    let private_keys = rustls_pemfile::pkcs8_private_keys(&mut pem_pkcs8.as_bytes());
 
     match private_keys {
         Ok(mut keys) if !keys.is_empty() => {
             keys.truncate(1);
-            Ok(keys.remove(0))
+            Ok(rustls::PrivateKey(keys.remove(0)))
         }
         Ok(_) => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -129,7 +128,7 @@ pub(crate) struct JWTSigner {
 impl JWTSigner {
     fn new(private_key: &str) -> Result<Self, io::Error> {
         let key = decode_rsa_key(private_key)?;
-        let signing_key = sign::RSASigningKey::new(&key)
+        let signing_key = sign::RsaSigningKey::new(&key)
             .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't initialize signer"))?;
         let signer = signing_key
             .choose_scheme(&[rustls::SignatureScheme::RSA_PKCS1_SHA256])
@@ -139,7 +138,7 @@ impl JWTSigner {
         Ok(JWTSigner { signer })
     }
 
-    fn sign_claims(&self, claims: &Claims) -> Result<String, rustls::TLSError> {
+    fn sign_claims(&self, claims: &Claims) -> Result<String, rustls::Error> {
         let mut jwt_head = Self::encode_claims(claims);
         let signature = self.signer.sign(jwt_head.as_bytes())?;
         jwt_head.push_str(".");
@@ -228,8 +227,14 @@ mod tests {
             .await
             .unwrap();
         let acc = ServiceAccountFlow::new(ServiceAccountFlowOpts { key, subject: None }).unwrap();
-        let client =
-            hyper::Client::builder().build(hyper_rustls::HttpsConnector::with_native_roots());
+        let client = hyper::Client::builder().build(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .https_only()
+                .enable_http1()
+                .enable_http2()
+                .build(),
+        );
         println!(
             "{:?}",
             acc.token(&client, &["https://www.googleapis.com/auth/pubsub"])

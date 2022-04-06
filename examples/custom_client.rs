@@ -31,7 +31,14 @@ async fn main() {
     let secret = yup_oauth2::read_service_account_key(google_credentials)
         .await
         .expect("$GOOGLE_APPLICATION_CREDENTIALS is not a valid service account key");
-    let client = hyper::Client::builder().build(hyper_rustls::HttpsConnector::with_native_roots());
+    let client = hyper::Client::builder().build(
+        hyper_rustls::HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_only()
+            .enable_http1()
+            .enable_http2()
+            .build(),
+    );
     let authenticator =
         yup_oauth2::ServiceAccountAuthenticator::with_client(secret, client.clone())
             .build()

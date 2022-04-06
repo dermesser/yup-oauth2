@@ -768,7 +768,12 @@ impl HyperClientBuilder for DefaultHyperClient {
 
     fn build_hyper_client(self) -> hyper::Client<Self::Connector> {
         #[cfg(feature = "hyper-rustls")]
-        let connector = hyper_rustls::HttpsConnector::with_native_roots();
+        let connector = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_only()
+            .enable_http1()
+            .enable_http2()
+            .build();
         #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
         let connector = hyper_tls::HttpsConnector::new();
 
