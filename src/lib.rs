@@ -75,7 +75,7 @@
 mod application_default_credentials;
 pub mod authenticator;
 pub mod authenticator_delegate;
-mod authorized_user;
+pub mod authorized_user;
 mod device;
 pub mod error;
 mod helper;
