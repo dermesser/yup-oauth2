@@ -82,7 +82,7 @@ impl DeviceFlow {
         loop {
             tokio::time::sleep(interval).await;
             interval = match Self::poll_token(
-                &app_secret,
+                app_secret,
                 hyper_client,
                 &device_auth_resp.device_code,
                 grant_type,

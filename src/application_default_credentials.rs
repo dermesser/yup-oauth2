@@ -2,14 +2,10 @@ use crate::error::Error;
 use crate::types::TokenInfo;
 
 /// Provide options for the Application Default Credential Flow, mostly used for testing
+#[derive(Default, Clone, Debug)]
 pub struct ApplicationDefaultCredentialsFlowOpts {
     /// Used as base to build the url during token request from GCP metadata server
     pub metadata_url: Option<String>,
-}
-impl Default for ApplicationDefaultCredentialsFlowOpts {
-    fn default() -> Self {
-        Self { metadata_url: None }
-    }
 }
 
 pub struct ApplicationDefaultCredentialsFlow {

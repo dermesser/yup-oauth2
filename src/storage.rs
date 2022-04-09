@@ -343,7 +343,7 @@ impl JSONTokens {
                     hash,
                     filter,
                 };
-                entry.insert(json_token.clone());
+                entry.insert(json_token);
             }
         }
         Ok(())

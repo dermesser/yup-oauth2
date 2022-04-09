@@ -113,7 +113,7 @@ where
             (Some(t), _) if !t.is_expired() && !force_refresh => {
                 // unexpired token found
                 log::debug!("found valid token in cache: {:?}", t);
-                Ok(t.into())
+                Ok(t)
             }
             (
                 Some(TokenInfo {

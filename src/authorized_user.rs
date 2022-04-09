@@ -10,7 +10,7 @@ use hyper::header;
 use serde::{Deserialize, Serialize};
 use url::form_urlencoded;
 
-const TOKEN_URI: &'static str = "https://accounts.google.com/o/oauth2/token";
+const TOKEN_URI: &str = "https://accounts.google.com/o/oauth2/token";
 
 /// JSON schema of authorized user secret. You can obtain it by
 /// running on the client: `gcloud auth application-default login`.
