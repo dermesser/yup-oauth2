@@ -123,12 +123,21 @@ where
                 Some(app_secret),
             ) => {
                 // token is expired but has a refresh token.
-                let token_info = RefreshFlow::refresh_token(
+                let token_info_result = RefreshFlow::refresh_token(
                     &self.inner.hyper_client,
                     app_secret,
                     &refresh_token,
                 )
-                .await?;
+                .await;
+                let token_info = if let Ok(token_info) = token_info_result {
+                    token_info
+                } else {
+                    // token refresh failed.
+                    self.inner
+                        .auth_flow
+                        .token(&self.inner.hyper_client, scopes)
+                        .await?
+                };
                 self.inner
                     .storage
                     .set(hashed_scopes, token_info.clone())

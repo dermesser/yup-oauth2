@@ -446,6 +446,8 @@ async fn test_refresh() {
         .expect("failed to get token");
     assert_eq!("accesstoken3", tok.as_str());
 
+    // Refresh fails, but renewing the token succeeds.
+    // PR #165
     server.expect(
         Expectation::matching(all_of![
             request::method_path("POST", "/token"),
@@ -458,18 +460,26 @@ async fn test_refresh() {
             "error": "invalid_request",
         }))),
     );
+    server.expect(
+        Expectation::matching(all_of![
+            request::method_path("POST", "/token"),
+            request::body(url_decoded(all_of![
+                contains(("code", "authorizationcode")),
+                contains(("client_id", matches("^9022167"))),
+            ]))
+        ])
+        .respond_with(json_encoded(serde_json::json!({
+            "access_token": "accesstoken",
+            "refresh_token": "refreshtoken",
+            "token_type": "Bearer",
+            "expires_in": 59,
+        }))),
+    );
 
     let tok_err = auth
         .token(&["https://googleapis.com/some/scope"])
-        .await
-        .expect_err("token refresh succeeded unexpectedly");
-    match tok_err {
-        Error::AuthError(AuthError {
-            error: AuthErrorCode::InvalidRequest,
-            ..
-        }) => {}
-        e => panic!("unexpected error on refresh: {:?}", e),
-    }
+        .await;
+    assert!(tok_err.is_ok());
 }
 
 #[tokio::test]
