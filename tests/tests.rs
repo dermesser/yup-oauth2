@@ -216,7 +216,7 @@ async fn create_installed_flow_auth(
     }
 
     let mut builder = InstalledFlowAuthenticator::builder(app_secret, method)
-        .flow_delegate(Box::new(FD(DefaultHyperClient.build_hyper_client())));
+        .flow_delegate(Box::new(FD(DefaultHyperClient.build_test_hyper_client())));
 
     builder = if let Some(filename) = filename {
         builder.persist_tokens_to_disk(filename)

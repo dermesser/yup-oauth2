@@ -727,6 +727,10 @@ pub trait HyperClientBuilder {
 
     /// Create a hyper::Client
     fn build_hyper_client(self) -> hyper::Client<Self::Connector>;
+
+    /// Create a `hyper::Client` for tests (HTTPS not required)
+    #[doc(hidden)]
+    fn build_test_hyper_client(self) -> hyper::Client<Self::Connector>;
 }
 
 #[cfg(feature = "hyper-rustls")]
@@ -781,6 +785,22 @@ impl HyperClientBuilder for DefaultHyperClient {
             .pool_max_idle_per_host(0)
             .build::<_, hyper::Body>(connector)
     }
+
+    fn build_test_hyper_client(self) -> hyper::Client<Self::Connector> {
+        #[cfg(feature = "hyper-rustls")]
+        let connector = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_or_http()
+            .enable_http1()
+            .enable_http2()
+            .build();
+        #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
+        let connector = hyper_tls::HttpsConnector::new();
+
+        hyper::Client::builder()
+            .pool_max_idle_per_host(0)
+            .build::<_, hyper::Body>(connector)
+    }
 }
 
 impl<C> HyperClientBuilder for hyper::Client<C>
@@ -790,6 +810,10 @@ where
     type Connector = C;
 
     fn build_hyper_client(self) -> hyper::Client<C> {
+        self
+    }
+
+    fn build_test_hyper_client(self) -> hyper::Client<Self::Connector> {
         self
     }
 }
