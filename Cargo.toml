@@ -28,7 +28,7 @@ required-features = ["hyper-rustls", "service_account"]
 
 [features]
 default = ["hyper-rustls", "service_account"]
-service_account = ["rustls"]
+service_account = ["hyper-rustls", "rustls", "rustls-pemfile"]
 
 [dependencies]
 anyhow = "1.0.38"
@@ -37,12 +37,13 @@ base64 = "0.13.0"
 futures = "0.3"
 http = "0.2"
 hyper = { version = "0.14", features = ["client", "server", "tcp", "http2"] }
-hyper-rustls = { version = "0.22.1", optional = true }
+hyper-rustls = { version = "0.23", optional = true, features = ["http2"] }
 hyper-tls = { version = "0.5.0", optional = true }
 itertools = "0.10.0"
 log = "0.4"
 percent-encoding = "2"
-rustls = { version = "0.19", optional = true }
+rustls = { version = "0.20.4", optional = true }
+rustls-pemfile = { version = "0.3", optional = true }
 seahash = "4"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
@@ -55,7 +56,7 @@ httptest = "0.14"
 env_logger = "0.7"
 tempfile = "3.1"
 webbrowser = "0.5"
-hyper-rustls = "0.22.1"
+hyper-rustls = "0.23"
 
 [workspace]
 members = ["examples/test-installed/", "examples/test-svc-acct/", "examples/test-device/", "examples/service_account", "examples/drive_example", "examples/test-adc"]

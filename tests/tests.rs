@@ -44,7 +44,7 @@ async fn create_device_flow_auth(server: &Server) -> DefaultAuthenticator {
         }
     }
 
-    DeviceFlowAuthenticator::builder(app_secret)
+    DeviceFlowAuthenticator::with_client(app_secret, DefaultHyperClient.build_test_hyper_client())
         .flow_delegate(Box::new(FD))
         .device_code_url(server.url_str("/code"))
         .build()
@@ -215,8 +215,9 @@ async fn create_installed_flow_auth(
         }
     }
 
-    let mut builder = InstalledFlowAuthenticator::builder(app_secret, method)
-        .flow_delegate(Box::new(FD(DefaultHyperClient.build_hyper_client())));
+    let client =  DefaultHyperClient.build_test_hyper_client();
+    let mut builder = InstalledFlowAuthenticator::with_client(app_secret, method, client.clone())
+        .flow_delegate(Box::new(FD(client)));
 
     builder = if let Some(filename) = filename {
         builder.persist_tokens_to_disk(filename)
@@ -326,7 +327,7 @@ async fn create_service_account_auth(server: &Server) -> DefaultAuthenticator {
         "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/yup-test-sa-1%40yup-test-243420.iam.gserviceaccount.com"
     });
 
-    ServiceAccountAuthenticator::builder(key)
+    ServiceAccountAuthenticator::with_client(key, DefaultHyperClient.build_test_hyper_client())
         .build()
         .await
         .unwrap()
@@ -632,7 +633,7 @@ async fn test_default_application_credentials_from_metadata_server() {
     let opts = ApplicationDefaultCredentialsFlowOpts {
         metadata_url: Some(server.url("/token").to_string()),
     };
-    let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts).await {
+    let authenticator = match ApplicationDefaultCredentialsAuthenticator::with_client(opts, DefaultHyperClient.build_test_hyper_client()).await {
         ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth.build().await.unwrap(),
         _ => panic!("We are not testing service account adc model"),
     };
