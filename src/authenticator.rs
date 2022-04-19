@@ -325,14 +325,14 @@ impl ApplicationDefaultCredentialsAuthenticator {
     pub async fn builder(
         opts: ApplicationDefaultCredentialsFlowOpts,
     ) -> ApplicationDefaultCredentialsTypes<DefaultHyperClient> {
-        Self::with_client(DefaultHyperClient, opts).await
+        Self::with_client(opts, DefaultHyperClient).await
     }
 
     /// Use the builder pattern to deduce which model of authenticator should be used and allow providing a hyper client
     #[cfg(feature = "service_account")]
     pub async fn with_client<C>(
-        client: C,
         opts: ApplicationDefaultCredentialsFlowOpts,
+        client: C,
     ) -> ApplicationDefaultCredentialsTypes<C>
     where
         C: HyperClientBuilder,
