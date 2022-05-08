@@ -1,4 +1,4 @@
-//! Module contianing the core functionality for OAuth2 Authentication.
+//! Module containing the core functionality for OAuth2 Authentication.
 use crate::application_default_credentials::{
     ApplicationDefaultCredentialsFlow, ApplicationDefaultCredentialsFlowOpts,
 };
