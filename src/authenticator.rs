@@ -10,7 +10,7 @@ use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 use crate::refresh::RefreshFlow;
 
 #[cfg(feature = "service_account")]
-use crate::service_account::{ServiceAccountFlow, ServiceAccountFlowOpts, ServiceAccountKey};
+use crate::service_account::{self, ServiceAccountFlow, ServiceAccountFlowOpts, ServiceAccountKey};
 use crate::storage::{self, Storage, TokenStorage};
 use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
 use private::AuthFlow;
@@ -278,7 +278,7 @@ impl ServiceAccountAuthenticator {
     ) -> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
         AuthenticatorBuilder::new(
             ServiceAccountFlowOpts {
-                key: service_account_key,
+                key: service_account::FlowOptsKey::Key(service_account_key),
                 subject: None,
             },
             client,
@@ -312,13 +312,10 @@ impl ApplicationDefaultCredentialsAuthenticator {
     /// Try to build ServiceAccountFlowOpts from the environment
     #[cfg(feature = "service_account")]
     pub async fn from_environment() -> Result<ServiceAccountFlowOpts, std::env::VarError> {
-        let service_account_key =
-            crate::read_service_account_key(std::env::var("GOOGLE_APPLICATION_CREDENTIALS")?)
-                .await
-                .unwrap();
+        let key_path = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")?;
 
         Ok(ServiceAccountFlowOpts {
-            key: service_account_key,
+            key: service_account::FlowOptsKey::Path(key_path.into()),
             subject: None,
         })
     }
@@ -626,7 +623,7 @@ impl<C> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
     where
         C: HyperClientBuilder,
     {
-        let service_account_auth_flow = ServiceAccountFlow::new(self.auth_flow)?;
+        let service_account_auth_flow = ServiceAccountFlow::new(self.auth_flow).await?;
         Self::common_build(
             self.hyper_client_builder,
             self.storage_type,

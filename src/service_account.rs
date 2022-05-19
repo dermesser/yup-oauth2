@@ -16,7 +16,7 @@
 use crate::error::Error;
 use crate::types::TokenInfo;
 
-use std::io;
+use std::{io, path::PathBuf};
 
 use hyper::header;
 use rustls::{
@@ -158,8 +158,16 @@ impl JWTSigner {
 }
 
 pub struct ServiceAccountFlowOpts {
-    pub(crate) key: ServiceAccountKey,
+    pub(crate) key: FlowOptsKey,
     pub(crate) subject: Option<String>,
+}
+
+/// The source of the key given to ServiceAccountFlowOpts.
+pub(crate) enum FlowOptsKey {
+    /// A path at which the key can be read from disk
+    Path(PathBuf),
+    /// An already initialized key
+    Key(ServiceAccountKey),
 }
 
 /// ServiceAccountFlow can fetch oauth tokens using a service account.
@@ -170,10 +178,15 @@ pub struct ServiceAccountFlow {
 }
 
 impl ServiceAccountFlow {
-    pub(crate) fn new(opts: ServiceAccountFlowOpts) -> Result<Self, io::Error> {
-        let signer = JWTSigner::new(&opts.key.private_key)?;
+    pub(crate) async fn new(opts: ServiceAccountFlowOpts) -> Result<Self, io::Error> {
+        let key = match opts.key {
+            FlowOptsKey::Path(path) => crate::read_service_account_key(path).await?,
+            FlowOptsKey::Key(key) => key,
+        };
+
+        let signer = JWTSigner::new(&key.private_key)?;
         Ok(ServiceAccountFlow {
-            key: opts.key,
+            key,
             subject: opts.subject,
             signer,
         })
@@ -223,10 +236,12 @@ mod tests {
     //#[tokio::test]
     #[allow(dead_code)]
     async fn test_service_account_e2e() {
-        let key = read_service_account_key(TEST_PRIVATE_KEY_PATH)
-            .await
-            .unwrap();
-        let acc = ServiceAccountFlow::new(ServiceAccountFlowOpts { key, subject: None }).unwrap();
+        let acc = ServiceAccountFlow::new(ServiceAccountFlowOpts {
+            key: FlowOptsKey::Path(TEST_PRIVATE_KEY_PATH.into()),
+            subject: None,
+        })
+        .await
+        .unwrap();
         let client = hyper::Client::builder().build(
             hyper_rustls::HttpsConnectorBuilder::new()
                 .with_native_roots()
