@@ -6,8 +6,13 @@
 //!
 use crate::error::Error;
 use crate::types::TokenInfo;
+use hyper::client::connect::Connection;
 use hyper::header;
+use http::Uri;
 use serde::{Deserialize, Serialize};
+use std::error::Error as StdError;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tower_service::Service;
 use url::form_urlencoded;
 
 const TOKEN_URI: &str = "https://accounts.google.com/o/oauth2/token";
@@ -37,14 +42,17 @@ pub struct AuthorizedUserFlow {
 
 impl AuthorizedUserFlow {
     /// Send a request for a new Bearer token to the OAuth provider.
-    pub(crate) async fn token<C, T>(
+    pub(crate) async fn token<S, T>(
         &self,
-        hyper_client: &hyper::Client<C>,
+        hyper_client: &hyper::Client<S>,
         _scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        S::Future: Send + Unpin + 'static,
+        S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[

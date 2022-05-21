@@ -16,14 +16,19 @@ use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
 use private::AuthFlow;
 
 use futures::lock::Mutex;
+use http::{Uri};
+use hyper::client::connect::Connection;
 use std::borrow::Cow;
+use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tower_service::Service;
 
-struct InnerAuthenticator<C> {
-    hyper_client: hyper::Client<C>,
+struct InnerAuthenticator<S> {
+    hyper_client: hyper::Client<S>,
     storage: Storage,
     auth_flow: AuthFlow,
 }
@@ -31,8 +36,8 @@ struct InnerAuthenticator<C> {
 /// Authenticator is responsible for fetching tokens, handling refreshing tokens,
 /// and optionally persisting tokens to disk.
 #[derive(Clone)]
-pub struct Authenticator<C> {
-    inner: Arc<InnerAuthenticator<C>>,
+pub struct Authenticator<S> {
+    inner: Arc<InnerAuthenticator<S>>,
 }
 
 struct DisplayScopes<'a, T>(&'a [T]);
@@ -54,9 +59,12 @@ where
     }
 }
 
-impl<C> Authenticator<C>
+impl<S> Authenticator<S>
 where
-    C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+    S: Service<Uri> + Clone + Send + Sync + 'static,
+    S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    S::Future: Send + Unpin + 'static,
+    S::Error: Into<Box<dyn StdError + Send + Sync>>,
 {
     /// Return the current token for the provided scopes.
     pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<AccessToken, Error>
@@ -669,6 +677,7 @@ impl<C> AuthenticatorBuilder<C, AuthorizedUserFlow> {
 mod private {
     use crate::application_default_credentials::ApplicationDefaultCredentialsFlow;
     use crate::authorized_user::AuthorizedUserFlow;
+    use crate::authenticator::{AsyncRead, AsyncWrite, Connection, Service, StdError, Uri};
     use crate::device::DeviceFlow;
     use crate::error::Error;
     use crate::installed::InstalledFlow;
@@ -697,14 +706,17 @@ mod private {
             }
         }
 
-        pub(crate) async fn token<'a, C, T>(
+        pub(crate) async fn token<'a, S, T>(
             &'a self,
-            hyper_client: &'a hyper::Client<C>,
+            hyper_client: &'a hyper::Client<S>,
             scopes: &'a [T],
         ) -> Result<TokenInfo, Error>
         where
             T: AsRef<str>,
-            C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+            S: Service<Uri> + Clone + Send + Sync + 'static,
+            S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+            S::Future: Send + Unpin + 'static,
+            S::Error: Into<Box<dyn StdError + Send + Sync>>,
         {
             match self {
                 AuthFlow::DeviceFlow(device_flow) => device_flow.token(hyper_client, scopes).await,
@@ -729,7 +741,7 @@ mod private {
 /// A trait implemented for any hyper::Client as well as the DefaultHyperClient.
 pub trait HyperClientBuilder {
     /// The hyper connector that the resulting hyper client will use.
-    type Connector: hyper::client::connect::Connect + Clone + Send + Sync + 'static;
+    type Connector: Service<Uri> + Clone + Send + Sync + 'static;
 
     /// Create a hyper::Client
     fn build_hyper_client(self) -> hyper::Client<Self::Connector>;
@@ -809,13 +821,16 @@ impl HyperClientBuilder for DefaultHyperClient {
     }
 }
 
-impl<C> HyperClientBuilder for hyper::Client<C>
+impl<S> HyperClientBuilder for hyper::Client<S>
 where
-    C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+    S: Service<Uri> + Clone + Send + Sync + 'static,
+    S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    S::Future: Send + Unpin + 'static,
+    S::Error: Into<Box<dyn StdError + Send + Sync>>,
 {
-    type Connector = C;
+    type Connector = S;
 
-    fn build_hyper_client(self) -> hyper::Client<C> {
+    fn build_hyper_client(self) -> hyper::Client<S> {
         self
     }
 
