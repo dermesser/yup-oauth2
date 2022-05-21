@@ -92,6 +92,7 @@ pub mod storage;
 mod types;
 
 #[cfg(feature = "service_account")]
+#[doc(inline)]
 pub use crate::authenticator::ServiceAccountAuthenticator;
 #[doc(inline)]
 pub use crate::authenticator::{
