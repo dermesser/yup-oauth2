@@ -792,7 +792,7 @@ impl HyperClientBuilder for DefaultHyperClient {
         #[cfg(feature = "hyper-rustls")]
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
             .with_native_roots()
-            .https_only()
+            .https_or_http()
             .enable_http1()
             .enable_http2()
             .build();
