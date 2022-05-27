@@ -16,15 +16,19 @@
 use crate::error::Error;
 use crate::types::TokenInfo;
 
-use std::{io, path::PathBuf};
+use std::{io, path::PathBuf, error::Error as StdError};
 
+use hyper::client::connect::Connection;
 use hyper::header;
+use http::Uri;
 use rustls::{
     self,
     sign::{self, SigningKey},
     PrivateKey,
 };
 use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tower_service::Service;
 use time::OffsetDateTime;
 use url::form_urlencoded;
 
@@ -193,14 +197,17 @@ impl ServiceAccountFlow {
     }
 
     /// Send a request for a new Bearer token to the OAuth provider.
-    pub(crate) async fn token<C, T>(
+    pub(crate) async fn token<S, T>(
         &self,
-        hyper_client: &hyper::Client<C>,
+        hyper_client: &hyper::Client<S>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        S::Future: Send + Unpin + 'static,
+        S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         let claims = Claims::new(&self.key, scopes, self.subject.as_deref());
         let signed = self.signer.sign_claims(&claims).map_err(|_| {

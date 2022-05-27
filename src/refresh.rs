@@ -1,7 +1,12 @@
 use crate::error::Error;
 use crate::types::{ApplicationSecret, TokenInfo};
 
+use http::{Uri};
+use hyper::client::connect::Connection;
 use hyper::header;
+use std::error::Error as StdError;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tower_service::Service;
 use url::form_urlencoded;
 
 /// Implements the [OAuth2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
@@ -26,13 +31,16 @@ impl RefreshFlow {
     ///
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub(crate) async fn refresh_token<C>(
-        client: &hyper::Client<C>,
+    pub(crate) async fn refresh_token<S>(
+        client: &hyper::Client<S>,
         client_secret: &ApplicationSecret,
         refresh_token: &str,
     ) -> Result<TokenInfo, Error>
     where
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        S::Future: Send + Unpin + 'static,
+        S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         log::debug!(
             "refreshing access token with refresh token: {}",

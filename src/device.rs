@@ -5,10 +5,15 @@ use crate::error::{AuthError, Error};
 use crate::types::{ApplicationSecret, TokenInfo};
 
 use std::borrow::Cow;
+use std::error::Error as StdError;
 use std::time::Duration;
 
+use hyper::client::connect::Connection;
 use hyper::header;
+use http::Uri;
 use url::form_urlencoded;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tower_service::Service;
 
 pub const GOOGLE_DEVICE_CODE_URL: &str = "https://accounts.google.com/o/oauth2/device/code";
 
@@ -38,14 +43,17 @@ impl DeviceFlow {
         }
     }
 
-    pub(crate) async fn token<C, T>(
+    pub(crate) async fn token<S, T>(
         &self,
-        hyper_client: &hyper::Client<C>,
+        hyper_client: &hyper::Client<S>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        S::Future: Send + Unpin + 'static,
+        S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         let device_auth_resp = Self::request_code(
             &self.app_secret,
@@ -67,15 +75,18 @@ impl DeviceFlow {
         .await
     }
 
-    async fn wait_for_device_token<C>(
+    async fn wait_for_device_token<S>(
         &self,
-        hyper_client: &hyper::Client<C>,
+        hyper_client: &hyper::Client<S>,
         app_secret: &ApplicationSecret,
         device_auth_resp: &DeviceAuthResponse,
         grant_type: &str,
     ) -> Result<TokenInfo, Error>
     where
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        S::Future: Send + Unpin + 'static,
+        S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         let mut interval = device_auth_resp.interval;
         log::debug!("Polling every {:?} for device token", interval);
@@ -124,15 +135,18 @@ impl DeviceFlow {
     /// * If called after a successful result was returned at least once.
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    async fn request_code<C, T>(
+    async fn request_code<S, T>(
         application_secret: &ApplicationSecret,
-        client: &hyper::Client<C>,
+        client: &hyper::Client<S>,
         device_code_url: &str,
         scopes: &[T],
     ) -> Result<DeviceAuthResponse, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        S::Future: Send + Unpin + 'static,
+        S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
@@ -172,14 +186,17 @@ impl DeviceFlow {
     ///
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    async fn poll_token<'a, C>(
+    async fn poll_token<'a, S>(
         application_secret: &ApplicationSecret,
-        client: &hyper::Client<C>,
+        client: &hyper::Client<S>,
         device_code: &str,
         grant_type: &str,
     ) -> Result<TokenInfo, Error>
     where
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        S::Future: Send + Unpin + 'static,
+        S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         // We should be ready for a new request
         let req = form_urlencoded::Serializer::new(String::new())

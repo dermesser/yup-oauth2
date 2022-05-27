@@ -8,12 +8,17 @@ use crate::types::{ApplicationSecret, TokenInfo};
 
 use futures::lock::Mutex;
 use std::convert::AsRef;
+use std::error::Error as StdError;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use hyper::client::connect::Connection;
 use hyper::header;
+use http::Uri;
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::oneshot;
+use tower_service::Service;
 use url::form_urlencoded;
 
 const QUERY_SET: AsciiSet = CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');
@@ -100,14 +105,17 @@ impl InstalledFlow {
     /// . Return that token
     ///
     /// It's recommended not to use the DefaultInstalledFlowDelegate, but a specialized one.
-    pub(crate) async fn token<C, T>(
+    pub(crate) async fn token<S, T>(
         &self,
-        hyper_client: &hyper::Client<C>,
+        hyper_client: &hyper::Client<S>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        S::Future: Send + Unpin + 'static,
+        S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         match self.method {
             InstalledFlowReturnMethod::HTTPRedirect => {
@@ -121,15 +129,18 @@ impl InstalledFlow {
         }
     }
 
-    async fn ask_auth_code_interactively<C, T>(
+    async fn ask_auth_code_interactively<S, T>(
         &self,
-        hyper_client: &hyper::Client<C>,
+        hyper_client: &hyper::Client<S>,
         app_secret: &ApplicationSecret,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        S::Future: Send + Unpin + 'static,
+        S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         let url = build_authentication_request_url(
             &app_secret.auth_uri,
@@ -148,15 +159,18 @@ impl InstalledFlow {
             .await
     }
 
-    async fn ask_auth_code_via_http<C, T>(
+    async fn ask_auth_code_via_http<S, T>(
         &self,
-        hyper_client: &hyper::Client<C>,
+        hyper_client: &hyper::Client<S>,
         app_secret: &ApplicationSecret,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        S::Future: Send + Unpin + 'static,
+        S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         use std::borrow::Cow;
         let server = InstalledFlowServer::run()?;
@@ -185,15 +199,18 @@ impl InstalledFlow {
             .await
     }
 
-    async fn exchange_auth_code<C>(
+    async fn exchange_auth_code<S>(
         &self,
         authcode: &str,
-        hyper_client: &hyper::Client<C>,
+        hyper_client: &hyper::Client<S>,
         app_secret: &ApplicationSecret,
         server_addr: Option<SocketAddr>,
     ) -> Result<TokenInfo, Error>
     where
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        S::Future: Send + Unpin + 'static,
+        S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         let redirect_uri = self.flow_delegate.redirect_uri();
         let request = Self::request_token(app_secret, authcode, redirect_uri, server_addr);

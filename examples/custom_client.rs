@@ -5,12 +5,22 @@
 //!
 //! It is also a better use of resources (memory, sockets, etc.)
 
-async fn r#use<C>(
-    client: hyper::Client<C>,
-    authenticator: yup_oauth2::authenticator::Authenticator<C>,
+use std::error::Error as StdError;
+
+use hyper::client::connect::Connection;
+use http::Uri;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tower_service::Service;
+
+async fn r#use<S>(
+    client: hyper::Client<S>,
+    authenticator: yup_oauth2::authenticator::Authenticator<S>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 where
-    C: Clone + Send + Sync + hyper::client::connect::Connect + 'static,
+    S: Service<Uri> + Clone + Send + Sync + 'static,
+    S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    S::Future: Send + Unpin + 'static,
+    S::Error: Into<Box<dyn StdError + Send + Sync>>,
 {
     let token = authenticator.token(&["email"]).await?;
     let request = http::Request::get("https://example.com")

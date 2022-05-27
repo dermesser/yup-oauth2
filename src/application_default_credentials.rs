@@ -1,5 +1,10 @@
 use crate::error::Error;
 use crate::types::TokenInfo;
+use hyper::client::connect::Connection;
+use std::error::Error as StdError;
+use http::Uri;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tower_service::Service;
 
 /// Provide options for the Application Default Credential Flow, mostly used for testing
 #[derive(Default, Clone, Debug)]
@@ -18,14 +23,17 @@ impl ApplicationDefaultCredentialsFlow {
         ApplicationDefaultCredentialsFlow { metadata_url }
     }
 
-    pub(crate) async fn token<C, T>(
+    pub(crate) async fn token<S, T>(
         &self,
-        hyper_client: &hyper::Client<C>,
+        hyper_client: &hyper::Client<S>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        S::Future: Send + Unpin + 'static,
+        S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         let scope = crate::helper::join(scopes, ",");
         let token_uri = format!("{}?scopes={}", self.metadata_url, scope);
