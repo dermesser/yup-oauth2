@@ -727,8 +727,8 @@ mod private {
                 AuthFlow::ServiceAccountFlow(service_account_flow) => {
                     service_account_flow.token(hyper_client, scopes).await
                 }
-                AuthFlow::ApplicationDefaultCredentialsFlow(service_account_flow) => {
-                    service_account_flow.token(hyper_client, scopes).await
+                AuthFlow::ApplicationDefaultCredentialsFlow(adc_flow) => {
+                    adc_flow.token(hyper_client, scopes).await
                 }
                 AuthFlow::AuthorizedUserFlow(authorized_user_flow) => {
                     authorized_user_flow.token(hyper_client, scopes).await
@@ -792,7 +792,7 @@ impl HyperClientBuilder for DefaultHyperClient {
         #[cfg(feature = "hyper-rustls")]
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
             .with_native_roots()
-            .https_only()
+            .https_or_http()
             .enable_http1()
             .enable_http2()
             .build();
