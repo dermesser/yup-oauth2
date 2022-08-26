@@ -5,6 +5,7 @@ use yup_oauth2::{
     ApplicationDefaultCredentialsAuthenticator, ApplicationDefaultCredentialsFlowOpts,
     ApplicationSecret, DeviceFlowAuthenticator, Error, InstalledFlowAuthenticator,
     InstalledFlowReturnMethod, ServiceAccountAuthenticator, ServiceAccountKey,
+    AccessTokenAuthenticator,
 };
 
 use std::future::Future;
@@ -642,4 +643,17 @@ async fn test_default_application_credentials_from_metadata_server() {
         .await
         .unwrap();
     assert_eq!(token.as_str(), "accesstoken");
+}
+
+#[tokio::test]
+async fn test_access_token() {
+    let authenticator = AccessTokenAuthenticator::with_client("0815".to_string(), DefaultHyperClient)
+	.build()
+	.await
+	.unwrap();
+    let token = authenticator
+        .token(&["https://googleapis.com/some/scope"])
+        .await
+        .unwrap();
+    assert_eq!(token.as_str(), "0815".to_string());
 }

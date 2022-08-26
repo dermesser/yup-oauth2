@@ -76,6 +76,7 @@ mod application_default_credentials;
 pub mod authenticator;
 pub mod authenticator_delegate;
 pub mod authorized_user;
+pub mod access_token;
 mod device;
 pub mod error;
 mod helper;
@@ -98,6 +99,7 @@ pub use crate::authenticator::ServiceAccountAuthenticator;
 pub use crate::authenticator::{
     ApplicationDefaultCredentialsAuthenticator, AuthorizedUserAuthenticator,
     DeviceFlowAuthenticator, InstalledFlowAuthenticator,
+    AccessTokenAuthenticator,
 };
 
 pub use crate::helper::*;
