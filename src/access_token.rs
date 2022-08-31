@@ -1,14 +1,17 @@
-//! pseudo authenticator for use with plain access tokens
+//! pseudo authenticator for use with plain access tokens.
+//! If you use a specialized service to manage your
+//! OAuth2-tokens you may get just the fresh generated
+//! access token from your service.
+//! The intention behind this is that if two services using the
+//! same refresh token then each service will invalitate the
+//! access token of the other service by generating a new token.
 use crate::error::Error;
 use crate::types::TokenInfo;
 use hyper::client::connect::Connection;
-// use hyper::header;
 use http::Uri;
-// use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower_service::Service;
-// use url::form_urlencoded;
 
 /// the flow for the access token authenticator
 pub struct AccessTokenFlow {
