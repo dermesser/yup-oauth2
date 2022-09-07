@@ -15,6 +15,8 @@ use crate::storage::{self, Storage, TokenStorage};
 use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
 use private::AuthFlow;
 
+use crate::access_token::{AccessTokenFlow};
+
 use futures::lock::Mutex;
 use http::{Uri};
 use hyper::client::connect::Connection;
@@ -414,6 +416,39 @@ impl AuthorizedUserAuthenticator {
         )
     }
 }
+/// Create a access token authenticator for use with pre-generated
+/// access tokens
+/// ```
+/// # async fn foo() {
+/// #   use yup_oauth2::authenticator::AccessTokenAuthenticator;
+/// #   let authenticator = yup_oauth2::AccessTokenAuthenticator::builder("TOKEN".to_string())
+/// #     .build()
+/// #     .await
+/// #     .expect("failed to create authenticator");
+/// # }
+/// ```
+pub struct AccessTokenAuthenticator;
+impl AccessTokenAuthenticator {
+    /// the builder pattern for the authenticator
+    pub fn builder(
+	access_token: String,
+    ) -> AuthenticatorBuilder<DefaultHyperClient, AccessTokenFlow> {
+	Self::with_client(access_token, DefaultHyperClient)
+    }
+    /// Construct a new Authenticator that uses the installed flow and the provided http client.
+    /// the client itself is not used
+    pub fn with_client<C>(
+	access_token: String,
+	client: C,
+    ) -> AuthenticatorBuilder<C, AccessTokenFlow> {
+	AuthenticatorBuilder::new(
+	    AccessTokenFlow {
+		access_token: access_token,
+	    },
+	    client,
+	)
+    }
+}
 
 /// ## Methods available when building any Authenticator.
 /// ```
@@ -674,6 +709,21 @@ impl<C> AuthenticatorBuilder<C, AuthorizedUserFlow> {
     }
 }
 
+/// ## Methods available when building an access token flow Authenticator.
+impl<C> AuthenticatorBuilder<C, AccessTokenFlow> {
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            AuthFlow::AccessTokenFlow(self.auth_flow),
+        )
+        .await
+    }
+}
 mod private {
     use crate::application_default_credentials::ApplicationDefaultCredentialsFlow;
     use crate::authorized_user::AuthorizedUserFlow;
@@ -684,6 +734,7 @@ mod private {
     #[cfg(feature = "service_account")]
     use crate::service_account::ServiceAccountFlow;
     use crate::types::{ApplicationSecret, TokenInfo};
+    use crate::access_token::AccessTokenFlow;
 
     pub enum AuthFlow {
         DeviceFlow(DeviceFlow),
@@ -692,6 +743,7 @@ mod private {
         ServiceAccountFlow(ServiceAccountFlow),
         ApplicationDefaultCredentialsFlow(ApplicationDefaultCredentialsFlow),
         AuthorizedUserFlow(AuthorizedUserFlow),
+	AccessTokenFlow(AccessTokenFlow),
     }
 
     impl AuthFlow {
@@ -703,6 +755,7 @@ mod private {
                 AuthFlow::ServiceAccountFlow(_) => None,
                 AuthFlow::ApplicationDefaultCredentialsFlow(_) => None,
                 AuthFlow::AuthorizedUserFlow(_) => None,
+		AuthFlow::AccessTokenFlow(_) => None,
             }
         }
 
@@ -733,6 +786,9 @@ mod private {
                 AuthFlow::AuthorizedUserFlow(authorized_user_flow) => {
                     authorized_user_flow.token(hyper_client, scopes).await
                 }
+		AuthFlow::AccessTokenFlow(access_token_flow) => {
+		    access_token_flow.token(hyper_client, scopes).await
+		}
             }
         }
     }
