@@ -12,7 +12,7 @@ use crate::refresh::RefreshFlow;
 #[cfg(feature = "service_account")]
 use crate::service_account::{self, ServiceAccountFlow, ServiceAccountFlowOpts, ServiceAccountKey};
 use crate::storage::{self, Storage, TokenStorage};
-use crate::types::{ApplicationSecret, Token, TokenInfo};
+use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
 use private::AuthFlow;
 
 use crate::access_token::{AccessTokenFlow};
@@ -69,7 +69,7 @@ where
     S::Error: Into<Box<dyn StdError + Send + Sync>>,
 {
     /// Return the current token for the provided scopes.
-    pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<Token, Error>
+    pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<AccessToken, Error>
     where
         T: AsRef<str>,
     {
@@ -80,7 +80,7 @@ where
 
     /// Return a token for the provided scopes, but don't reuse cached tokens. Instead,
     /// always fetch a new token from the OAuth server.
-    pub async fn force_refreshed_token<'a, T>(&'a self, scopes: &'a [T]) -> Result<Token, Error>
+    pub async fn force_refreshed_token<'a, T>(&'a self, scopes: &'a [T]) -> Result<AccessToken, Error>
     where
         T: AsRef<str>,
     {

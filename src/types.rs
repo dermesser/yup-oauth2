@@ -6,20 +6,15 @@ use serde::{Deserialize, Serialize};
 /// Represents a token returned by oauth2 servers. All tokens are Bearer tokens. Other types of
 /// tokens are not supported.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
-pub struct Token {
-    id_token: Option<String>,
+pub struct AccessToken {
     access_token: Option<String>,
     expires_at: Option<OffsetDateTime>,
 }
 
-impl Token {
-    /// A string representation of the ID token.
-    pub fn id_token(&self) -> Option<&str> {
-        self.id_token.as_deref()
-    }
+impl AccessToken {
 
     /// A string representation of the access token.
-    pub fn access_token(&self) -> Option<&str> {
+    pub fn token(&self) -> Option<&str> {
         self.access_token.as_deref()
     }
 
@@ -40,18 +35,16 @@ impl Token {
     }
 }
 
-impl From<TokenInfo> for Token {
+impl From<TokenInfo> for AccessToken {
     fn from(
         TokenInfo {
             access_token,
-            id_token,
             expires_at,
             ..
         }: TokenInfo,
     ) -> Self {
-        Token {
+        AccessToken {
             access_token,
-            id_token,
             expires_at,
         }
     }
