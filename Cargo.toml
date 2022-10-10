@@ -47,7 +47,7 @@ rustls-pemfile = { version = "0.3", optional = true }
 seahash = "4"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
-time = { version = "0.3.7", features = ["local-offset", "serde"] }
+time = { version = "0.3.7", features = ["local-offset", "parsing", "serde"] }
 tokio = { version = "1.0", features = ["fs", "macros", "io-std", "io-util", "time", "sync", "rt"] }
 tower-service = "^0.3.1"
 url = "2"
