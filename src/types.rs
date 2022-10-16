@@ -3,49 +3,49 @@ use crate::error::{AuthErrorOr, Error};
 use time::OffsetDateTime;
 use serde::{Deserialize, Serialize};
 
-/// Represents an access token returned by oauth2 servers. All access tokens are
-/// Bearer tokens. Other types of tokens are not supported.
+/// Represents a token returned by oauth2 servers. All tokens are Bearer tokens. Other types of
+/// tokens are not supported.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 pub struct AccessToken {
-    value: String,
+    access_token: Option<String>,
     expires_at: Option<OffsetDateTime>,
 }
 
 impl AccessToken {
+
     /// A string representation of the access token.
-    pub fn as_str(&self) -> &str {
-        &self.value
+    pub fn token(&self) -> Option<&str> {
+        self.access_token.as_deref()
     }
 
-    /// The time the access token will expire, if any.
+    /// The time at which the tokens will expire, if any.
     pub fn expiration_time(&self) -> Option<OffsetDateTime> {
         self.expires_at
     }
 
     /// Determine if the access token is expired.
-    /// This will report that the token is expired 1 minute prior to the
-    /// expiration time to ensure that when the token is actually sent to the
-    /// server it's still valid.
+    ///
+    /// This will report that the token is expired 1 minute prior to the expiration time to ensure
+    /// that when the token is actually sent to the server it's still valid.
     pub fn is_expired(&self) -> bool {
-        // Consider the token expired if it's within 1 minute of it's expiration
-        // time.
+        // Consider the token expired if it's within 1 minute of it's expiration time.
         self.expires_at
             .map(|expiration_time| expiration_time - time::Duration::minutes(1) <= OffsetDateTime::now_utc())
             .unwrap_or(false)
     }
 }
 
-impl AsRef<str> for AccessToken {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
 impl From<TokenInfo> for AccessToken {
-    fn from(value: TokenInfo) -> Self {
+    fn from(
+        TokenInfo {
+            access_token,
+            expires_at,
+            ..
+        }: TokenInfo,
+    ) -> Self {
         AccessToken {
-            value: value.access_token,
-            expires_at: value.expires_at,
+            access_token,
+            expires_at,
         }
     }
 }
@@ -53,12 +53,11 @@ impl From<TokenInfo> for AccessToken {
 /// Represents a token as returned by OAuth2 servers.
 ///
 /// It is produced by all authentication flows.
-/// It authenticates certain operations, and must be refreshed once
-/// it reached it's expiry date.
+/// It authenticates certain operations, and must be refreshed once it reached it's expiry date.
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct TokenInfo {
-    /// used when authenticating calls to oauth2 enabled services.
-    pub access_token: String,
+    /// used when authorizing calls to oauth2 enabled services.
+    pub access_token: Option<String>,
     /// used to refresh an expired access_token.
     pub refresh_token: Option<String>,
     /// The time when the token expires.
@@ -74,9 +73,9 @@ impl TokenInfo {
     pub(crate) fn from_json(json_data: &[u8]) -> Result<TokenInfo, Error> {
         #[derive(Deserialize)]
         struct RawToken {
-            access_token: String,
+            access_token: Option<String>,
             refresh_token: Option<String>,
-            token_type: String,
+            token_type: Option<String>,
             expires_in: Option<i64>,
             id_token: Option<String>,
         }
@@ -92,26 +91,29 @@ impl TokenInfo {
             id_token,
         } = <AuthErrorOr<RawToken>>::deserialize(raw_token)?.into_result()?;
 
-        if token_type.to_lowercase().as_str() != "bearer" {
-            use std::io;
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    r#"unknown token type returned; expected "bearer" found {}"#,
-                    token_type
-                ),
-            )
-            .into());
+        match token_type {
+            Some(token_ty) if !token_ty.eq_ignore_ascii_case("bearer") => {
+                use std::io;
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        r#"unknown token type returned; expected "bearer" found {}"#,
+                        token_ty
+                    ),
+                )
+                .into());
+            }
+            _ => (),
         }
 
         let expires_at = expires_in
             .map(|seconds_from_now| OffsetDateTime::now_utc() + time::Duration::seconds(seconds_from_now));
 
         Ok(TokenInfo {
+            id_token,
             access_token,
             refresh_token,
             expires_at,
-            id_token,
         })
     }
 

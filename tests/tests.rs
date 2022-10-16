@@ -94,7 +94,7 @@ async fn test_device_success() {
         .token(&["https://www.googleapis.com/scope/1"])
         .await
         .expect("token failed");
-    assert_eq!("accesstoken", token.as_str());
+    assert_eq!("accesstoken", token.token().expect("should have access token"));
 }
 
 #[tokio::test]
@@ -255,7 +255,7 @@ async fn test_installed_interactive_success() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken", tok.as_str());
+    assert_eq!("accesstoken", tok.token().expect("should have access token"));
 }
 
 #[tokio::test]
@@ -284,7 +284,7 @@ async fn test_installed_redirect_success() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken", tok.as_str());
+    assert_eq!("accesstoken", tok.token().expect("should have access token"));
 }
 
 #[tokio::test]
@@ -353,7 +353,7 @@ async fn test_service_account_success() {
         .token(&["https://www.googleapis.com/auth/pubsub"])
         .await
         .expect("token failed");
-    assert!(tok.as_str().contains("ya29.c.ElouBywiys0Ly"));
+    assert!(tok.token().expect("should have access token").contains("ya29.c.ElouBywiys0Ly"));
     assert!(OffsetDateTime::now_utc() + time::Duration::seconds(3600) >= tok.expiration_time().unwrap());
 }
 
@@ -404,7 +404,7 @@ async fn test_refresh() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken", tok.as_str());
+    assert_eq!("accesstoken", tok.token().expect("should have access token"));
 
     server.expect(
         Expectation::matching(all_of![
@@ -425,7 +425,7 @@ async fn test_refresh() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken2", tok.as_str());
+    assert_eq!("accesstoken2", tok.token().expect("should have access token"));
 
     server.expect(
         Expectation::matching(all_of![
@@ -446,7 +446,7 @@ async fn test_refresh() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken3", tok.as_str());
+    assert_eq!("accesstoken3", tok.token().expect("should have access token"));
 
     // Refresh fails, but renewing the token succeeds.
     // PR #165
@@ -516,7 +516,7 @@ async fn test_memory_storage() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!(token1.as_str(), "accesstoken");
+    assert_eq!(token1.token().expect("should have access token"), "accesstoken");
     assert_eq!(token1, token2);
 
     // Create a new authenticator. This authenticator does not share a cache
@@ -542,7 +542,7 @@ async fn test_memory_storage() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!(token3.as_str(), "accesstoken2");
+    assert_eq!(token3.token().expect("should have access token"), "accesstoken2");
 }
 
 #[tokio::test]
@@ -584,7 +584,7 @@ async fn test_disk_storage() {
             .token(&["https://googleapis.com/some/scope"])
             .await
             .expect("failed to get token");
-        assert_eq!(token1.as_str(), "accesstoken");
+        assert_eq!(token1.token().expect("should have access token"), "accesstoken");
         assert_eq!(token1, token2);
     }
 
@@ -606,7 +606,7 @@ async fn test_disk_storage() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!(token1.as_str(), "accesstoken");
+    assert_eq!(token1.token().expect("should have access token"), "accesstoken");
     assert_eq!(token1, token2);
 }
 
@@ -638,22 +638,22 @@ async fn test_default_application_credentials_from_metadata_server() {
         ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth.build().await.unwrap(),
         _ => panic!("We are not testing service account adc model"),
     };
-    let token = authenticator
+    let access_token = authenticator
         .token(&["https://googleapis.com/some/scope"])
         .await
         .unwrap();
-    assert_eq!(token.as_str(), "accesstoken");
+    assert_eq!(access_token.token().expect("should have access token"), "accesstoken");
 }
 
 #[tokio::test]
-async fn test_access_token() {
+async fn test_token() {
     let authenticator = AccessTokenAuthenticator::with_client("0815".to_string(), DefaultHyperClient)
 	.build()
 	.await
 	.unwrap();
-    let token = authenticator
+    let access_token = authenticator
         .token(&["https://googleapis.com/some/scope"])
         .await
         .unwrap();
-    assert_eq!(token.as_str(), "0815".to_string());
+    assert_eq!(access_token.token().expect("should have access token"), "0815".to_string());
 }

@@ -33,7 +33,7 @@ impl AccessTokenFlow {
         S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         Ok(TokenInfo {
-            access_token: self.access_token.clone(),
+            access_token: Some(self.access_token.clone()),
             refresh_token: None,
             expires_at: None,
             id_token: None,

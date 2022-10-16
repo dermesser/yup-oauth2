@@ -80,10 +80,7 @@ where
 
     /// Return a token for the provided scopes, but don't reuse cached tokens. Instead,
     /// always fetch a new token from the OAuth server.
-    pub async fn force_refreshed_token<'a, T>(
-        &'a self,
-        scopes: &'a [T],
-    ) -> Result<AccessToken, Error>
+    pub async fn force_refreshed_token<'a, T>(&'a self, scopes: &'a [T]) -> Result<AccessToken, Error>
     where
         T: AsRef<str>,
     {

@@ -22,11 +22,11 @@ where
     S::Future: Send + Unpin + 'static,
     S::Error: Into<Box<dyn StdError + Send + Sync>>,
 {
-    let token = authenticator.token(&["email"]).await?;
+    let access_token = authenticator.token(&["email"]).await?;
     let request = http::Request::get("https://example.com")
         .header(
             http::header::AUTHORIZATION,
-            format!("Bearer {}", token.as_str()),
+            format!("Bearer {}", access_token.token().ok_or("no access token")?),
         )
         .body(hyper::body::Body::empty())?;
     let response = client.request(request).await?;
