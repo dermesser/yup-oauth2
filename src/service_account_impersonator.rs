@@ -55,7 +55,7 @@ impl From<TokenResponse> for TokenInfo {
         )
         .ok();
         TokenInfo {
-            access_token: resp.access_token,
+            access_token: Some(resp.access_token),
             refresh_token: None,
             expires_at,
             id_token: None,
@@ -99,7 +99,8 @@ impl ServiceAccountImpersonationFlow {
             .inner_flow
             .token(hyper_client, scopes)
             .await?
-            .access_token;
+            .access_token
+            .ok_or(Error::MissingAccessToken)?;
 
         let scopes: Vec<_> = scopes.iter().map(|s| s.as_ref()).collect();
         let req_body = Request {
