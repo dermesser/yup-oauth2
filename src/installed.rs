@@ -75,6 +75,9 @@ pub enum InstalledFlowReturnMethod {
     /// Involves spinning up a local HTTP server and Google redirecting the browser to
     /// the server with a URL containing the code (preferred, but not as reliable).
     HTTPRedirect,
+    /// Identical to [Self::HTTPRedirect], but allows a port to be specified for the
+    /// server, instead of choosing a port randomly.
+    HTTPPortRedirect(u16),
 }
 
 /// InstalledFlowImpl provides tokens for services that follow the "Installed" OAuth flow. (See
@@ -119,7 +122,11 @@ impl InstalledFlow {
     {
         match self.method {
             InstalledFlowReturnMethod::HTTPRedirect => {
-                self.ask_auth_code_via_http(hyper_client, &self.app_secret, scopes)
+                self.ask_auth_code_via_http(hyper_client, None, &self.app_secret, scopes)
+                .await
+            }
+            InstalledFlowReturnMethod::HTTPPortRedirect(port) => {
+                self.ask_auth_code_via_http(hyper_client, Some(port), &self.app_secret, scopes)
                     .await
             }
             InstalledFlowReturnMethod::Interactive => {
@@ -162,6 +169,7 @@ impl InstalledFlow {
     async fn ask_auth_code_via_http<S, T>(
         &self,
         hyper_client: &hyper::Client<S>,
+        port: Option<u16>,
         app_secret: &ApplicationSecret,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
@@ -173,7 +181,7 @@ impl InstalledFlow {
         S::Error: Into<Box<dyn StdError + Send + Sync>>,
     {
         use std::borrow::Cow;
-        let server = InstalledFlowServer::run()?;
+        let server = InstalledFlowServer::run(port)?;
         let server_addr = server.local_addr();
 
         // Present url to user.
@@ -260,7 +268,7 @@ struct InstalledFlowServer {
 }
 
 impl InstalledFlowServer {
-    fn run() -> Result<Self, Error> {
+    fn run(port: Option<u16>) -> Result<Self, Error> {
         use hyper::service::{make_service_fn, service_fn};
         let (auth_code_tx, auth_code_rx) = oneshot::channel::<String>();
         let (trigger_shutdown_tx, trigger_shutdown_rx) = oneshot::channel::<()>();
@@ -275,7 +283,10 @@ impl InstalledFlowServer {
                 }))
             }
         });
-        let addr: std::net::SocketAddr = ([127, 0, 0, 1], 0).into();
+        let addr: std::net::SocketAddr = match port {
+            Some(port) => ([127, 0, 0, 1], port).into(),
+            None => ([127, 0, 0, 1], 0).into()
+        };
         let server = hyper::server::Server::try_bind(&addr)?;
         let server = server.http1_only(true).serve(service);
         let addr = server.local_addr();
@@ -419,8 +430,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_random_local_port() {
-        let addr1 = InstalledFlowServer::run().unwrap().local_addr();
-        let addr2 = InstalledFlowServer::run().unwrap().local_addr();
+        let addr1 = InstalledFlowServer::run(None).unwrap().local_addr();
+        let addr2 = InstalledFlowServer::run(None).unwrap().local_addr();
         assert_ne!(addr1.port(), addr2.port());
     }
 
@@ -442,7 +453,7 @@ mod tests {
     async fn test_server() {
         let client: hyper::Client<hyper::client::HttpConnector, hyper::Body> =
             hyper::Client::builder().build_http();
-        let server = InstalledFlowServer::run().unwrap();
+        let server = InstalledFlowServer::run(None).unwrap();
 
         let response = client
             .get(format!("http://{}/", server.local_addr()).parse().unwrap())
