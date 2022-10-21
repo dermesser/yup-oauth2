@@ -154,6 +154,8 @@ pub enum Error {
     UserError(String),
     /// A lower level IO error.
     LowLevelError(io::Error),
+    /// We required an access token, but received a response that didn't contain one.
+    MissingAccessToken,
     /// Other errors produced by a storage provider
     OtherError(anyhow::Error),
 }
@@ -206,6 +208,13 @@ impl fmt::Display for Error {
             }
             Error::UserError(ref s) => s.fmt(f),
             Error::LowLevelError(ref e) => e.fmt(f),
+            Error::MissingAccessToken => {
+                write!(
+                    f,
+                    "Expected an access token, but received a response without one"
+                )?;
+                Ok(())
+            }
             Error::OtherError(ref e) => e.fmt(f),
         }
     }

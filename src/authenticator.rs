@@ -8,6 +8,7 @@ use crate::device::DeviceFlow;
 use crate::error::Error;
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 use crate::refresh::RefreshFlow;
+use crate::service_account_impersonator::ServiceAccountImpersonationFlow;
 
 #[cfg(feature = "service_account")]
 use crate::service_account::{self, ServiceAccountFlow, ServiceAccountFlowOpts, ServiceAccountKey};
@@ -15,10 +16,10 @@ use crate::storage::{self, Storage, TokenStorage};
 use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
 use private::AuthFlow;
 
-use crate::access_token::{AccessTokenFlow};
+use crate::access_token::AccessTokenFlow;
 
 use futures::lock::Mutex;
-use http::{Uri};
+use http::Uri;
 use hyper::client::connect::Connection;
 use std::borrow::Cow;
 use std::error::Error as StdError;
@@ -428,22 +429,69 @@ pub struct AccessTokenAuthenticator;
 impl AccessTokenAuthenticator {
     /// the builder pattern for the authenticator
     pub fn builder(
-	access_token: String,
+        access_token: String,
     ) -> AuthenticatorBuilder<DefaultHyperClient, AccessTokenFlow> {
-	Self::with_client(access_token, DefaultHyperClient)
+        Self::with_client(access_token, DefaultHyperClient)
     }
     /// Construct a new Authenticator that uses the installed flow and the provided http client.
     /// the client itself is not used
     pub fn with_client<C>(
-	access_token: String,
-	client: C,
+        access_token: String,
+        client: C,
     ) -> AuthenticatorBuilder<C, AccessTokenFlow> {
-	AuthenticatorBuilder::new(
-	    AccessTokenFlow {
-		access_token: access_token,
-	    },
-	    client,
-	)
+        AuthenticatorBuilder::new(
+            AccessTokenFlow {
+                access_token: access_token,
+            },
+            client,
+        )
+    }
+}
+
+/// Create a access token authenticator that uses user secrets to impersonate
+/// a service account.
+///
+/// ```
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # async fn foo() {
+/// # use yup_oauth2::authenticator::AuthorizedUserAuthenticator;
+/// # let secret = yup_oauth2::read_authorized_user_secret("/tmp/foo").await.unwrap();
+/// # let email = "my-test-account@my-test-project.iam.gserviceaccount.com";
+///     let authenticator = yup_oauth2::ServiceAccountImpersonationAuthenticator::builder(secret, email)
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
+pub struct ServiceAccountImpersonationAuthenticator;
+impl ServiceAccountImpersonationAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses the device flow.
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+    #[cfg_attr(
+        yup_oauth2_docsrs,
+        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
+    )]
+    pub fn builder(
+        authorized_user_secret: AuthorizedUserSecret,
+        service_account_email: &str,
+    ) -> AuthenticatorBuilder<DefaultHyperClient, ServiceAccountImpersonationFlow> {
+        Self::with_client(
+            authorized_user_secret,
+            service_account_email,
+            DefaultHyperClient,
+        )
+    }
+
+    /// Construct a new Authenticator that uses the installed flow and the provided http client.
+    pub fn with_client<C>(
+        authorized_user_secret: AuthorizedUserSecret,
+        service_account_email: &str,
+        client: C,
+    ) -> AuthenticatorBuilder<C, ServiceAccountImpersonationFlow> {
+        AuthenticatorBuilder::new(
+            ServiceAccountImpersonationFlow::new(authorized_user_secret, service_account_email),
+            client,
+        )
     }
 }
 
@@ -706,6 +754,22 @@ impl<C> AuthenticatorBuilder<C, AuthorizedUserFlow> {
     }
 }
 
+/// ## Methods available when building a service account impersonation Authenticator.
+impl<C> AuthenticatorBuilder<C, ServiceAccountImpersonationFlow> {
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            AuthFlow::ServiceAccountImpersonationFlow(self.auth_flow),
+        )
+        .await
+    }
+}
+
 /// ## Methods available when building an access token flow Authenticator.
 impl<C> AuthenticatorBuilder<C, AccessTokenFlow> {
     /// Create the authenticator.
@@ -722,25 +786,27 @@ impl<C> AuthenticatorBuilder<C, AccessTokenFlow> {
     }
 }
 mod private {
+    use crate::access_token::AccessTokenFlow;
     use crate::application_default_credentials::ApplicationDefaultCredentialsFlow;
-    use crate::authorized_user::AuthorizedUserFlow;
     use crate::authenticator::{AsyncRead, AsyncWrite, Connection, Service, StdError, Uri};
+    use crate::authorized_user::AuthorizedUserFlow;
     use crate::device::DeviceFlow;
     use crate::error::Error;
     use crate::installed::InstalledFlow;
     #[cfg(feature = "service_account")]
     use crate::service_account::ServiceAccountFlow;
+    use crate::service_account_impersonator::ServiceAccountImpersonationFlow;
     use crate::types::{ApplicationSecret, TokenInfo};
-    use crate::access_token::AccessTokenFlow;
 
     pub enum AuthFlow {
         DeviceFlow(DeviceFlow),
         InstalledFlow(InstalledFlow),
         #[cfg(feature = "service_account")]
         ServiceAccountFlow(ServiceAccountFlow),
+        ServiceAccountImpersonationFlow(ServiceAccountImpersonationFlow),
         ApplicationDefaultCredentialsFlow(ApplicationDefaultCredentialsFlow),
         AuthorizedUserFlow(AuthorizedUserFlow),
-	AccessTokenFlow(AccessTokenFlow),
+        AccessTokenFlow(AccessTokenFlow),
     }
 
     impl AuthFlow {
@@ -750,9 +816,10 @@ mod private {
                 AuthFlow::InstalledFlow(installed_flow) => Some(&installed_flow.app_secret),
                 #[cfg(feature = "service_account")]
                 AuthFlow::ServiceAccountFlow(_) => None,
+                AuthFlow::ServiceAccountImpersonationFlow(_) => None,
                 AuthFlow::ApplicationDefaultCredentialsFlow(_) => None,
                 AuthFlow::AuthorizedUserFlow(_) => None,
-		AuthFlow::AccessTokenFlow(_) => None,
+                AuthFlow::AccessTokenFlow(_) => None,
             }
         }
 
@@ -777,15 +844,20 @@ mod private {
                 AuthFlow::ServiceAccountFlow(service_account_flow) => {
                     service_account_flow.token(hyper_client, scopes).await
                 }
+                AuthFlow::ServiceAccountImpersonationFlow(service_account_impersonation_flow) => {
+                    service_account_impersonation_flow
+                        .token(hyper_client, scopes)
+                        .await
+                }
                 AuthFlow::ApplicationDefaultCredentialsFlow(adc_flow) => {
                     adc_flow.token(hyper_client, scopes).await
                 }
                 AuthFlow::AuthorizedUserFlow(authorized_user_flow) => {
                     authorized_user_flow.token(hyper_client, scopes).await
                 }
-		AuthFlow::AccessTokenFlow(access_token_flow) => {
-		    access_token_flow.token(hyper_client, scopes).await
-		}
+                AuthFlow::AccessTokenFlow(access_token_flow) => {
+                    access_token_flow.token(hyper_client, scopes).await
+                }
             }
         }
     }
