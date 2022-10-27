@@ -60,7 +60,7 @@ webbrowser = "0.5"
 hyper-rustls = "0.23"
 
 [workspace]
-members = ["examples/test-installed/", "examples/test-svc-acct/", "examples/test-device/", "examples/service_account", "examples/drive_example", "examples/test-adc"]
+members = ["examples/test-installed/", "examples/test-svc-acct/", "examples/test-device/", "examples/test-adc"]
 
 [package.metadata.docs.rs]
 all-features = true
