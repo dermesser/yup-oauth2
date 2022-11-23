@@ -156,6 +156,8 @@ pub enum Error {
     LowLevelError(io::Error),
     /// We required an access token, but received a response that didn't contain one.
     MissingAccessToken,
+    /// We tried to read an environment variable, but failed.
+    EnvError(std::env::VarError),
     /// Other errors produced by a storage provider
     OtherError(anyhow::Error),
 }
@@ -175,6 +177,12 @@ impl From<AuthError> for Error {
 impl From<serde_json::Error> for Error {
     fn from(value: serde_json::Error) -> Error {
         Error::JSONError(value)
+    }
+}
+
+impl From<std::env::VarError> for Error {
+    fn from(value: std::env::VarError) -> Error {
+        Error::EnvError(value)
     }
 }
 
@@ -207,6 +215,7 @@ impl fmt::Display for Error {
                 Ok(())
             }
             Error::UserError(ref s) => s.fmt(f),
+            Error::EnvError(ref e) => e.fmt(f),
             Error::LowLevelError(ref e) => e.fmt(f),
             Error::MissingAccessToken => {
                 write!(
@@ -227,6 +236,7 @@ impl StdError for Error {
             Error::AuthError(ref err) => Some(err),
             Error::JSONError(ref err) => Some(err),
             Error::LowLevelError(ref err) => Some(err),
+            Error::EnvError(ref err) => Some(err),
             _ => None,
         }
     }

@@ -331,6 +331,28 @@ impl ApplicationDefaultCredentialsAuthenticator {
         })
     }
 
+    /// Try to build an AuthorizedUserFlow from the application default credentials path.
+    pub async fn from_user_credentials() -> Result<AuthorizedUserFlow, Error> {
+        let mut path = {
+            #[cfg(target_os = "windows")]
+            {
+                PathBuf::from(std::env::var("APPDATA")?)
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let mut path = PathBuf::from(std::env::var("HOME")?);
+                path.push(".config");
+                path
+            }
+        };
+
+        path.push("gcloud");
+        path.push("application_default_credentials.json");
+
+        let secret = crate::helper::read_authorized_user_secret(&path).await?;
+        Ok(AuthorizedUserFlow { secret })
+    }
+
     /// Use the builder pattern to deduce which model of authenticator should be used:
     /// Service account one or GCE instance metadata kind
     #[cfg(feature = "service_account")]
@@ -354,15 +376,19 @@ impl ApplicationDefaultCredentialsAuthenticator {
     where
         C: HyperClientBuilder,
     {
-        match ApplicationDefaultCredentialsAuthenticator::from_environment().await {
-            Ok(flow_opts) => {
-                let builder = AuthenticatorBuilder::new(flow_opts, client);
-
-                ApplicationDefaultCredentialsTypes::ServiceAccount(builder)
-            }
-            Err(_) => ApplicationDefaultCredentialsTypes::InstanceMetadata(
-                AuthenticatorBuilder::new(opts, client),
-            ),
+        if let Ok(flow_opts) = ApplicationDefaultCredentialsAuthenticator::from_environment().await
+        {
+            let builder = AuthenticatorBuilder::new(flow_opts, client);
+            ApplicationDefaultCredentialsTypes::ServiceAccount(builder)
+        } else if let Ok(user_opts) =
+            ApplicationDefaultCredentialsAuthenticator::from_user_credentials().await
+        {
+            let builder = AuthenticatorBuilder::new(user_opts, client);
+            ApplicationDefaultCredentialsTypes::AuthorizedUser(builder)
+        } else {
+            ApplicationDefaultCredentialsTypes::InstanceMetadata(AuthenticatorBuilder::new(
+                opts, client,
+            ))
         }
     }
 }
@@ -374,8 +400,24 @@ where
     /// Service account based authenticator signature
     #[cfg(feature = "service_account")]
     ServiceAccount(AuthenticatorBuilder<C, ServiceAccountFlowOpts>),
+    /// User account authentication
+    AuthorizedUser(AuthenticatorBuilder<C, AuthorizedUserFlow>),
     /// GCE Instance Metadata based authenticator signature
     InstanceMetadata(AuthenticatorBuilder<C, ApplicationDefaultCredentialsFlowOpts>),
+}
+
+impl<C> ApplicationDefaultCredentialsTypes<C>
+where
+    C: HyperClientBuilder,
+{
+    /// Create an authenticator using whichever credentials type was selected.
+    pub async fn build(self) -> Result<Authenticator<C::Connector>, Error> {
+        match self {
+            ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => Ok(auth.build().await?),
+            ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => Ok(auth.build().await?),
+            ApplicationDefaultCredentialsTypes::AuthorizedUser(auth) => Ok(auth.build().await?),
+        }
+    }
 }
 
 /// Create an authenticator that uses an authorized user credentials.
