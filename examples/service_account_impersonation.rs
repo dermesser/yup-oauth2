@@ -12,6 +12,19 @@ async fn main() {
     .await
     .expect("user secret");
 
+    let auth = ServiceAccountImpersonationAuthenticator::builder(user_secret.clone(), &svc_email)
+        .build()
+        .await
+        .expect("authenticator");
+
+    let scopes = &["https://www.googleapis.com/auth/youtube.readonly"];
+    match auth.token(scopes).await {
+        Err(e) => println!("error: {:?}", e),
+        Ok(t) => println!("token: {:?}", t),
+    }
+
+    // If you configure the authenticator to request id tokens, it will give back id tokens
+    // instead of access tokens.
     let auth = ServiceAccountImpersonationAuthenticator::builder(user_secret, &svc_email)
         .request_id_token()
         .build()
