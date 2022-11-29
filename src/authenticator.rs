@@ -306,16 +306,10 @@ impl ServiceAccountAuthenticator {
 /// #    use yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
 ///
 ///     let opts = ApplicationDefaultCredentialsFlowOpts::default();
-///     let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts).await {
-///         ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth
-///             .build()
-///             .await
-///             .expect("Unable to create instance metadata authenticator"),
-///         ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => auth
-///             .build()
-///             .await
-///             .expect("Unable to create service account authenticator"),
-///     };
+///     let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts)
+///        .await
+///        .build()
+///        .await?;
 /// # }
 /// ```
 pub struct ApplicationDefaultCredentialsAuthenticator;
@@ -414,6 +408,7 @@ where
     pub async fn build(self) -> Result<Authenticator<C::Connector>, Error> {
         match self {
             ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => Ok(auth.build().await?),
+            #[cfg(feature = "service_account")]
             ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => Ok(auth.build().await?),
             ApplicationDefaultCredentialsTypes::AuthorizedUser(auth) => Ok(auth.build().await?),
         }
