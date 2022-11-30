@@ -306,10 +306,11 @@ impl ServiceAccountAuthenticator {
 /// #    use yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
 ///
 ///     let opts = ApplicationDefaultCredentialsFlowOpts::default();
-///     let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts)
+///     let authenticator = ApplicationDefaultCredentialsAuthenticator::builder(opts)
 ///        .await
 ///        .build()
-///        .await?;
+///        .await
+///        .expect("failed to build application default credentials authenticator");
 /// # }
 /// ```
 pub struct ApplicationDefaultCredentialsAuthenticator;
