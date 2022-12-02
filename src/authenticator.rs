@@ -81,7 +81,10 @@ where
 
     /// Return a token for the provided scopes, but don't reuse cached tokens. Instead,
     /// always fetch a new token from the OAuth server.
-    pub async fn force_refreshed_token<'a, T>(&'a self, scopes: &'a [T]) -> Result<AccessToken, Error>
+    pub async fn force_refreshed_token<'a, T>(
+        &'a self,
+        scopes: &'a [T],
+    ) -> Result<AccessToken, Error>
     where
         T: AsRef<str>,
     {
@@ -767,6 +770,15 @@ impl<C> AuthenticatorBuilder<C, ServiceAccountImpersonationFlow> {
             AuthFlow::ServiceAccountImpersonationFlow(self.auth_flow),
         )
         .await
+    }
+
+    /// Configure this authenticator to impersonate an ID token (rather an an access token,
+    /// as is the default).
+    ///
+    /// For more on impersonating ID tokens, see [google's docs](https://cloud.google.com/iam/docs/create-short-lived-credentials-direct#sa-credentials-oidc).
+    pub fn request_id_token(mut self) -> Self {
+        self.auth_flow.access_token = false;
+        self
     }
 }
 
