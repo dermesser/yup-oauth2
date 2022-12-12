@@ -1,26 +1,26 @@
 use crate::error::Error;
 use crate::types::TokenInfo;
+use http::Uri;
 use hyper::client::connect::Connection;
 use std::error::Error as StdError;
-use http::Uri;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower_service::Service;
 
-/// Provide options for the Application Default Credential Flow, mostly used for testing
+/// Provide options for the Instance Metadata Flow, mostly used for testing
 #[derive(Default, Clone, Debug)]
-pub struct ApplicationDefaultCredentialsFlowOpts {
+pub struct InstanceMetadataFlowOpts {
     /// Used as base to build the url during token request from GCP metadata server
     pub metadata_url: Option<String>,
 }
 
-pub struct ApplicationDefaultCredentialsFlow {
+pub struct InstanceMetadataFlow {
     metadata_url: String,
 }
 
-impl ApplicationDefaultCredentialsFlow {
-    pub(crate) fn new(opts: ApplicationDefaultCredentialsFlowOpts) -> Self {
+impl InstanceMetadataFlow {
+    pub(crate) fn new(opts: InstanceMetadataFlowOpts) -> Self {
         let metadata_url = opts.metadata_url.unwrap_or_else(|| "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token".to_string());
-        ApplicationDefaultCredentialsFlow { metadata_url }
+        InstanceMetadataFlow { metadata_url }
     }
 
     pub(crate) async fn token<S, T>(

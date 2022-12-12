@@ -100,13 +100,13 @@ pub use crate::authenticator::ServiceAccountAuthenticator;
 pub use crate::authenticator::{
     AccessTokenAuthenticator, ApplicationDefaultCredentialsAuthenticator,
     AuthorizedUserAuthenticator, DeviceFlowAuthenticator, InstalledFlowAuthenticator,
-    ServiceAccountImpersonationAuthenticator,
+    InstanceMetadataAuthenticator, ServiceAccountImpersonationAuthenticator,
 };
 
 pub use crate::helper::*;
 pub use crate::installed::InstalledFlowReturnMethod;
 
-pub use crate::application_default_credentials::ApplicationDefaultCredentialsFlowOpts;
+pub use crate::application_default_credentials::InstanceMetadataFlowOpts;
 #[cfg(feature = "service_account")]
 pub use crate::service_account::ServiceAccountKey;
 
