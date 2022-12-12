@@ -1,20 +1,14 @@
-use yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
 use yup_oauth2::ApplicationDefaultCredentialsAuthenticator;
-use yup_oauth2::ApplicationDefaultCredentialsFlowOpts;
+use yup_oauth2::InstanceMetadataFlowOpts;
 
 #[tokio::main]
 async fn main() {
-    let opts = ApplicationDefaultCredentialsFlowOpts::default();
-    let auth = match ApplicationDefaultCredentialsAuthenticator::builder(opts).await {
-        ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth
-            .build()
-            .await
-            .expect("Unable to create instance metadata authenticator"),
-        ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => auth
-            .build()
-            .await
-            .expect("Unable to create service account authenticator"),
-    };
+    let opts = InstanceMetadataFlowOpts::default();
+    let auth = ApplicationDefaultCredentialsAuthenticator::builder(opts)
+        .await
+        .build()
+        .await
+        .expect("Unable to create authenticator");
     let scopes = &["https://www.googleapis.com/auth/pubsub"];
 
     let tok = auth.token(scopes).await.unwrap();
