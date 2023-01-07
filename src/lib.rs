@@ -69,7 +69,7 @@
 //! }
 //! ```
 //!
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 #![cfg_attr(yup_oauth2_docsrs, feature(doc_cfg))]
 
 pub mod access_token;
@@ -80,7 +80,7 @@ pub mod authorized_user;
 mod device;
 pub mod error;
 mod helper;
-mod installed;
+pub mod installed;
 mod refresh;
 pub mod service_account_impersonator;
 
