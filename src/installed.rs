@@ -12,9 +12,9 @@ use std::error::Error as StdError;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use http::Uri;
 use hyper::client::connect::Connection;
 use hyper::header;
-use http::Uri;
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::oneshot;
@@ -86,7 +86,7 @@ pub enum InstalledFlowReturnMethod {
 pub struct InstalledFlow {
     pub(crate) app_secret: ApplicationSecret,
     pub(crate) method: InstalledFlowReturnMethod,
-    pub(crate) flow_delegate: Box<dyn InstalledFlowDelegate>,
+    pub flow_delegate: Box<dyn InstalledFlowDelegate>,
 }
 
 impl InstalledFlow {
@@ -100,14 +100,24 @@ impl InstalledFlow {
     ///
     /// The `InstalledFlowDelegate` implementation should be assigned to the `flow_delegate` field
     /// of the `InstalledFlow` struct.
-    pub(crate) fn new(
-        app_secret: ApplicationSecret,
-        method: InstalledFlowReturnMethod,
-    ) -> InstalledFlow {
+    pub(crate) fn new(app_secret: ApplicationSecret, method: InstalledFlowReturnMethod) -> InstalledFlow {
         InstalledFlow {
             app_secret,
             method,
             flow_delegate: Box::new(DefaultInstalledFlowDelegate),
+        }
+    }
+
+    /// Create a new InstalledFlow with the provided secret and method.
+    pub fn new_with_delegate(
+        app_secret: ApplicationSecret,
+        method: InstalledFlowReturnMethod,
+        flow_delegate: Box<dyn InstalledFlowDelegate>,
+    ) -> InstalledFlow {
+        InstalledFlow {
+            app_secret,
+            method,
+            flow_delegate,
         }
     }
 
@@ -132,7 +142,7 @@ impl InstalledFlow {
         match self.method {
             InstalledFlowReturnMethod::HTTPRedirect => {
                 self.ask_auth_code_via_http(hyper_client, None, &self.app_secret, scopes)
-                .await
+                    .await
             }
             InstalledFlowReturnMethod::HTTPPortRedirect(port) => {
                 self.ask_auth_code_via_http(hyper_client, Some(port), &self.app_secret, scopes)
@@ -294,7 +304,7 @@ impl InstalledFlowServer {
         });
         let addr: std::net::SocketAddr = match port {
             Some(port) => ([127, 0, 0, 1], port).into(),
-            None => ([127, 0, 0, 1], 0).into()
+            None => ([127, 0, 0, 1], 0).into(),
         };
         let server = hyper::server::Server::try_bind(&addr)?;
         let server = server.http1_only(true).serve(service);

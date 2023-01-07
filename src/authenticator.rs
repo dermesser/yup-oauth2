@@ -539,7 +539,7 @@ impl<C, F> AuthenticatorBuilder<C, F> {
         })
     }
 
-    fn new(auth_flow: F, hyper_client_builder: C) -> AuthenticatorBuilder<C, F> {
+    pub fn new(auth_flow: F, hyper_client_builder: C) -> AuthenticatorBuilder<C, F> {
         AuthenticatorBuilder {
             hyper_client_builder,
             storage_type: StorageType::Memory,
