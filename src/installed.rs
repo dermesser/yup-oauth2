@@ -91,6 +91,15 @@ pub struct InstalledFlow {
 
 impl InstalledFlow {
     /// Create a new InstalledFlow with the provided secret and method.
+    ///
+    /// In order to specify the redirect URL to use (in the case of `HTTPRedirect` or
+    /// `HTTPPortRedirect` as method), either implement the `InstalledFlowDelegate` trait, or
+    /// use the `DefaultInstalledFlowDelegateWithRedirectURI`, which presents the URL on stdout.
+    /// The redirect URL to use is configured with the OAuth provider, and possible options are
+    /// given in the `ApplicationSecret.redirect_uris` field.
+    ///
+    /// The `InstalledFlowDelegate` implementation should be assigned to the `flow_delegate` field
+    /// of the `InstalledFlow` struct.
     pub(crate) fn new(
         app_secret: ApplicationSecret,
         method: InstalledFlowReturnMethod,
