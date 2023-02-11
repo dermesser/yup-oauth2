@@ -539,6 +539,7 @@ impl<C, F> AuthenticatorBuilder<C, F> {
         })
     }
 
+    /// Create new `AuthenticatorBuilder`
     pub fn new(auth_flow: F, hyper_client_builder: C) -> AuthenticatorBuilder<C, F> {
         AuthenticatorBuilder {
             hyper_client_builder,

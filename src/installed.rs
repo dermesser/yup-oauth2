@@ -2,6 +2,7 @@
 //
 // Refer to the project root for licensing information.
 //
+//! Installed flow
 use crate::authenticator_delegate::{DefaultInstalledFlowDelegate, InstalledFlowDelegate};
 use crate::error::Error;
 use crate::types::{ApplicationSecret, TokenInfo};
@@ -86,6 +87,7 @@ pub enum InstalledFlowReturnMethod {
 pub struct InstalledFlow {
     pub(crate) app_secret: ApplicationSecret,
     pub(crate) method: InstalledFlowReturnMethod,
+    /// Flow delegate instance
     pub flow_delegate: Box<dyn InstalledFlowDelegate>,
 }
 

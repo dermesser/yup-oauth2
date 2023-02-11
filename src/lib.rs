@@ -69,7 +69,7 @@
 //! }
 //! ```
 //!
-// #![deny(missing_docs)]
+#![deny(missing_docs)]
 #![cfg_attr(yup_oauth2_docsrs, feature(doc_cfg))]
 
 pub mod access_token;
