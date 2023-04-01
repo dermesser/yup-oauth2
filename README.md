@@ -27,18 +27,6 @@ doesn't, please let us know and/or contribute a fix!
 * Service account flow: Non-interactive authorization of server-to-server communication based on
   public key cryptography. Used for services like Cloud Pubsub, Cloud Storage, ...
 
-### Usage
-
-Please have a look at the [API landing page][API-docs] for all the examples you will ever need.
-
-A simple commandline program which authenticates any scope and prints token information can be found
-in [the examples directory][examples].
-
-The video below shows the *auth* example in action. It's meant to be used as utility to record all
-server communication and improve protocol compliance.
-
-![usage][auth-usage]
-
 ## Versions
 
 * Version 1.x for Hyper versions below 12
