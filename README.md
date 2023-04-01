@@ -1,5 +1,5 @@
 [![Build
-Status](https://travis-ci.org/dermesser/yup-oauth2.svg)](https://travis-ci.org/dermesser/yup-oauth2)
+Status](https://github.com/dermesser/yup-oauth2/actions/workflows/test.yml/badge.svg)](https://github.com/dermesser/yup-oauth2/actions)
 [![codecov](https://codecov.io/gh/dermesser/yup-oauth2/branch/master/graph/badge.svg)](https://codecov.io/gh/dermesser/yup-oauth2)
 [![crates.io](https://img.shields.io/crates/v/yup-oauth2.svg)](https://crates.io/crates/yup-oauth2)
 
