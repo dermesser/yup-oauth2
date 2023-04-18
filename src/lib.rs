@@ -93,6 +93,7 @@ pub mod storage;
 
 mod types;
 
+pub use hyper;
 pub use hyper_rustls;
 
 #[cfg(feature = "service_account")]
