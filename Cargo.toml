@@ -1,7 +1,7 @@
 [package]
 
 name = "yup-oauth2"
-version = "8.1.0"
+version = "8.3.0"
 authors = ["Sebastian Thiel <byronimo@gmail.com>", "Lewin Bormann <lbo@spheniscida.de>"]
 repository = "https://github.com/dermesser/yup-oauth2"
 description = "An oauth2 implementation, providing the 'device', 'service account' and 'installed' authorization flows"
@@ -37,12 +37,12 @@ base64 = "0.13.0"
 futures = "0.3"
 http = "0.2"
 hyper = { version = "0.14", features = ["client", "server", "tcp", "http2"] }
-hyper-rustls = { version = "0.23", optional = true, features = ["http2"] }
+hyper-rustls = { version = "0.24", optional = true, features = ["http2"] }
 hyper-tls = { version = "0.5.0", optional = true }
 itertools = "0.10.0"
 log = "0.4"
 percent-encoding = "2"
-rustls = { version = "0.20.4", optional = true }
+rustls = { version = "0.21.0", optional = true }
 rustls-pemfile = { version = "1.0.1", optional = true }
 seahash = "4"
 serde = {version = "1.0", features = ["derive"]}
@@ -57,7 +57,7 @@ httptest = "0.15"
 env_logger = "0.10"
 tempfile = "3.1"
 webbrowser = "0.8"
-hyper-rustls = "0.23"
+hyper-rustls = "0.24"
 
 [workspace]
 members = ["examples/test-installed/", "examples/test-svc-acct/", "examples/test-device/", "examples/test-adc"]

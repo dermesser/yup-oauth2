@@ -1,7 +1,7 @@
 use crate::error::{AuthErrorOr, Error};
 
-use time::OffsetDateTime;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 
 /// Represents a token returned by oauth2 servers. All tokens are Bearer tokens. Other types of
 /// tokens are not supported.
@@ -12,7 +12,6 @@ pub struct AccessToken {
 }
 
 impl AccessToken {
-
     /// A string representation of the access token.
     pub fn token(&self) -> Option<&str> {
         self.access_token.as_deref()
@@ -30,7 +29,9 @@ impl AccessToken {
     pub fn is_expired(&self) -> bool {
         // Consider the token expired if it's within 1 minute of it's expiration time.
         self.expires_at
-            .map(|expiration_time| expiration_time - time::Duration::minutes(1) <= OffsetDateTime::now_utc())
+            .map(|expiration_time| {
+                expiration_time - time::Duration::minutes(1) <= OffsetDateTime::now_utc()
+            })
             .unwrap_or(false)
     }
 }
@@ -106,8 +107,19 @@ impl TokenInfo {
             _ => (),
         }
 
-        let expires_at = expires_in
-            .map(|seconds_from_now| OffsetDateTime::now_utc() + time::Duration::seconds(seconds_from_now));
+        let expires_at = match expires_in {
+            Some(seconds_from_now) => {
+                Some(OffsetDateTime::now_utc() + time::Duration::seconds(seconds_from_now))
+            }
+            None if id_token.is_some() && access_token.is_none() => {
+                // If the response contains only an ID token, an expiration date may not be
+                // returned. According to the docs, the tokens are always valid for 1 hour.
+                //
+                // https://cloud.google.com/iam/docs/create-short-lived-credentials-direct#sa-credentials-oidc
+                Some(OffsetDateTime::now_utc() + time::Duration::HOUR)
+            }
+            None => None,
+        };
 
         Ok(TokenInfo {
             id_token,
@@ -120,7 +132,9 @@ impl TokenInfo {
     /// Returns true if we are expired.
     pub fn is_expired(&self) -> bool {
         self.expires_at
-            .map(|expiration_time| expiration_time - time::Duration::minutes(1) <= OffsetDateTime::now_utc())
+            .map(|expiration_time| {
+                expiration_time - time::Duration::minutes(1) <= OffsetDateTime::now_utc()
+            })
             .unwrap_or(false)
     }
 }
@@ -182,5 +196,28 @@ pub mod tests {
                 err
             ),
         }
+    }
+
+    #[test]
+    fn default_expiry_for_id_token_only() {
+        // If only an ID token is present, set a default expiration date
+        let json = r#"{"id_token": "id"}"#;
+
+        let token = TokenInfo::from_json(json.as_bytes()).unwrap();
+        assert_eq!(token.id_token, Some("id".to_owned()));
+
+        let expiry = token.expires_at.unwrap();
+        assert!(expiry <= time::OffsetDateTime::now_utc() + time::Duration::HOUR);
+    }
+
+    #[test]
+    fn no_default_expiry_for_access_token() {
+        // Don't set a default expiration date if an access token is returned
+        let json = r#"{"access_token": "access", "id_token": "id"}"#;
+
+        let token = TokenInfo::from_json(json.as_bytes()).unwrap();
+        assert_eq!(token.access_token, Some("access".to_owned()));
+        assert_eq!(token.id_token, Some("id".to_owned()));
+        assert_eq!(token.expires_at, None);
     }
 }

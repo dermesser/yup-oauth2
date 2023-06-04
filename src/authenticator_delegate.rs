@@ -156,3 +156,11 @@ impl DeviceFlowDelegate for DefaultDeviceFlowDelegate {}
 #[derive(Copy, Clone)]
 pub struct DefaultInstalledFlowDelegate;
 impl InstalledFlowDelegate for DefaultInstalledFlowDelegate {}
+
+/// The default installed-flow delegate (i.e.: show URL on stdout). Use this to specify
+/// a custom redirect URL.
+#[derive(Clone)]
+pub struct DefaultInstalledFlowDelegateWithRedirectURI(pub String);
+impl InstalledFlowDelegate for DefaultInstalledFlowDelegateWithRedirectURI {
+    fn redirect_uri(&self) -> Option<&str> { Some(self.0.as_str()) }
+}
