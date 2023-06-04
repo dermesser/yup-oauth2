@@ -667,6 +667,16 @@ impl<C> AuthenticatorBuilder<C, InstalledFlow> {
             ..self
         }
     }
+    /// Force the user to select an account on the initial request
+    pub fn force_account_selection(self, force: bool)->Self{
+        AuthenticatorBuilder {
+            auth_flow: InstalledFlow {
+                force_account_selection: force,
+                ..self.auth_flow
+            },
+            ..self
+        }
+    }
 
     /// Create the authenticator.
     pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
