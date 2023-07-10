@@ -33,6 +33,7 @@ fn build_authentication_request_url<T>(
     client_id: &str,
     scopes: &[T],
     redirect_uri: Option<&str>,
+    force_account_selection: bool,
 ) -> String
 where
     T: AsRef<str>,
@@ -51,13 +52,17 @@ where
         }
     }
 
-    vec![
+    let mut params = vec![
         format!("scope={}", scopes_string),
         "&access_type=offline".to_string(),
         format!("&redirect_uri={}", redirect_uri.unwrap_or(OOB_REDIRECT_URI)),
         "&response_type=code".to_string(),
         format!("&client_id={}", client_id),
-    ]
+    ];
+    if force_account_selection {
+        params.push("&prompt=select_account+consent".to_string());
+    }
+    params
     .into_iter()
     .fold(url, |mut u, param| {
         u.push_str(&percent_encode(param.as_ref(), &QUERY_SET).to_string());
@@ -87,6 +92,7 @@ pub struct InstalledFlow {
     pub(crate) app_secret: ApplicationSecret,
     pub(crate) method: InstalledFlowReturnMethod,
     pub(crate) flow_delegate: Box<dyn InstalledFlowDelegate>,
+    pub(crate) force_account_selection: bool,
 }
 
 impl InstalledFlow {
@@ -108,6 +114,7 @@ impl InstalledFlow {
             app_secret,
             method,
             flow_delegate: Box::new(DefaultInstalledFlowDelegate),
+            force_account_selection: false
         }
     }
 
@@ -163,6 +170,7 @@ impl InstalledFlow {
             &app_secret.client_id,
             scopes,
             self.flow_delegate.redirect_uri(),
+            self.force_account_selection,
         );
         log::debug!("Presenting auth url to user: {}", url);
         let auth_code = self
@@ -205,6 +213,7 @@ impl InstalledFlow {
             &app_secret.client_id,
             scopes,
             Some(redirect_uri.as_ref()),
+            self.force_account_selection,
         );
         log::debug!("Presenting auth url to user: {}", url);
         let _ = self
@@ -415,7 +424,8 @@ mod tests {
                 "812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5am\
                  rf.apps.googleusercontent.com",
                 &["email", "profile"],
-                None
+                None,
+                false
             )
         );
     }
@@ -432,7 +442,8 @@ mod tests {
                 "812741506391-h38jh0j4fv0ce1krdkiq0hfvt6n5am\
                  rf.apps.googleusercontent.com",
                 &["email", "profile"],
-                None
+                None,
+                false
             )
         );
     }
