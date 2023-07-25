@@ -1,7 +1,5 @@
 //! Module containing the core functionality for OAuth2 Authentication.
-use crate::application_default_credentials::{
-    ApplicationDefaultCredentialsFlow, ApplicationDefaultCredentialsFlowOpts,
-};
+use crate::application_default_credentials::{InstanceMetadataFlow, InstanceMetadataFlowOpts};
 use crate::authenticator_delegate::{DeviceFlowDelegate, InstalledFlowDelegate};
 use crate::authorized_user::{AuthorizedUserFlow, AuthorizedUserSecret};
 use crate::device::DeviceFlow;
@@ -302,20 +300,15 @@ impl ServiceAccountAuthenticator {
 /// # #[cfg(all(any(feature = "hyper-rustls", feature = "hyper-tls"), feature = "service_account"))]
 /// # async fn foo() {
 /// #    use yup_oauth2::ApplicationDefaultCredentialsAuthenticator;
-/// #    use yup_oauth2::ApplicationDefaultCredentialsFlowOpts;
+/// #    use yup_oauth2::InstanceMetadataFlowOpts;
 /// #    use yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
 ///
-///     let opts = ApplicationDefaultCredentialsFlowOpts::default();
-///     let authenticator = match ApplicationDefaultCredentialsAuthenticator::builder(opts).await {
-///         ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth
-///             .build()
-///             .await
-///             .expect("Unable to create instance metadata authenticator"),
-///         ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => auth
-///             .build()
-///             .await
-///             .expect("Unable to create service account authenticator"),
-///     };
+///     let opts = InstanceMetadataFlowOpts::default();
+///     let authenticator = ApplicationDefaultCredentialsAuthenticator::builder(opts)
+///        .await
+///        .build()
+///        .await
+///        .expect("failed to build application default credentials authenticator");
 /// # }
 /// ```
 pub struct ApplicationDefaultCredentialsAuthenticator;
@@ -331,6 +324,28 @@ impl ApplicationDefaultCredentialsAuthenticator {
         })
     }
 
+    /// Try to build an AuthorizedUserFlow from the application default credentials path.
+    pub async fn from_user_credentials() -> Result<AuthorizedUserFlow, Error> {
+        let mut path = {
+            #[cfg(target_os = "windows")]
+            {
+                PathBuf::from(std::env::var("APPDATA")?)
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let mut path = PathBuf::from(std::env::var("HOME")?);
+                path.push(".config");
+                path
+            }
+        };
+
+        path.push("gcloud");
+        path.push("application_default_credentials.json");
+
+        let secret = crate::helper::read_authorized_user_secret(&path).await?;
+        Ok(AuthorizedUserFlow { secret })
+    }
+
     /// Use the builder pattern to deduce which model of authenticator should be used:
     /// Service account one or GCE instance metadata kind
     #[cfg(feature = "service_account")]
@@ -340,7 +355,7 @@ impl ApplicationDefaultCredentialsAuthenticator {
         doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
     )]
     pub async fn builder(
-        opts: ApplicationDefaultCredentialsFlowOpts,
+        opts: InstanceMetadataFlowOpts,
     ) -> ApplicationDefaultCredentialsTypes<DefaultHyperClient> {
         Self::with_client(opts, DefaultHyperClient).await
     }
@@ -348,21 +363,25 @@ impl ApplicationDefaultCredentialsAuthenticator {
     /// Use the builder pattern to deduce which model of authenticator should be used and allow providing a hyper client
     #[cfg(feature = "service_account")]
     pub async fn with_client<C>(
-        opts: ApplicationDefaultCredentialsFlowOpts,
+        opts: InstanceMetadataFlowOpts,
         client: C,
     ) -> ApplicationDefaultCredentialsTypes<C>
     where
         C: HyperClientBuilder,
     {
-        match ApplicationDefaultCredentialsAuthenticator::from_environment().await {
-            Ok(flow_opts) => {
-                let builder = AuthenticatorBuilder::new(flow_opts, client);
-
-                ApplicationDefaultCredentialsTypes::ServiceAccount(builder)
-            }
-            Err(_) => ApplicationDefaultCredentialsTypes::InstanceMetadata(
-                AuthenticatorBuilder::new(opts, client),
-            ),
+        if let Ok(flow_opts) = ApplicationDefaultCredentialsAuthenticator::from_environment().await
+        {
+            let builder = AuthenticatorBuilder::new(flow_opts, client);
+            ApplicationDefaultCredentialsTypes::ServiceAccount(builder)
+        } else if let Ok(user_opts) =
+            ApplicationDefaultCredentialsAuthenticator::from_user_credentials().await
+        {
+            let builder = AuthenticatorBuilder::new(user_opts, client);
+            ApplicationDefaultCredentialsTypes::AuthorizedUser(builder)
+        } else {
+            ApplicationDefaultCredentialsTypes::InstanceMetadata(AuthenticatorBuilder::new(
+                opts, client,
+            ))
         }
     }
 }
@@ -374,8 +393,65 @@ where
     /// Service account based authenticator signature
     #[cfg(feature = "service_account")]
     ServiceAccount(AuthenticatorBuilder<C, ServiceAccountFlowOpts>),
+    /// User account authentication
+    AuthorizedUser(AuthenticatorBuilder<C, AuthorizedUserFlow>),
     /// GCE Instance Metadata based authenticator signature
-    InstanceMetadata(AuthenticatorBuilder<C, ApplicationDefaultCredentialsFlowOpts>),
+    InstanceMetadata(AuthenticatorBuilder<C, InstanceMetadataFlowOpts>),
+}
+
+impl<C> ApplicationDefaultCredentialsTypes<C>
+where
+    C: HyperClientBuilder,
+{
+    /// Create an authenticator using whichever credentials type was selected.
+    pub async fn build(self) -> Result<Authenticator<C::Connector>, Error> {
+        match self {
+            ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => Ok(auth.build().await?),
+            #[cfg(feature = "service_account")]
+            ApplicationDefaultCredentialsTypes::ServiceAccount(auth) => Ok(auth.build().await?),
+            ApplicationDefaultCredentialsTypes::AuthorizedUser(auth) => Ok(auth.build().await?),
+        }
+    }
+}
+
+/// Create an authenticator that uses a metadata server to access service account credentials.
+///
+/// Note that this is the final fallback in the Application Default Credentials flow,
+/// so you may want to use [`ApplicationDefaultCredentialsAuthenticator`] instead of
+/// using this directly.
+///
+/// ```
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # async fn foo() {
+/// # use yup_oauth2::authenticator::AuthorizedUserAuthenticator;
+/// # let secret = yup_oauth2::read_authorized_user_secret("/tmp/foo").await.unwrap();
+///     let authenticator = yup_oauth2::InstanceMetadataAuthenticator::builder(Default::default())
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
+pub struct InstanceMetadataAuthenticator;
+impl InstanceMetadataAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses a a metadata server.
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+    #[cfg_attr(
+        yup_oauth2_docsrs,
+        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
+    )]
+    pub fn builder(
+        opts: InstanceMetadataFlowOpts,
+    ) -> AuthenticatorBuilder<DefaultHyperClient, InstanceMetadataFlowOpts> {
+        Self::with_client(opts, DefaultHyperClient)
+    }
+
+    /// Construct a new Authenticator that uses the metadata server and the provided http client.
+    pub fn with_client<C>(
+        opts: InstanceMetadataFlowOpts,
+        client: C,
+    ) -> AuthenticatorBuilder<C, InstanceMetadataFlowOpts> {
+        AuthenticatorBuilder::new(opts, client)
+    }
 }
 
 /// Create an authenticator that uses an authorized user credentials.
@@ -734,18 +810,17 @@ impl<C> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
     }
 }
 
-impl<C> AuthenticatorBuilder<C, ApplicationDefaultCredentialsFlowOpts> {
+impl<C> AuthenticatorBuilder<C, InstanceMetadataFlowOpts> {
     /// Create the authenticator.
     pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
     where
         C: HyperClientBuilder,
     {
-        let application_default_credential_flow =
-            ApplicationDefaultCredentialsFlow::new(self.auth_flow);
+        let instance_metadata_flow = InstanceMetadataFlow::new(self.auth_flow);
         Self::common_build(
             self.hyper_client_builder,
             self.storage_type,
-            AuthFlow::ApplicationDefaultCredentialsFlow(application_default_credential_flow),
+            AuthFlow::ApplicationDefaultCredentialsFlow(instance_metadata_flow),
         )
         .await
     }
@@ -809,7 +884,7 @@ impl<C> AuthenticatorBuilder<C, AccessTokenFlow> {
 }
 mod private {
     use crate::access_token::AccessTokenFlow;
-    use crate::application_default_credentials::ApplicationDefaultCredentialsFlow;
+    use crate::application_default_credentials::InstanceMetadataFlow;
     use crate::authenticator::{AsyncRead, AsyncWrite, Connection, Service, StdError, Uri};
     use crate::authorized_user::AuthorizedUserFlow;
     use crate::device::DeviceFlow;
@@ -826,7 +901,7 @@ mod private {
         #[cfg(feature = "service_account")]
         ServiceAccountFlow(ServiceAccountFlow),
         ServiceAccountImpersonationFlow(ServiceAccountImpersonationFlow),
-        ApplicationDefaultCredentialsFlow(ApplicationDefaultCredentialsFlow),
+        ApplicationDefaultCredentialsFlow(InstanceMetadataFlow),
         AuthorizedUserFlow(AuthorizedUserFlow),
         AccessTokenFlow(AccessTokenFlow),
     }

@@ -1,10 +1,9 @@
 use yup_oauth2::{
     authenticator::{DefaultAuthenticator, DefaultHyperClient, HyperClientBuilder},
     authenticator_delegate::{DeviceAuthResponse, DeviceFlowDelegate, InstalledFlowDelegate},
-    ApplicationDefaultCredentialsAuthenticator, ApplicationDefaultCredentialsFlowOpts,
-    ApplicationSecret, DeviceFlowAuthenticator, InstalledFlowAuthenticator,
-    InstalledFlowReturnMethod, ServiceAccountAuthenticator, ServiceAccountKey,
-    AccessTokenAuthenticator,
+    AccessTokenAuthenticator, ApplicationSecret, DeviceFlowAuthenticator,
+    InstalledFlowAuthenticator, InstalledFlowReturnMethod, InstanceMetadataAuthenticator,
+    InstanceMetadataFlowOpts, ServiceAccountAuthenticator, ServiceAccountKey,
 };
 
 use std::future::Future;
@@ -93,7 +92,10 @@ async fn test_device_success() {
         .token(&["https://www.googleapis.com/scope/1"])
         .await
         .expect("token failed");
-    assert_eq!("accesstoken", token.token().expect("should have access token"));
+    assert_eq!(
+        "accesstoken",
+        token.token().expect("should have access token")
+    );
 }
 
 #[tokio::test]
@@ -215,7 +217,7 @@ async fn create_installed_flow_auth(
         }
     }
 
-    let client =  DefaultHyperClient.build_test_hyper_client();
+    let client = DefaultHyperClient.build_test_hyper_client();
     let mut builder = InstalledFlowAuthenticator::with_client(app_secret, method, client.clone())
         .flow_delegate(Box::new(FD(client)));
 
@@ -254,7 +256,10 @@ async fn test_installed_interactive_success() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken", tok.token().expect("should have access token"));
+    assert_eq!(
+        "accesstoken",
+        tok.token().expect("should have access token")
+    );
 }
 
 #[tokio::test]
@@ -283,7 +288,10 @@ async fn test_installed_redirect_success() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken", tok.token().expect("should have access token"));
+    assert_eq!(
+        "accesstoken",
+        tok.token().expect("should have access token")
+    );
 }
 
 #[tokio::test]
@@ -352,8 +360,13 @@ async fn test_service_account_success() {
         .token(&["https://www.googleapis.com/auth/pubsub"])
         .await
         .expect("token failed");
-    assert!(tok.token().expect("should have access token").contains("ya29.c.ElouBywiys0Ly"));
-    assert!(OffsetDateTime::now_utc() + time::Duration::seconds(3600) >= tok.expiration_time().unwrap());
+    assert!(tok
+        .token()
+        .expect("should have access token")
+        .contains("ya29.c.ElouBywiys0Ly"));
+    assert!(
+        OffsetDateTime::now_utc() + time::Duration::seconds(3600) >= tok.expiration_time().unwrap()
+    );
 }
 
 #[tokio::test]
@@ -403,7 +416,10 @@ async fn test_refresh() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken", tok.token().expect("should have access token"));
+    assert_eq!(
+        "accesstoken",
+        tok.token().expect("should have access token")
+    );
 
     server.expect(
         Expectation::matching(all_of![
@@ -424,7 +440,10 @@ async fn test_refresh() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken2", tok.token().expect("should have access token"));
+    assert_eq!(
+        "accesstoken2",
+        tok.token().expect("should have access token")
+    );
 
     server.expect(
         Expectation::matching(all_of![
@@ -445,7 +464,10 @@ async fn test_refresh() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!("accesstoken3", tok.token().expect("should have access token"));
+    assert_eq!(
+        "accesstoken3",
+        tok.token().expect("should have access token")
+    );
 
     // Refresh fails, but renewing the token succeeds.
     // PR #165
@@ -477,9 +499,7 @@ async fn test_refresh() {
         }))),
     );
 
-    let tok_err = auth
-        .token(&["https://googleapis.com/some/scope"])
-        .await;
+    let tok_err = auth.token(&["https://googleapis.com/some/scope"]).await;
     assert!(tok_err.is_ok());
 }
 
@@ -515,7 +535,10 @@ async fn test_memory_storage() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!(token1.token().expect("should have access token"), "accesstoken");
+    assert_eq!(
+        token1.token().expect("should have access token"),
+        "accesstoken"
+    );
     assert_eq!(token1, token2);
 
     // Create a new authenticator. This authenticator does not share a cache
@@ -541,7 +564,10 @@ async fn test_memory_storage() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!(token3.token().expect("should have access token"), "accesstoken2");
+    assert_eq!(
+        token3.token().expect("should have access token"),
+        "accesstoken2"
+    );
 }
 
 #[tokio::test]
@@ -583,7 +609,10 @@ async fn test_disk_storage() {
             .token(&["https://googleapis.com/some/scope"])
             .await
             .expect("failed to get token");
-        assert_eq!(token1.token().expect("should have access token"), "accesstoken");
+        assert_eq!(
+            token1.token().expect("should have access token"),
+            "accesstoken"
+        );
         assert_eq!(token1, token2);
     }
 
@@ -605,13 +634,15 @@ async fn test_disk_storage() {
         .token(&["https://googleapis.com/some/scope"])
         .await
         .expect("failed to get token");
-    assert_eq!(token1.token().expect("should have access token"), "accesstoken");
+    assert_eq!(
+        token1.token().expect("should have access token"),
+        "accesstoken"
+    );
     assert_eq!(token1, token2);
 }
 
 #[tokio::test]
 async fn test_default_application_credentials_from_metadata_server() {
-    use yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
     let _ = env_logger::try_init();
     let server = Server::run();
     server.expect(
@@ -630,29 +661,39 @@ async fn test_default_application_credentials_from_metadata_server() {
         }))),
     );
 
-    let opts = ApplicationDefaultCredentialsFlowOpts {
+    let opts = InstanceMetadataFlowOpts {
         metadata_url: Some(server.url("/token").to_string()),
     };
-    let authenticator = match ApplicationDefaultCredentialsAuthenticator::with_client(opts, DefaultHyperClient.build_test_hyper_client()).await {
-        ApplicationDefaultCredentialsTypes::InstanceMetadata(auth) => auth.build().await.unwrap(),
-        _ => panic!("We are not testing service account adc model"),
-    };
+    let authenticator = InstanceMetadataAuthenticator::with_client(
+        opts,
+        DefaultHyperClient.build_test_hyper_client(),
+    )
+    .build()
+    .await
+    .unwrap();
     let access_token = authenticator
         .token(&["https://googleapis.com/some/scope"])
         .await
         .unwrap();
-    assert_eq!(access_token.token().expect("should have access token"), "accesstoken");
+    assert_eq!(
+        access_token.token().expect("should have access token"),
+        "accesstoken"
+    );
 }
 
 #[tokio::test]
 async fn test_token() {
-    let authenticator = AccessTokenAuthenticator::with_client("0815".to_string(), DefaultHyperClient)
-	.build()
-	.await
-	.unwrap();
+    let authenticator =
+        AccessTokenAuthenticator::with_client("0815".to_string(), DefaultHyperClient)
+            .build()
+            .await
+            .unwrap();
     let access_token = authenticator
         .token(&["https://googleapis.com/some/scope"])
         .await
         .unwrap();
-    assert_eq!(access_token.token().expect("should have access token"), "0815".to_string());
+    assert_eq!(
+        access_token.token().expect("should have access token"),
+        "0815".to_string()
+    );
 }
