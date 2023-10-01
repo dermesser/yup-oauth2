@@ -5,6 +5,7 @@
 //
 // Refer to the project root for licensing information.
 use crate::authorized_user::AuthorizedUserSecret;
+use crate::external_account::ExternalAccountSecret;
 use crate::types::{ApplicationSecret, ConsoleApplicationSecret};
 
 #[cfg(feature = "service_account")]
@@ -71,6 +72,19 @@ pub async fn read_authorized_user_secret<P: AsRef<Path>>(
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("Bad authorized user secret: {}", e),
+        )
+    })
+}
+
+/// Read an external account secret from a JSON file.
+pub async fn read_external_account_secret<P: AsRef<Path>>(
+    path: P,
+) -> io::Result<ExternalAccountSecret> {
+    let key = tokio::fs::read(path).await?;
+    serde_json::from_slice(&key).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Bad external account secret: {}", e),
         )
     })
 }
