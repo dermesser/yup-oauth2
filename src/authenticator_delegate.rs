@@ -96,7 +96,7 @@ async fn present_user_code(device_auth_resp: &DeviceAuthResponse) {
     println!("Do not close this application until you either denied or granted access.");
     let printable_time = match UtcOffset::current_local_offset() {
         Ok(offset) => device_auth_resp.expires_at.to_offset(offset),
-        Err(_) => device_auth_resp.expires_at,  // Fallback to printing in UTC
+        Err(_) => device_auth_resp.expires_at, // Fallback to printing in UTC
     };
     println!("You have time until {}.", printable_time);
 }
@@ -162,5 +162,7 @@ impl InstalledFlowDelegate for DefaultInstalledFlowDelegate {}
 #[derive(Clone)]
 pub struct DefaultInstalledFlowDelegateWithRedirectURI(pub String);
 impl InstalledFlowDelegate for DefaultInstalledFlowDelegateWithRedirectURI {
-    fn redirect_uri(&self) -> Option<&str> { Some(self.0.as_str()) }
+    fn redirect_uri(&self) -> Option<&str> {
+        Some(self.0.as_str())
+    }
 }

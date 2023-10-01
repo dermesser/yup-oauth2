@@ -7,8 +7,8 @@
 
 use std::error::Error as StdError;
 
-use hyper::client::connect::Connection;
 use http::Uri;
+use hyper::client::connect::Connection;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower_service::Service;
 
