@@ -64,7 +64,16 @@ impl ApplicationDefaultCredentialsFlow {
         let (head, body) = hyper_client.request(request).await?.into_parts();
         let body = hyper::body::to_bytes(body).await?;
         log::debug!("received response; head: {:?}, body: {:?}", head, body);
-        TokenInfo::from_json(&body)
+        if self.id_token {
+            Ok(TokenInfo {
+                id_token: Some(String::from_utf8(body.to_vec())?),
+                access_token: None,
+                refresh_token: None,
+                expires_at: None,
+            })
+        } else {
+            TokenInfo::from_json(&body)
+        }
     }
 }
 
