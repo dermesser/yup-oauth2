@@ -25,9 +25,9 @@ impl ApplicationDefaultCredentialsFlow {
         let id_token = opts.id_token;
         let metadata_url = opts.metadata_url
             .unwrap_or_else(|| if id_token {
-                 "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token".to_string()
-            } else {
                  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity".to_string()
+            } else {
+                 "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token".to_string()
             });
         ApplicationDefaultCredentialsFlow {
             metadata_url,
