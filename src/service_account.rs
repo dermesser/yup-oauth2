@@ -16,20 +16,20 @@
 use crate::error::Error;
 use crate::types::TokenInfo;
 
-use std::{io, path::PathBuf, error::Error as StdError};
+use std::{error::Error as StdError, io, path::PathBuf};
 
+use http::Uri;
 use hyper::client::connect::Connection;
 use hyper::header;
-use http::Uri;
 use rustls::{
     self,
     sign::{self, SigningKey},
     PrivateKey,
 };
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower_service::Service;
-use time::OffsetDateTime;
 use url::form_urlencoded;
 
 const GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:jwt-bearer";

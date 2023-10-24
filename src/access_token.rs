@@ -7,8 +7,8 @@
 //! access token of the other service by generating a new token.
 use crate::error::Error;
 use crate::types::TokenInfo;
-use hyper::client::connect::Connection;
 use http::Uri;
+use hyper::client::connect::Connection;
 use std::error::Error as StdError;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower_service::Service;

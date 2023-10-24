@@ -1,8 +1,8 @@
 use crate::error::Error;
 use crate::types::TokenInfo;
+use http::Uri;
 use hyper::client::connect::Connection;
 use std::error::Error as StdError;
-use http::Uri;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower_service::Service;
 

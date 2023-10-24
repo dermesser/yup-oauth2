@@ -12,9 +12,9 @@ use std::error::Error as StdError;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use http::Uri;
 use hyper::client::connect::Connection;
 use hyper::header;
-use http::Uri;
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::oneshot;
@@ -62,9 +62,7 @@ where
     if force_account_selection {
         params.push("&prompt=select_account+consent".to_string());
     }
-    params
-    .into_iter()
-    .fold(url, |mut u, param| {
+    params.into_iter().fold(url, |mut u, param| {
         u.push_str(&percent_encode(param.as_ref(), &QUERY_SET).to_string());
         u
     })
@@ -114,7 +112,7 @@ impl InstalledFlow {
             app_secret,
             method,
             flow_delegate: Box::new(DefaultInstalledFlowDelegate),
-            force_account_selection: false
+            force_account_selection: false,
         }
     }
 
@@ -139,7 +137,7 @@ impl InstalledFlow {
         match self.method {
             InstalledFlowReturnMethod::HTTPRedirect => {
                 self.ask_auth_code_via_http(hyper_client, None, &self.app_secret, scopes)
-                .await
+                    .await
             }
             InstalledFlowReturnMethod::HTTPPortRedirect(port) => {
                 self.ask_auth_code_via_http(hyper_client, Some(port), &self.app_secret, scopes)
@@ -303,7 +301,7 @@ impl InstalledFlowServer {
         });
         let addr: std::net::SocketAddr = match port {
             Some(port) => ([127, 0, 0, 1], port).into(),
-            None => ([127, 0, 0, 1], 0).into()
+            None => ([127, 0, 0, 1], 0).into(),
         };
         let server = hyper::server::Server::try_bind(&addr)?;
         let server = server.http1_only(true).serve(service);

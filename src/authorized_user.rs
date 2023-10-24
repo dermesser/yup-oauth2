@@ -6,9 +6,9 @@
 //!
 use crate::error::Error;
 use crate::types::TokenInfo;
+use http::Uri;
 use hyper::client::connect::Connection;
 use hyper::header;
-use http::Uri;
 use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
 use tokio::io::{AsyncRead, AsyncWrite};

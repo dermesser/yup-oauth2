@@ -8,12 +8,12 @@ use std::borrow::Cow;
 use std::error::Error as StdError;
 use std::time::Duration;
 
+use http::Uri;
 use hyper::client::connect::Connection;
 use hyper::header;
-use http::Uri;
-use url::form_urlencoded;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower_service::Service;
+use url::form_urlencoded;
 
 pub const GOOGLE_DEVICE_CODE_URL: &str = "https://accounts.google.com/o/oauth2/device/code";
 

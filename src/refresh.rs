@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::types::{ApplicationSecret, TokenInfo};
 
-use http::{Uri};
+use http::Uri;
 use hyper::client::connect::Connection;
 use hyper::header;
 use std::error::Error as StdError;
