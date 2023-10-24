@@ -6,6 +6,7 @@ use crate::authenticator_delegate::{DeviceFlowDelegate, InstalledFlowDelegate};
 use crate::authorized_user::{AuthorizedUserFlow, AuthorizedUserSecret};
 use crate::device::DeviceFlow;
 use crate::error::Error;
+use crate::external_account::{ExternalAccountFlow, ExternalAccountSecret};
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 use crate::refresh::RefreshFlow;
 use crate::service_account_impersonator::ServiceAccountImpersonationFlow;
@@ -417,6 +418,47 @@ impl AuthorizedUserAuthenticator {
         )
     }
 }
+
+/// Create an authenticator that uses an external account credentials.
+/// ```
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # async fn foo() {
+/// # use yup_oauth2::authenticator::ExternalAccountAuthenticator;
+/// # let secret = yup_oauth2::read_external_account_secret("/tmp/foo").await.unwrap();
+///     let authenticator = yup_oauth2::ExternalAccountAuthenticator::builder(secret)
+///         .build()
+///         .await
+///         .expect("failed to create authenticator");
+/// # }
+/// ```
+pub struct ExternalAccountAuthenticator;
+impl ExternalAccountAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses an external account.
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+    #[cfg_attr(
+        yup_oauth2_docsrs,
+        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
+    )]
+    pub fn builder(
+        external_account_secret: ExternalAccountSecret,
+    ) -> AuthenticatorBuilder<DefaultHyperClient, ExternalAccountFlow> {
+        Self::with_client(external_account_secret, DefaultHyperClient)
+    }
+
+    /// Construct a new Authenticator that uses the installed flow and the provided http client.
+    pub fn with_client<C>(
+        external_account_secret: ExternalAccountSecret,
+        client: C,
+    ) -> AuthenticatorBuilder<C, ExternalAccountFlow> {
+        AuthenticatorBuilder::new(
+            ExternalAccountFlow {
+                secret: external_account_secret,
+            },
+            client,
+        )
+    }
+}
+
 /// Create a access token authenticator for use with pre-generated
 /// access tokens
 /// ```
@@ -767,6 +809,22 @@ impl<C> AuthenticatorBuilder<C, AuthorizedUserFlow> {
     }
 }
 
+/// ## Methods available when building an external account flow Authenticator.
+impl<C> AuthenticatorBuilder<C, ExternalAccountFlow> {
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            AuthFlow::ExternalAccountFlow(self.auth_flow),
+        )
+        .await
+    }
+}
+
 /// ## Methods available when building a service account impersonation Authenticator.
 impl<C> AuthenticatorBuilder<C, ServiceAccountImpersonationFlow> {
     /// Create the authenticator.
@@ -814,6 +872,7 @@ mod private {
     use crate::authorized_user::AuthorizedUserFlow;
     use crate::device::DeviceFlow;
     use crate::error::Error;
+    use crate::external_account::ExternalAccountFlow;
     use crate::installed::InstalledFlow;
     #[cfg(feature = "service_account")]
     use crate::service_account::ServiceAccountFlow;
@@ -828,6 +887,7 @@ mod private {
         ServiceAccountImpersonationFlow(ServiceAccountImpersonationFlow),
         ApplicationDefaultCredentialsFlow(ApplicationDefaultCredentialsFlow),
         AuthorizedUserFlow(AuthorizedUserFlow),
+        ExternalAccountFlow(ExternalAccountFlow),
         AccessTokenFlow(AccessTokenFlow),
     }
 
@@ -841,6 +901,7 @@ mod private {
                 AuthFlow::ServiceAccountImpersonationFlow(_) => None,
                 AuthFlow::ApplicationDefaultCredentialsFlow(_) => None,
                 AuthFlow::AuthorizedUserFlow(_) => None,
+                AuthFlow::ExternalAccountFlow(_) => None,
                 AuthFlow::AccessTokenFlow(_) => None,
             }
         }
@@ -876,6 +937,9 @@ mod private {
                 }
                 AuthFlow::AuthorizedUserFlow(authorized_user_flow) => {
                     authorized_user_flow.token(hyper_client, scopes).await
+                }
+                AuthFlow::ExternalAccountFlow(external_account_flow) => {
+                    external_account_flow.token(hyper_client, scopes).await
                 }
                 AuthFlow::AccessTokenFlow(access_token_flow) => {
                     access_token_flow.token(hyper_client, scopes).await

@@ -121,45 +121,6 @@ impl ServiceAccountImpersonationFlow {
         }
     }
 
-    fn access_request(
-        &self,
-        inner_token: &str,
-        scopes: &[&str],
-    ) -> Result<hyper::Request<hyper::Body>, Error> {
-        let req_body = Request {
-            scope: scopes,
-            // Max validity is 1h.
-            lifetime: "3600s",
-        };
-        let req_body = serde_json::to_vec(&req_body)?;
-        Ok(hyper::Request::post(uri(&self.service_account_email))
-            .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
-            .header(header::CONTENT_LENGTH, req_body.len())
-            .header(header::AUTHORIZATION, format!("Bearer {}", inner_token))
-            .body(req_body.into())
-            .unwrap())
-    }
-
-    fn id_request(
-        &self,
-        inner_token: &str,
-        scopes: &[&str],
-    ) -> Result<hyper::Request<hyper::Body>, Error> {
-        // Only one audience is supported.
-        let audience = scopes.first().unwrap_or(&"");
-        let req_body = IdRequest {
-            audience,
-            include_email: true,
-        };
-        let req_body = serde_json::to_vec(&req_body)?;
-        Ok(hyper::Request::post(id_uri(&self.service_account_email))
-            .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
-            .header(header::CONTENT_LENGTH, req_body.len())
-            .header(header::AUTHORIZATION, format!("Bearer {}", inner_token))
-            .body(req_body.into())
-            .unwrap())
-    }
-
     pub(crate) async fn token<S, T>(
         &self,
         hyper_client: &hyper::Client<S>,
@@ -178,25 +139,91 @@ impl ServiceAccountImpersonationFlow {
             .await?
             .access_token
             .ok_or(Error::MissingAccessToken)?;
+        token_impl(
+            hyper_client,
+            &if self.access_token {
+                uri(&self.service_account_email)
+            } else {
+                id_uri(&self.service_account_email)
+            },
+            self.access_token,
+            &inner_token,
+            scopes,
+        )
+        .await
+    }
+}
 
-        let scopes: Vec<_> = scopes.iter().map(|s| s.as_ref()).collect();
-        let request = if self.access_token {
-            self.access_request(&inner_token, &scopes)?
-        } else {
-            self.id_request(&inner_token, &scopes)?
-        };
+fn access_request(
+    uri: &str,
+    inner_token: &str,
+    scopes: &[&str],
+) -> Result<hyper::Request<hyper::Body>, Error> {
+    let req_body = Request {
+        scope: scopes,
+        // Max validity is 1h.
+        lifetime: "3600s",
+    };
+    let req_body = serde_json::to_vec(&req_body)?;
+    Ok(hyper::Request::post(uri)
+        .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
+        .header(header::CONTENT_LENGTH, req_body.len())
+        .header(header::AUTHORIZATION, format!("Bearer {}", inner_token))
+        .body(req_body.into())
+        .unwrap())
+}
 
-        log::debug!("requesting impersonated token {:?}", request);
-        let (head, body) = hyper_client.request(request).await?.into_parts();
-        let body = hyper::body::to_bytes(body).await?;
-        log::debug!("received response; head: {:?}, body: {:?}", head, body);
+fn id_request(
+    uri: &str,
+    inner_token: &str,
+    scopes: &[&str],
+) -> Result<hyper::Request<hyper::Body>, Error> {
+    // Only one audience is supported.
+    let audience = scopes.first().unwrap_or(&"");
+    let req_body = IdRequest {
+        audience,
+        include_email: true,
+    };
+    let req_body = serde_json::to_vec(&req_body)?;
+    Ok(hyper::Request::post(uri)
+        .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
+        .header(header::CONTENT_LENGTH, req_body.len())
+        .header(header::AUTHORIZATION, format!("Bearer {}", inner_token))
+        .body(req_body.into())
+        .unwrap())
+}
 
-        if self.access_token {
-            let response: TokenResponse = serde_json::from_slice(&body)?;
-            Ok(response.into())
-        } else {
-            let response: IdTokenResponse = serde_json::from_slice(&body)?;
-            Ok(response.into())
-        }
+pub(crate) async fn token_impl<S, T>(
+    hyper_client: &hyper::Client<S>,
+    uri: &str,
+    access_token: bool,
+    inner_token: &str,
+    scopes: &[T],
+) -> Result<TokenInfo, Error>
+where
+    T: AsRef<str>,
+    S: Service<Uri> + Clone + Send + Sync + 'static,
+    S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    S::Future: Send + Unpin + 'static,
+    S::Error: Into<Box<dyn StdError + Send + Sync>>,
+{
+    let scopes: Vec<_> = scopes.iter().map(|s| s.as_ref()).collect();
+    let request = if access_token {
+        access_request(uri, inner_token, &scopes)?
+    } else {
+        id_request(uri, inner_token, &scopes)?
+    };
+
+    log::debug!("requesting impersonated token {:?}", request);
+    let (head, body) = hyper_client.request(request).await?.into_parts();
+    let body = hyper::body::to_bytes(body).await?;
+    log::debug!("received response; head: {:?}, body: {:?}", head, body);
+
+    if access_token {
+        let response: TokenResponse = serde_json::from_slice(&body)?;
+        Ok(response.into())
+    } else {
+        let response: IdTokenResponse = serde_json::from_slice(&body)?;
+        Ok(response.into())
     }
 }

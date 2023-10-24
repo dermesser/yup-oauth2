@@ -79,6 +79,7 @@ pub mod authenticator_delegate;
 pub mod authorized_user;
 mod device;
 pub mod error;
+pub mod external_account;
 mod helper;
 mod installed;
 mod refresh;
@@ -104,8 +105,8 @@ pub use crate::authenticator::ServiceAccountAuthenticator;
 #[doc(inline)]
 pub use crate::authenticator::{
     AccessTokenAuthenticator, ApplicationDefaultCredentialsAuthenticator,
-    AuthorizedUserAuthenticator, DeviceFlowAuthenticator, InstalledFlowAuthenticator,
-    ServiceAccountImpersonationAuthenticator,
+    AuthorizedUserAuthenticator, DeviceFlowAuthenticator, ExternalAccountAuthenticator,
+    InstalledFlowAuthenticator, ServiceAccountImpersonationAuthenticator,
 };
 
 pub use crate::helper::*;
