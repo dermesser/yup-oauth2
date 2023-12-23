@@ -18,6 +18,7 @@ use crate::types::TokenInfo;
 
 use std::{error::Error as StdError, io, path::PathBuf};
 
+use base64::Engine as _;
 use http::Uri;
 use hyper::client::connect::Connection;
 use hyper::header;
@@ -37,7 +38,7 @@ const GOOGLE_RS256_HEAD: &str = r#"{"alg":"RS256","typ":"JWT"}"#;
 
 /// Encodes s as Base64
 fn append_base64<T: AsRef<[u8]> + ?Sized>(s: &T, out: &mut String) {
-    base64::encode_config_buf(s, base64::URL_SAFE, out)
+    base64::engine::general_purpose::URL_SAFE.encode_string(s, out)
 }
 
 /// Decode a PKCS8 formatted RSA key.
