@@ -249,6 +249,7 @@ mod tests {
         let client = hyper::Client::builder().build(
             hyper_rustls::HttpsConnectorBuilder::new()
                 .with_native_roots()
+                .unwrap()
                 .https_only()
                 .enable_http1()
                 .enable_http2()
