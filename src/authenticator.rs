@@ -563,7 +563,13 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     where
         C: HyperClientBuilder,
     {
-        let hyper_client = hyper_client_builder.build_hyper_client();
+        let hyper_client = hyper_client_builder.build_hyper_client().map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("failed to build hyper client: {}", err),
+            )
+        })?;
+
         let storage = match storage_type {
             StorageType::Memory => Storage::Memory {
                 tokens: Mutex::new(storage::JSONTokens::new()),
@@ -955,7 +961,7 @@ pub trait HyperClientBuilder {
     type Connector: Service<Uri> + Clone + Send + Sync + 'static;
 
     /// Create a hyper::Client
-    fn build_hyper_client(self) -> hyper::Client<Self::Connector>;
+    fn build_hyper_client(self) -> Result<hyper::Client<Self::Connector>, Error>;
 
     /// Create a `hyper::Client` for tests (HTTPS not required)
     #[doc(hidden)]
@@ -999,10 +1005,10 @@ impl HyperClientBuilder for DefaultHyperClient {
     #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
     type Connector = hyper_tls::HttpsConnector<hyper::client::connect::HttpConnector>;
 
-    fn build_hyper_client(self) -> hyper::Client<Self::Connector> {
+    fn build_hyper_client(self) -> Result<hyper::Client<Self::Connector>, Error> {
         #[cfg(feature = "hyper-rustls")]
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_native_roots()
+            .with_native_roots()?
             .https_or_http()
             .enable_http1()
             .enable_http2()
@@ -1010,15 +1016,16 @@ impl HyperClientBuilder for DefaultHyperClient {
         #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
         let connector = hyper_tls::HttpsConnector::new();
 
-        hyper::Client::builder()
+        Ok(hyper::Client::builder()
             .pool_max_idle_per_host(0)
-            .build::<_, hyper::Body>(connector)
+            .build::<_, hyper::Body>(connector))
     }
 
     fn build_test_hyper_client(self) -> hyper::Client<Self::Connector> {
         #[cfg(feature = "hyper-rustls")]
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
             .with_native_roots()
+            .unwrap()
             .https_or_http()
             .enable_http1()
             .enable_http2()
@@ -1041,8 +1048,8 @@ where
 {
     type Connector = S;
 
-    fn build_hyper_client(self) -> hyper::Client<S> {
-        self
+    fn build_hyper_client(self) -> Result<hyper::Client<S>, Error> {
+        Ok(self)
     }
 
     fn build_test_hyper_client(self) -> hyper::Client<Self::Connector> {
