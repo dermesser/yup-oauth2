@@ -5,7 +5,8 @@
 //! - [service account impersonation](https://cloud.google.com/iam/docs/create-short-lived-credentials-direct#sa-credentials-oauth)
 
 use http::{header, Uri};
-use hyper::client::connect::Connection;
+use http_body_util::BodyExt;
+use hyper_util::client::legacy::connect::{Connect, Connection};
 use serde::Serialize;
 use std::error::Error as StdError;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -123,7 +124,7 @@ impl ServiceAccountImpersonationFlow {
 
     pub(crate) async fn token<S, T>(
         &self,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<S, String>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
@@ -158,7 +159,7 @@ fn access_request(
     uri: &str,
     inner_token: &str,
     scopes: &[&str],
-) -> Result<hyper::Request<hyper::Body>, Error> {
+) -> Result<hyper::Request<String>, Error> {
     let req_body = Request {
         scope: scopes,
         // Max validity is 1h.
@@ -169,7 +170,7 @@ fn access_request(
         .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
         .header(header::CONTENT_LENGTH, req_body.len())
         .header(header::AUTHORIZATION, format!("Bearer {}", inner_token))
-        .body(req_body.into())
+        .body(String::from_utf8_lossy(&req_body).into_owned())
         .unwrap())
 }
 
@@ -177,7 +178,7 @@ fn id_request(
     uri: &str,
     inner_token: &str,
     scopes: &[&str],
-) -> Result<hyper::Request<hyper::Body>, Error> {
+) -> Result<hyper::Request<String>, Error> {
     // Only one audience is supported.
     let audience = scopes.first().unwrap_or(&"");
     let req_body = IdRequest {
@@ -189,12 +190,12 @@ fn id_request(
         .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
         .header(header::CONTENT_LENGTH, req_body.len())
         .header(header::AUTHORIZATION, format!("Bearer {}", inner_token))
-        .body(req_body.into())
+        .body(String::from_utf8_lossy(&req_body).into_owned())
         .unwrap())
 }
 
 pub(crate) async fn token_impl<S, T>(
-    hyper_client: &hyper::Client<S>,
+    hyper_client: &hyper_util::client::legacy::Client<S, String>,
     uri: &str,
     access_token: bool,
     inner_token: &str,
@@ -202,7 +203,7 @@ pub(crate) async fn token_impl<S, T>(
 ) -> Result<TokenInfo, Error>
 where
     T: AsRef<str>,
-    S: Service<Uri> + Clone + Send + Sync + 'static,
+    S: Service<Uri> + Connect + Clone + Send + Sync + 'static,
     S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
     S::Future: Send + Unpin + 'static,
     S::Error: Into<Box<dyn StdError + Send + Sync>>,
@@ -215,8 +216,8 @@ where
     };
 
     log::debug!("requesting impersonated token {:?}", request);
-    let (head, body) = hyper_client.request(request).await?.into_parts();
-    let body = hyper::body::to_bytes(body).await?;
+    let (head, body) = hyper_client.request(request).await.map_err(|err| Error::OtherError(err.into()))?.into_parts();
+    let body = body.collect().await?.to_bytes();
     log::debug!("received response; head: {:?}, body: {:?}", head, body);
 
     if access_token {

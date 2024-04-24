@@ -175,7 +175,7 @@ async fn create_installed_flow_auth(
         "client_secret": "iuMPN6Ne1PD7cos29Tk9rlqH",
         "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob","http://localhost"],
     });
-    struct FD(hyper::Client<<DefaultHyperClient as HyperClientBuilder>::Connector>);
+    struct FD(hyper_util::client::legacy::Client<<DefaultHyperClient as HyperClientBuilder>::Connector>);
     impl InstalledFlowDelegate for FD {
         /// Depending on need_code, return the pre-set code or send the code to the server at
         /// the redirect_uri given in the url.

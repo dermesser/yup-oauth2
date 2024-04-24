@@ -9,7 +9,8 @@ use std::error::Error as StdError;
 use std::time::Duration;
 
 use http::Uri;
-use hyper::client::connect::Connection;
+use http_body_util::BodyExt;
+use hyper_util::client::legacy::connect::{Connect, Connection};
 use hyper::header;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower_service::Service;
@@ -45,7 +46,7 @@ impl DeviceFlow {
 
     pub(crate) async fn token<S, T>(
         &self,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<S, String>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
@@ -77,7 +78,7 @@ impl DeviceFlow {
 
     async fn wait_for_device_token<S>(
         &self,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<S, String>,
         app_secret: &ApplicationSecret,
         device_auth_resp: &DeviceAuthResponse,
         grant_type: &str,
@@ -137,13 +138,13 @@ impl DeviceFlow {
     /// See test-cases in source code for a more complete example.
     async fn request_code<S, T>(
         application_secret: &ApplicationSecret,
-        client: &hyper::Client<S>,
+        client: &hyper_util::client::legacy::Client<S, String>,
         device_code_url: &str,
         scopes: &[T],
     ) -> Result<DeviceAuthResponse, Error>
     where
         T: AsRef<str>,
-        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Connect + Clone + Send + Sync + 'static,
         S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
         S::Future: Send + Unpin + 'static,
         S::Error: Into<Box<dyn StdError + Send + Sync>>,
@@ -159,11 +160,11 @@ impl DeviceFlow {
         // https://github.com/rust-lang/rust/issues/22252
         let req = hyper::Request::post(device_code_url)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body(hyper::Body::from(req))
+            .body(req)
             .unwrap();
         log::debug!("requesting code from server: {:?}", req);
-        let (head, body) = client.request(req).await?.into_parts();
-        let body = hyper::body::to_bytes(body).await?;
+        let (head, body) = client.request(req).await.map_err(|err| Error::OtherError(err.into()))?.into_parts();
+        let body = body.collect().await?.to_bytes();
         log::debug!("received response; head: {:?}, body: {:?}", head, body);
         DeviceAuthResponse::from_json(&body)
     }
@@ -188,12 +189,12 @@ impl DeviceFlow {
     /// See test-cases in source code for a more complete example.
     async fn poll_token<'a, S>(
         application_secret: &ApplicationSecret,
-        client: &hyper::Client<S>,
+        client: &hyper_util::client::legacy::Client<S, String>,
         device_code: &str,
         grant_type: &str,
     ) -> Result<TokenInfo, Error>
     where
-        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Connect + Clone + Send + Sync + 'static,
         S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
         S::Future: Send + Unpin + 'static,
         S::Error: Into<Box<dyn StdError + Send + Sync>>,
@@ -210,11 +211,11 @@ impl DeviceFlow {
 
         let request = hyper::Request::post(&application_secret.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body(hyper::Body::from(req))
-            .unwrap(); // TODO: Error checking
+            .body(req)
+            .map_err(|err| Error::OtherError(err.into()))?;
         log::debug!("polling for token: {:?}", request);
-        let (head, body) = client.request(request).await?.into_parts();
-        let body = hyper::body::to_bytes(body).await?;
+        let (head, body) = client.request(request).await.map_err(|err| Error::OtherError(err.into()))?.into_parts();
+        let body = body.collect().await?.to_bytes();
         log::debug!("received response; head: {:?} body: {:?}", head, body);
         TokenInfo::from_json(&body)
     }

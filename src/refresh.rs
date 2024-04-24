@@ -2,7 +2,8 @@ use crate::error::Error;
 use crate::types::{ApplicationSecret, TokenInfo};
 
 use http::Uri;
-use hyper::client::connect::Connection;
+use http_body_util::BodyExt;
+use hyper_util::client::legacy::connect::{Connect, Connection};
 use hyper::header;
 use std::error::Error as StdError;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -32,12 +33,12 @@ impl RefreshFlow {
     /// # Examples
     /// Please see the crate landing page for an example.
     pub(crate) async fn refresh_token<S>(
-        client: &hyper::Client<S>,
+        client: &hyper_util::client::legacy::Client<S, String>,
         client_secret: &ApplicationSecret,
         refresh_token: &str,
     ) -> Result<TokenInfo, Error>
     where
-        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Connect + Clone + Send + Sync + 'static,
         S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
         S::Future: Send + Unpin + 'static,
         S::Error: Into<Box<dyn StdError + Send + Sync>>,
@@ -57,11 +58,11 @@ impl RefreshFlow {
 
         let request = hyper::Request::post(&client_secret.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body(hyper::Body::from(req))
+            .body(req)
             .unwrap();
         log::debug!("Sending request: {:?}", request);
-        let (head, body) = client.request(request).await?.into_parts();
-        let body = hyper::body::to_bytes(body).await?;
+        let (head, body) = client.request(request).await.map_err(|err| Error::OtherError(err.into()))?.into_parts();
+        let body = body.collect().await?.to_bytes();
         log::debug!("Received response; head: {:?}, body: {:?}", head, body);
         let mut token = TokenInfo::from_json(&body)?;
         // If the refresh result contains a refresh_token use it, otherwise

@@ -7,7 +7,8 @@
 use crate::error::Error;
 use crate::types::TokenInfo;
 use http::Uri;
-use hyper::client::connect::Connection;
+use http_body_util::BodyExt;
+use hyper_util::client::legacy::connect::{Connect, Connection};
 use hyper::header;
 use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
@@ -44,12 +45,12 @@ impl AuthorizedUserFlow {
     /// Send a request for a new Bearer token to the OAuth provider.
     pub(crate) async fn token<S, T>(
         &self,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<S, String>,
         _scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Connect + Clone + Send + Sync + 'static,
         S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
         S::Future: Send + Unpin + 'static,
         S::Error: Into<Box<dyn StdError + Send + Sync>>,
@@ -65,12 +66,12 @@ impl AuthorizedUserFlow {
 
         let request = hyper::Request::post(TOKEN_URI)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body(hyper::Body::from(req))
+            .body(req)
             .unwrap();
 
         log::debug!("requesting token from authorized user: {:?}", request);
-        let (head, body) = hyper_client.request(request).await?.into_parts();
-        let body = hyper::body::to_bytes(body).await?;
+        let (head, body) = hyper_client.request(request).await.map_err(|err| Error::OtherError(err.into()))?.into_parts();
+        let body = body.collect().await?.to_bytes();
         log::debug!("received response; head: {:?}, body: {:?}", head, body);
         TokenInfo::from_json(&body)
     }

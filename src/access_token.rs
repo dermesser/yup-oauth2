@@ -8,7 +8,7 @@
 use crate::error::Error;
 use crate::types::TokenInfo;
 use http::Uri;
-use hyper::client::connect::Connection;
+use hyper_util::client::legacy::connect::Connection;
 use std::error::Error as StdError;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower_service::Service;
@@ -22,7 +22,7 @@ impl AccessTokenFlow {
     /// just return the access token
     pub(crate) async fn token<S, T>(
         &self,
-        _hyper_client: &hyper::Client<S>,
+        _hyper_client: &hyper_util::client::legacy::Client<S, String>,
         _scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where

@@ -7,8 +7,10 @@
 //!
 use crate::error::Error;
 use crate::types::TokenInfo;
+
 use http::Uri;
-use hyper::client::connect::Connection;
+use http_body_util::BodyExt;
+use hyper_util::client::legacy::connect::{Connect, Connection};
 use hyper::header;
 use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
@@ -60,12 +62,12 @@ impl ExternalAccountFlow {
     /// Send a request for a new Bearer token to the OAuth provider.
     pub(crate) async fn token<S, T>(
         &self,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<S, String>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Connect + Clone + Send + Sync + 'static,
         S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
         S::Future: Send + Unpin + 'static,
         S::Error: Into<Box<dyn StdError + Send + Sync>>,
@@ -104,12 +106,12 @@ impl ExternalAccountFlow {
 
         let request = hyper::Request::post(&self.secret.token_url)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body(hyper::Body::from(req))
-            .unwrap();
+            .body(req)
+            .map_err(|err| Error::OtherError(err.into()))?;
 
         log::debug!("requesting token from external account: {:?}", request);
-        let (head, body) = hyper_client.request(request).await?.into_parts();
-        let body = hyper::body::to_bytes(body).await?;
+        let (head, body) = hyper_client.request(request).await.map_err(|err| Error::OtherError(err.into()))?.into_parts();
+        let body = body.collect().await?.to_bytes();
         log::debug!("received response; head: {:?}, body: {:?}", head, body);
 
         let token_info = TokenInfo::from_json(&body)?;

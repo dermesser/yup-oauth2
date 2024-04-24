@@ -35,14 +35,16 @@ anyhow = "1.0.38"
 async-trait = "^0.1"
 base64 = "0.22"
 futures = "0.3"
-http = "0.2"
-hyper = { version = "0.14", features = ["client", "server", "tcp", "http2"] }
-hyper-rustls = { version = "0.25", optional = true, features = ["http2"] }
-hyper-tls = { version = "0.5.0", optional = true }
+http = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["http2"] }
+hyper-util = "0.1"
+hyper-rustls = { version = "0.27", optional = true, default-features = false, features = ["http2"] }
+hyper-tls = { version = "0.6.0", optional = true }
 itertools = "0.12"
 log = "0.4"
 percent-encoding = "2"
-rustls = { version = "^0.22.1", optional = true }
+rustls = { version = "^0.23", optional = true, features = ["ring"] }
 rustls-pemfile = { version = "1.0.1", optional = true }
 seahash = "4"
 serde = {version = "1.0", features = ["derive"]}
@@ -53,11 +55,11 @@ tower-service = "^0.3.1"
 url = "2"
 
 [dev-dependencies]
-httptest = "0.15"
-env_logger = "0.10"
+httptest = "0.16"
+env_logger = "0.11"
 tempfile = "3.1"
-webbrowser = "0.8"
-hyper-rustls = "0.25"
+webbrowser = "1"
+hyper-rustls = "0.27"
 
 [workspace]
 members = ["examples/test-installed/", "examples/test-svc-acct/", "examples/test-device/", "examples/test-adc"]

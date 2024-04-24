@@ -8,12 +8,12 @@
 use std::error::Error as StdError;
 
 use http::Uri;
-use hyper::client::connect::Connection;
+use hyper_util::client::legacy::connect::Connection;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower_service::Service;
 
 async fn r#use<S>(
-    client: hyper::Client<S>,
+    client: hyper_util::client::legacy::Client<S, String>,
     authenticator: yup_oauth2::authenticator::Authenticator<S>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 where
@@ -41,7 +41,7 @@ async fn main() {
     let secret = yup_oauth2::read_service_account_key(google_credentials)
         .await
         .expect("$GOOGLE_APPLICATION_CREDENTIALS is not a valid service account key");
-    let client = hyper::Client::builder().build(
+    let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new()).build(
         hyper_rustls::HttpsConnectorBuilder::new()
             .with_native_roots()
             .expect("failed to find native root certificates")

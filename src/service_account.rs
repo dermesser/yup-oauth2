@@ -20,8 +20,9 @@ use std::{error::Error as StdError, io, path::PathBuf};
 
 use base64::Engine as _;
 use http::Uri;
-use hyper::client::connect::Connection;
+use http_body_util::BodyExt;
 use hyper::header;
+use hyper_util::client::legacy::connect::{Connect, Connection};
 use rustls::{self, crypto::ring::sign, pki_types::PrivateKeyDer, sign::SigningKey};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -196,12 +197,12 @@ impl ServiceAccountFlow {
     /// Send a request for a new Bearer token to the OAuth provider.
     pub(crate) async fn token<S, T>(
         &self,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<S, String>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Connect + Clone + Send + Sync + 'static,
         S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
         S::Future: Send + Unpin + 'static,
         S::Error: Into<Box<dyn StdError + Send + Sync>>,
@@ -218,11 +219,13 @@ impl ServiceAccountFlow {
             .finish();
         let request = hyper::Request::post(&self.key.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body(hyper::Body::from(rqbody))
+            .body(rqbody)
             .unwrap();
         log::debug!("requesting token from service account: {:?}", request);
-        let (head, body) = hyper_client.request(request).await?.into_parts();
-        let body = hyper::body::to_bytes(body).await?;
+        let (head, body) = hyper_client.request(request).await.map_err(|err| {
+            Error::OtherError(err.into())
+        })?.into_parts();
+        let body = body.collect().await?.to_bytes();
         log::debug!("received response; head: {:?}, body: {:?}", head, body);
         TokenInfo::from_json(&body)
     }
@@ -246,7 +249,7 @@ mod tests {
         })
         .await
         .unwrap();
-        let client = hyper::Client::builder().build(
+        let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new()).build(
             hyper_rustls::HttpsConnectorBuilder::new()
                 .with_native_roots()
                 .unwrap()

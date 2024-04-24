@@ -21,7 +21,7 @@ use crate::access_token::AccessTokenFlow;
 
 use futures::lock::Mutex;
 use http::Uri;
-use hyper::client::connect::Connection;
+use hyper_util::client::legacy::connect::Connection;
 use std::borrow::Cow;
 use std::error::Error as StdError;
 use std::fmt;
@@ -32,7 +32,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tower_service::Service;
 
 struct InnerAuthenticator<S> {
-    hyper_client: hyper::Client<S>,
+    hyper_client: hyper_util::client::legacy::Client<S, String>,
     storage: Storage,
     auth_flow: AuthFlow,
 }
@@ -544,7 +544,7 @@ impl ServiceAccountImpersonationAuthenticator {
 /// ```
 /// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 /// # async fn foo() {
-/// # let custom_hyper_client = hyper::Client::new();
+/// # let custom_hyper_client = hyper_util::client::legacy::Client::new();
 /// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
 ///         .hyper_client(custom_hyper_client)
@@ -604,10 +604,10 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     }
 
     /// Use the provided hyper client.
-    pub fn hyper_client<NewC>(
+    pub fn hyper_client<NewC, B: hyper::body::Body>(
         self,
-        hyper_client: hyper::Client<NewC>,
-    ) -> AuthenticatorBuilder<hyper::Client<NewC>, F> {
+        hyper_client: hyper_util::client::legacy::Client<NewC, B>,
+    ) -> AuthenticatorBuilder<hyper_util::client::legacy::Client<NewC, B>, F> {
         AuthenticatorBuilder {
             hyper_client_builder: hyper_client,
             storage_type: self.storage_type,
@@ -914,12 +914,12 @@ mod private {
 
         pub(crate) async fn token<'a, S, T>(
             &'a self,
-            hyper_client: &'a hyper::Client<S>,
+            hyper_client: &'a hyper_util::client::legacy::Client<S, String>,
             scopes: &'a [T],
         ) -> Result<TokenInfo, Error>
         where
             T: AsRef<str>,
-            S: Service<Uri> + Clone + Send + Sync + 'static,
+            S: Service<Uri> + hyper_util::client::legacy::connect::Connect + Clone + Send + Sync + 'static,
             S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
             S::Future: Send + Unpin + 'static,
             S::Error: Into<Box<dyn StdError + Send + Sync>>,
@@ -955,17 +955,17 @@ mod private {
     }
 }
 
-/// A trait implemented for any hyper::Client as well as the DefaultHyperClient.
+/// A trait implemented for any hyper_util::client::legacy::Client as well as the DefaultHyperClient.
 pub trait HyperClientBuilder {
     /// The hyper connector that the resulting hyper client will use.
     type Connector: Service<Uri> + Clone + Send + Sync + 'static;
 
-    /// Create a hyper::Client
-    fn build_hyper_client(self) -> Result<hyper::Client<Self::Connector>, Error>;
+    /// Create a hyper_util::client::legacy::Client
+    fn build_hyper_client(self) -> Result<hyper_util::client::legacy::Client<Self::Connector, String>, Error>;
 
-    /// Create a `hyper::Client` for tests (HTTPS not required)
+    /// Create a `hyper_util::client::legacy::Client` for tests (HTTPS not required)
     #[doc(hidden)]
-    fn build_test_hyper_client(self) -> hyper::Client<Self::Connector>;
+    fn build_test_hyper_client(self) -> hyper_util::client::legacy::Client<Self::Connector, String>;
 }
 
 #[cfg(feature = "hyper-rustls")]
@@ -975,7 +975,7 @@ pub trait HyperClientBuilder {
 )]
 /// Default authenticator type
 pub type DefaultAuthenticator =
-    Authenticator<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>;
+    Authenticator<hyper_rustls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>;
 
 #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
 #[cfg_attr(
@@ -1001,11 +1001,11 @@ pub struct DefaultHyperClient;
 )]
 impl HyperClientBuilder for DefaultHyperClient {
     #[cfg(feature = "hyper-rustls")]
-    type Connector = hyper_rustls::HttpsConnector<hyper::client::connect::HttpConnector>;
+    type Connector = hyper_rustls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>;
     #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
-    type Connector = hyper_tls::HttpsConnector<hyper::client::connect::HttpConnector>;
+    type Connector = hyper_tls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>;
 
-    fn build_hyper_client(self) -> Result<hyper::Client<Self::Connector>, Error> {
+    fn build_hyper_client(self) -> Result<hyper_util::client::legacy::Client<Self::Connector, String>, Error> {
         #[cfg(feature = "hyper-rustls")]
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
             .with_native_roots()?
@@ -1016,12 +1016,12 @@ impl HyperClientBuilder for DefaultHyperClient {
         #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
         let connector = hyper_tls::HttpsConnector::new();
 
-        Ok(hyper::Client::builder()
+        Ok(hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
             .pool_max_idle_per_host(0)
-            .build::<_, hyper::Body>(connector))
+            .build::<_, _>(connector))
     }
 
-    fn build_test_hyper_client(self) -> hyper::Client<Self::Connector> {
+    fn build_test_hyper_client(self) -> hyper_util::client::legacy::Client<Self::Connector, String> {
         #[cfg(feature = "hyper-rustls")]
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
             .with_native_roots()
@@ -1033,13 +1033,13 @@ impl HyperClientBuilder for DefaultHyperClient {
         #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
         let connector = hyper_tls::HttpsConnector::new();
 
-        hyper::Client::builder()
+        hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
             .pool_max_idle_per_host(0)
-            .build::<_, hyper::Body>(connector)
+            .build::<_, _>(connector)
     }
 }
 
-impl<S> HyperClientBuilder for hyper::Client<S>
+impl<S> HyperClientBuilder for hyper_util::client::legacy::Client<S, String>
 where
     S: Service<Uri> + Clone + Send + Sync + 'static,
     S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
@@ -1048,11 +1048,11 @@ where
 {
     type Connector = S;
 
-    fn build_hyper_client(self) -> Result<hyper::Client<S>, Error> {
+    fn build_hyper_client(self) -> Result<hyper_util::client::legacy::Client<S, String>, Error> {
         Ok(self)
     }
 
-    fn build_test_hyper_client(self) -> hyper::Client<Self::Connector> {
+    fn build_test_hyper_client(self) -> hyper_util::client::legacy::Client<Self::Connector, String> {
         self
     }
 }

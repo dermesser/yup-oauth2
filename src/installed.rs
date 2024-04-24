@@ -13,7 +13,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use http::Uri;
-use hyper::client::connect::Connection;
+use http_body_util::BodyExt;
+use hyper_util::client::legacy::connect::{Connect, Connection};
 use hyper::header;
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -124,7 +125,7 @@ impl InstalledFlow {
     /// It's recommended not to use the DefaultInstalledFlowDelegate, but a specialized one.
     pub(crate) async fn token<S, T>(
         &self,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<S, String>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
@@ -152,7 +153,7 @@ impl InstalledFlow {
 
     async fn ask_auth_code_interactively<S, T>(
         &self,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<S, String>,
         app_secret: &ApplicationSecret,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
@@ -183,7 +184,7 @@ impl InstalledFlow {
 
     async fn ask_auth_code_via_http<S, T>(
         &self,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<S, String>,
         port: Option<u16>,
         app_secret: &ApplicationSecret,
         scopes: &[T],
@@ -226,12 +227,12 @@ impl InstalledFlow {
     async fn exchange_auth_code<S>(
         &self,
         authcode: &str,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<S, String>,
         app_secret: &ApplicationSecret,
         server_addr: Option<SocketAddr>,
     ) -> Result<TokenInfo, Error>
     where
-        S: Service<Uri> + Clone + Send + Sync + 'static,
+        S: Service<Uri> + Connect + Clone + Send + Sync + 'static,
         S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
         S::Future: Send + Unpin + 'static,
         S::Error: Into<Box<dyn StdError + Send + Sync>>,
@@ -239,8 +240,8 @@ impl InstalledFlow {
         let redirect_uri = self.flow_delegate.redirect_uri();
         let request = Self::request_token(app_secret, authcode, redirect_uri, server_addr);
         log::debug!("Sending request: {:?}", request);
-        let (head, body) = hyper_client.request(request).await?.into_parts();
-        let body = hyper::body::to_bytes(body).await?;
+        let (head, body) = hyper_client.request(request).await.map_err(|err| Error::OtherError(err.into()))?.into_parts();
+        let body = body.collect().await?.to_bytes();
         log::debug!("Received response; head: {:?} body: {:?}", head, body);
         TokenInfo::from_json(&body)
     }
@@ -251,7 +252,7 @@ impl InstalledFlow {
         authcode: &str,
         custom_redirect_uri: Option<&str>,
         server_addr: Option<SocketAddr>,
-    ) -> hyper::Request<hyper::Body> {
+    ) -> hyper::Request<String> {
         use std::borrow::Cow;
         let redirect_uri: Cow<str> = match (custom_redirect_uri, server_addr) {
             (Some(uri), _) => uri.into(),
@@ -271,7 +272,7 @@ impl InstalledFlow {
 
         hyper::Request::post(&app_secret.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body(hyper::Body::from(body))
+            .body(String::from(body))
             .unwrap() // TODO: error check
     }
 }
@@ -285,12 +286,12 @@ struct InstalledFlowServer {
 
 impl InstalledFlowServer {
     fn run(port: Option<u16>) -> Result<Self, Error> {
-        use hyper::service::{make_service_fn, service_fn};
+        use hyper::service::{service_fn};
         let (auth_code_tx, auth_code_rx) = oneshot::channel::<String>();
         let (trigger_shutdown_tx, trigger_shutdown_rx) = oneshot::channel::<()>();
         let auth_code_tx = Arc::new(Mutex::new(Some(auth_code_tx)));
 
-        let service = make_service_fn(move |_| {
+        let service = move |_| {
             let auth_code_tx = auth_code_tx.clone();
             async move {
                 use std::convert::Infallible;
@@ -298,21 +299,29 @@ impl InstalledFlowServer {
                     installed_flow_server::handle_req(req, auth_code_tx.clone())
                 }))
             }
-        });
+        };
         let addr: std::net::SocketAddr = match port {
             Some(port) => ([127, 0, 0, 1], port).into(),
             None => ([127, 0, 0, 1], 0).into(),
         };
-        let server = hyper::server::Server::try_bind(&addr)?;
-        let server = server.http1_only(true).serve(service);
-        let addr = server.local_addr();
-        let shutdown_complete = tokio::spawn(async {
-            let _ = server
-                .with_graceful_shutdown(async move {
-                    let _ = trigger_shutdown_rx.await;
-                })
-                .await;
+        // start with std::net because tokio's bind is async
+        let listener = std::net::TcpListener::bind(addr)?;
+        listener.set_nonblocking(true)?;
+        let addr = listener.local_addr()?;
+        let listener = tokio::net::TcpListener::from_std(listener)?;
+        let shutdown_complete = tokio::spawn(async move {
+            let server = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = trigger_shutdown_rx => break,
+                    Ok((tcp, _)) = listener.accept() => {
+                        server.serve_connection(hyper_util::rt::TokioIo::new(tcp), service);
+                    }
+                }
+            }
         });
+
         log::debug!("HTTP server listening on {}", addr);
         Ok(InstalledFlowServer {
             addr,
@@ -344,15 +353,15 @@ impl InstalledFlowServer {
 
 mod installed_flow_server {
     use futures::lock::Mutex;
-    use hyper::{Body, Request, Response, StatusCode, Uri};
+    use hyper::{Request, Response, StatusCode, Uri};
     use std::sync::Arc;
     use tokio::sync::oneshot;
     use url::form_urlencoded;
 
     pub(super) async fn handle_req(
-        req: Request<Body>,
+        req: Request<String>,
         auth_code_tx: Arc<Mutex<Option<oneshot::Sender<String>>>>,
-    ) -> Result<Response<Body>, http::Error> {
+    ) -> Result<Response<String>, http::Error> {
         match req.uri().path_and_query() {
             Some(path_and_query) => {
                 // We use a fake URL because the redirect goes to a URL, meaning we
@@ -367,14 +376,14 @@ mod installed_flow_server {
                 match url {
                     Err(_) => hyper::Response::builder()
                         .status(StatusCode::BAD_REQUEST)
-                        .body(hyper::Body::from("Unparseable URL")),
+                        .body(String::from("Unparseable URL")),
                     Ok(url) => match auth_code_from_url(url) {
                         Some(auth_code) => {
                             if let Some(sender) = auth_code_tx.lock().await.take() {
                                 let _ = sender.send(auth_code);
                             }
                             hyper::Response::builder().status(StatusCode::OK).body(
-                                hyper::Body::from(
+                                String::from(
                                     "<html><head><title>Success</title></head><body>You may now \
                                      close this window.</body></html>",
                                 ),
@@ -382,13 +391,13 @@ mod installed_flow_server {
                         }
                         None => hyper::Response::builder()
                             .status(StatusCode::BAD_REQUEST)
-                            .body(hyper::Body::from("No `code` in URL")),
+                            .body(String::from("No `code` in URL")),
                     },
                 }
             }
             None => hyper::Response::builder()
                 .status(StatusCode::BAD_REQUEST)
-                .body(hyper::Body::from("Invalid Request!")),
+                .body(String::from("Invalid Request!")),
         }
     }
 
@@ -469,8 +478,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_server() {
-        let client: hyper::Client<hyper::client::HttpConnector, hyper::Body> =
-            hyper::Client::builder().build_http();
+        let client: hyper_util::client::legacy::Client<hyper::client::HttpConnector, hyper::Body> =
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new()).build_http();
         let server = InstalledFlowServer::run(None).unwrap();
 
         let response = client
