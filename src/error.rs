@@ -150,6 +150,8 @@ pub enum Error {
     AuthError(AuthError),
     /// Error while decoding a JSON response.
     JSONError(serde_json::Error),
+    /// Error while decoding a text response.
+    Utf8Error(std::string::FromUtf8Error),
     /// Error within user input.
     UserError(String),
     /// A lower level IO error.
@@ -158,6 +160,12 @@ pub enum Error {
     MissingAccessToken,
     /// Other errors produced by a storage provider
     OtherError(anyhow::Error),
+}
+
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(v: std::string::FromUtf8Error) -> Self {
+        Self::Utf8Error(v)
+    }
 }
 
 impl From<hyper::Error> for Error {
@@ -215,6 +223,7 @@ impl fmt::Display for Error {
                 )?;
                 Ok(())
             }
+            Error::Utf8Error(ref err) => err.fmt(f),
             Error::OtherError(ref e) => e.fmt(f),
         }
     }

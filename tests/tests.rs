@@ -665,6 +665,7 @@ async fn test_default_application_credentials_from_metadata_server() {
 
     let opts = ApplicationDefaultCredentialsFlowOpts {
         metadata_url: Some(server.url("/token").to_string()),
+        ..Default::default()
     };
     let authenticator = match ApplicationDefaultCredentialsAuthenticator::with_client(
         opts,
