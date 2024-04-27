@@ -105,7 +105,7 @@ where
     }
 
     /// Return a cached token or fetch a new one from the server.
-    async fn find_token_info<'a, T>(
+    pub async fn find_token_info<'a, T>(
         &'a self,
         scopes: &'a [T],
         force_refresh: bool,
