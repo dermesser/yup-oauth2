@@ -11,6 +11,7 @@ use http::header;
 use http_body_util::BodyExt;
 use hyper_util::client::legacy::connect::Connect;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use url::form_urlencoded;
 
 /// JSON schema of external account secret.
@@ -44,8 +45,31 @@ pub enum CredentialSource {
         /// file
         file: String,
     },
-    // TODO: Microsoft Azure and URL-sourced credentials
+    /// Microsoft Azure and URL-sourced credentials
+    Url {
+        /// url
+        url: String,
+        /// headers
+        headers: Option<HashMap<String, String>>,
+        /// format
+        format: UrlCredentialSourceFormat,
+    },
     // TODO: executable-sourced credentials
+}
+
+/// JSON schema of URL-sourced credentials' format.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "type")]
+pub enum UrlCredentialSourceFormat {
+    /// text
+    #[serde(rename = "text")]
+    Text,
+    /// json
+    #[serde(rename = "json")]
+    Json {
+        /// subject_token_field_name
+        subject_token_field_name: String,
+    },
 }
 
 /// ExternalAccountFlow can fetch oauth tokens using an external account secret.
@@ -66,6 +90,39 @@ impl ExternalAccountFlow {
     {
         let subject_token = match &self.secret.credential_source {
             CredentialSource::File { file } => tokio::fs::read_to_string(file).await?,
+            CredentialSource::Url {
+                url,
+                headers,
+                format,
+            } => {
+                let request = headers
+                    .iter()
+                    .flatten()
+                    .fold(hyper::Request::get(url), |builder, (name, value)| {
+                        builder.header(name, value)
+                    })
+                    .body(String::new())
+                    .unwrap();
+
+                log::debug!("requesting credential from url: {:?}", request);
+                let (head, body) = hyper_client.request(request).await?.into_parts();
+                let body = body.collect().await?.to_bytes();
+                log::debug!("received response; head: {:?}, body: {:?}", head, body);
+
+                match format {
+                    UrlCredentialSourceFormat::Text => {
+                        String::from_utf8(body.to_vec()).map_err(anyhow::Error::from)?
+                    }
+                    UrlCredentialSourceFormat::Json {
+                        subject_token_field_name,
+                    } => serde_json::from_slice::<HashMap<String, serde_json::Value>>(&body)?
+                        .remove(subject_token_field_name)
+                        .ok_or_else(|| anyhow::format_err!("missing {subject_token_field_name}"))?
+                        .as_str()
+                        .ok_or_else(|| anyhow::format_err!("invalid type"))?
+                        .to_string(),
+                }
+            }
         };
 
         let req = form_urlencoded::Serializer::new(String::new())
