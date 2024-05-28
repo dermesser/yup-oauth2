@@ -16,18 +16,16 @@
 use crate::error::Error;
 use crate::types::TokenInfo;
 
-use std::{error::Error as StdError, io, path::PathBuf};
+use std::{io, path::PathBuf};
 
 use base64::Engine as _;
-use http::Uri;
+
+use http::header;
 use http_body_util::BodyExt;
-use hyper::header;
-use hyper_util::client::legacy::connect::{Connect, Connection};
+use hyper_util::client::legacy::connect::Connect;
 use rustls::{self, crypto::ring::sign, pki_types::PrivateKeyDer, sign::SigningKey};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tower_service::Service;
 use url::form_urlencoded;
 
 const GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
@@ -195,17 +193,14 @@ impl ServiceAccountFlow {
     }
 
     /// Send a request for a new Bearer token to the OAuth provider.
-    pub(crate) async fn token<S, T>(
+    pub(crate) async fn token<C, T>(
         &self,
-        hyper_client: &hyper_util::client::legacy::Client<S, String>,
+        hyper_client: &hyper_util::client::legacy::Client<C, String>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        S: Service<Uri> + Connect + Clone + Send + Sync + 'static,
-        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-        S::Future: Send + Unpin + 'static,
-        S::Error: Into<Box<dyn StdError + Send + Sync>>,
+        C: Connect + Clone + Send + Sync + 'static,
     {
         let claims = Claims::new(&self.key, scopes, self.subject.as_deref());
         let signed = self.signer.sign_claims(&claims).map_err(|_| {
@@ -217,14 +212,12 @@ impl ServiceAccountFlow {
         let rqbody = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[("grant_type", GRANT_TYPE), ("assertion", signed.as_str())])
             .finish();
-        let request = hyper::Request::post(&self.key.token_uri)
+        let request = http::Request::post(&self.key.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(rqbody)
             .unwrap();
         log::debug!("requesting token from service account: {:?}", request);
-        let (head, body) = hyper_client.request(request).await.map_err(|err| {
-            Error::OtherError(err.into())
-        })?.into_parts();
+        let (head, body) = hyper_client.request(request).await?.into_parts();
         let body = body.collect().await?.to_bytes();
         log::debug!("received response; head: {:?}, body: {:?}", head, body);
         TokenInfo::from_json(&body)
@@ -249,15 +242,17 @@ mod tests {
         })
         .await
         .unwrap();
-        let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new()).build(
-            hyper_rustls::HttpsConnectorBuilder::new()
-                .with_native_roots()
-                .unwrap()
-                .https_only()
-                .enable_http1()
-                .enable_http2()
-                .build(),
-        );
+        let client =
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+                .build(
+                    hyper_rustls::HttpsConnectorBuilder::new()
+                        .with_native_roots()
+                        .unwrap()
+                        .https_only()
+                        .enable_http1()
+                        .enable_http2()
+                        .build(),
+                );
         println!(
             "{:?}",
             acc.token(&client, &["https://www.googleapis.com/auth/pubsub"])

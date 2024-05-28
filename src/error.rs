@@ -146,6 +146,8 @@ impl<T> AuthErrorOr<T> {
 pub enum Error {
     /// Indicates connection failure
     HttpError(hyper::Error),
+    /// Indicates connection failure
+    HttpClientError(hyper_util::client::legacy::Error),
     /// The server returned an error.
     AuthError(AuthError),
     /// Error while decoding a JSON response.
@@ -163,6 +165,12 @@ pub enum Error {
 impl From<hyper::Error> for Error {
     fn from(error: hyper::Error) -> Error {
         Error::HttpError(error)
+    }
+}
+
+impl From<hyper_util::client::legacy::Error> for Error {
+    fn from(error: hyper_util::client::legacy::Error) -> Error {
+        Error::HttpClientError(error)
     }
 }
 
@@ -197,6 +205,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             Error::HttpError(ref err) => err.fmt(f),
+            Error::HttpClientError(ref err) => err.fmt(f),
             Error::AuthError(ref err) => err.fmt(f),
             Error::JSONError(ref e) => {
                 write!(
@@ -224,6 +233,7 @@ impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
             Error::HttpError(ref err) => Some(err),
+            Error::HttpClientError(ref err) => Some(err),
             Error::AuthError(ref err) => Some(err),
             Error::JSONError(ref err) => Some(err),
             Error::LowLevelError(ref err) => Some(err),

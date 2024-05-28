@@ -6,14 +6,11 @@
 //!
 use crate::error::Error;
 use crate::types::TokenInfo;
-use http::Uri;
+use http::header;
 use http_body_util::BodyExt;
-use hyper_util::client::legacy::connect::{Connect, Connection};
-use hyper::header;
+use hyper_util::client::legacy::connect::Connect;
 use serde::{Deserialize, Serialize};
-use std::error::Error as StdError;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tower_service::Service;
+
 use url::form_urlencoded;
 
 const TOKEN_URI: &str = "https://accounts.google.com/o/oauth2/token";
@@ -43,17 +40,14 @@ pub struct AuthorizedUserFlow {
 
 impl AuthorizedUserFlow {
     /// Send a request for a new Bearer token to the OAuth provider.
-    pub(crate) async fn token<S, T>(
+    pub(crate) async fn token<C, T>(
         &self,
-        hyper_client: &hyper_util::client::legacy::Client<S, String>,
+        hyper_client: &hyper_util::client::legacy::Client<C, String>,
         _scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        S: Service<Uri> + Connect + Clone + Send + Sync + 'static,
-        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-        S::Future: Send + Unpin + 'static,
-        S::Error: Into<Box<dyn StdError + Send + Sync>>,
+        C: Connect + Clone + Send + Sync + 'static,
     {
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
@@ -64,13 +58,13 @@ impl AuthorizedUserFlow {
             ])
             .finish();
 
-        let request = hyper::Request::post(TOKEN_URI)
+        let request = http::Request::post(TOKEN_URI)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(req)
             .unwrap();
 
         log::debug!("requesting token from authorized user: {:?}", request);
-        let (head, body) = hyper_client.request(request).await.map_err(|err| Error::OtherError(err.into()))?.into_parts();
+        let (head, body) = hyper_client.request(request).await?.into_parts();
         let body = body.collect().await?.to_bytes();
         log::debug!("received response; head: {:?}, body: {:?}", head, body);
         TokenInfo::from_json(&body)
