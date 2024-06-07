@@ -6,7 +6,7 @@ authors = ["Sebastian Thiel <byronimo@gmail.com>", "Lewin Bormann <lbo@sphenisci
 repository = "https://github.com/dermesser/yup-oauth2"
 description = "An oauth2 implementation, providing the 'device', 'service account' and 'installed' authorization flows"
 documentation = "https://docs.rs/yup-oauth2/"
-keywords = ["google", "oauth", "v2"]
+keywords = ["google", "oauth", "oauth2"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
 
