@@ -41,9 +41,7 @@ fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKeyDer, io::Error> {
     let private_key = rustls_pemfile::pkcs8_private_keys(&mut pem_pkcs8.as_bytes()).next();
 
     match private_key {
-        Some(Ok(key)) => {
-            Ok(PrivateKeyDer::Pkcs8(key.into()))
-        }
+        Some(Ok(key)) => Ok(PrivateKeyDer::Pkcs8(key.into())),
         None => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "Not enough private keys in PEM",
