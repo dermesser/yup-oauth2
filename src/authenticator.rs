@@ -20,19 +20,15 @@ use private::AuthFlow;
 use crate::access_token::AccessTokenFlow;
 
 use futures::lock::Mutex;
-use http::Uri;
-use hyper::client::connect::Connection;
+use hyper_util::client::legacy::connect::Connect;
 use std::borrow::Cow;
-use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tower_service::Service;
 
-struct InnerAuthenticator<S> {
-    hyper_client: hyper::Client<S>,
+struct InnerAuthenticator<C> {
+    hyper_client: hyper_util::client::legacy::Client<C, String>,
     storage: Storage,
     auth_flow: AuthFlow,
 }
@@ -40,8 +36,8 @@ struct InnerAuthenticator<S> {
 /// Authenticator is responsible for fetching tokens, handling refreshing tokens,
 /// and optionally persisting tokens to disk.
 #[derive(Clone)]
-pub struct Authenticator<S> {
-    inner: Arc<InnerAuthenticator<S>>,
+pub struct Authenticator<C> {
+    inner: Arc<InnerAuthenticator<C>>,
 }
 
 struct DisplayScopes<'a, T>(&'a [T]);
@@ -63,12 +59,9 @@ where
     }
 }
 
-impl<S> Authenticator<S>
+impl<C> Authenticator<C>
 where
-    S: Service<Uri> + Clone + Send + Sync + 'static,
-    S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    S::Future: Send + Unpin + 'static,
-    S::Error: Into<Box<dyn StdError + Send + Sync>>,
+    C: Connect + Clone + Send + Sync + 'static,
 {
     /// Return the current token for the provided scopes.
     pub async fn token<'a, T>(&'a self, scopes: &'a [T]) -> Result<AccessToken, Error>
@@ -544,7 +537,7 @@ impl ServiceAccountImpersonationAuthenticator {
 /// ```
 /// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 /// # async fn foo() {
-/// # let custom_hyper_client = hyper::Client::new();
+/// # let custom_hyper_client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new()).build_http::<String>();
 /// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
 ///         .hyper_client(custom_hyper_client)
@@ -606,8 +599,8 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     /// Use the provided hyper client.
     pub fn hyper_client<NewC>(
         self,
-        hyper_client: hyper::Client<NewC>,
-    ) -> AuthenticatorBuilder<hyper::Client<NewC>, F> {
+        hyper_client: hyper_util::client::legacy::Client<NewC, String>,
+    ) -> AuthenticatorBuilder<hyper_util::client::legacy::Client<NewC, String>, F> {
         AuthenticatorBuilder {
             hyper_client_builder: hyper_client,
             storage_type: self.storage_type,
@@ -874,7 +867,7 @@ impl<C> AuthenticatorBuilder<C, AccessTokenFlow> {
 mod private {
     use crate::access_token::AccessTokenFlow;
     use crate::application_default_credentials::ApplicationDefaultCredentialsFlow;
-    use crate::authenticator::{AsyncRead, AsyncWrite, Connection, Service, StdError, Uri};
+    use crate::authenticator::Connect;
     use crate::authorized_user::AuthorizedUserFlow;
     use crate::device::DeviceFlow;
     use crate::error::Error;
@@ -912,17 +905,14 @@ mod private {
             }
         }
 
-        pub(crate) async fn token<'a, S, T>(
+        pub(crate) async fn token<'a, C, T>(
             &'a self,
-            hyper_client: &'a hyper::Client<S>,
+            hyper_client: &'a hyper_util::client::legacy::Client<C, String>,
             scopes: &'a [T],
         ) -> Result<TokenInfo, Error>
         where
             T: AsRef<str>,
-            S: Service<Uri> + Clone + Send + Sync + 'static,
-            S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-            S::Future: Send + Unpin + 'static,
-            S::Error: Into<Box<dyn StdError + Send + Sync>>,
+            C: Connect + Clone + Send + Sync + 'static,
         {
             match self {
                 AuthFlow::DeviceFlow(device_flow) => device_flow.token(hyper_client, scopes).await,
@@ -955,17 +945,20 @@ mod private {
     }
 }
 
-/// A trait implemented for any hyper::Client as well as the DefaultHyperClient.
+/// A trait implemented for any hyper_util::client::legacy::Client as well as the DefaultHyperClient.
 pub trait HyperClientBuilder {
     /// The hyper connector that the resulting hyper client will use.
-    type Connector: Service<Uri> + Clone + Send + Sync + 'static;
+    type Connector: Connect + Clone + Send + Sync + 'static;
 
     /// Create a hyper::Client
-    fn build_hyper_client(self) -> Result<hyper::Client<Self::Connector>, Error>;
+    fn build_hyper_client(
+        self,
+    ) -> Result<hyper_util::client::legacy::Client<Self::Connector, String>, Error>;
 
-    /// Create a `hyper::Client` for tests (HTTPS not required)
+    /// Create a `hyper_util::client::legacy::Client` for tests (HTTPS not required)
     #[doc(hidden)]
-    fn build_test_hyper_client(self) -> hyper::Client<Self::Connector>;
+    fn build_test_hyper_client(self)
+        -> hyper_util::client::legacy::Client<Self::Connector, String>;
 }
 
 #[cfg(feature = "hyper-rustls")]
@@ -975,7 +968,7 @@ pub trait HyperClientBuilder {
 )]
 /// Default authenticator type
 pub type DefaultAuthenticator =
-    Authenticator<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>;
+    Authenticator<hyper_rustls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>;
 
 #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
 #[cfg_attr(
@@ -984,7 +977,7 @@ pub type DefaultAuthenticator =
 )]
 /// Default authenticator type
 pub type DefaultAuthenticator =
-    Authenticator<hyper_tls::HttpsConnector<hyper::client::HttpConnector>>;
+    Authenticator<hyper_tls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>;
 
 /// The builder value used when the default hyper client should be used.
 #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
@@ -1001,11 +994,14 @@ pub struct DefaultHyperClient;
 )]
 impl HyperClientBuilder for DefaultHyperClient {
     #[cfg(feature = "hyper-rustls")]
-    type Connector = hyper_rustls::HttpsConnector<hyper::client::connect::HttpConnector>;
+    type Connector =
+        hyper_rustls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>;
     #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
-    type Connector = hyper_tls::HttpsConnector<hyper::client::connect::HttpConnector>;
+    type Connector = hyper_tls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>;
 
-    fn build_hyper_client(self) -> Result<hyper::Client<Self::Connector>, Error> {
+    fn build_hyper_client(
+        self,
+    ) -> Result<hyper_util::client::legacy::Client<Self::Connector, String>, Error> {
         #[cfg(feature = "hyper-rustls")]
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
             .with_native_roots()?
@@ -1016,12 +1012,16 @@ impl HyperClientBuilder for DefaultHyperClient {
         #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
         let connector = hyper_tls::HttpsConnector::new();
 
-        Ok(hyper::Client::builder()
-            .pool_max_idle_per_host(0)
-            .build::<_, hyper::Body>(connector))
+        Ok(
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+                .pool_max_idle_per_host(0)
+                .build::<_, String>(connector),
+        )
     }
 
-    fn build_test_hyper_client(self) -> hyper::Client<Self::Connector> {
+    fn build_test_hyper_client(
+        self,
+    ) -> hyper_util::client::legacy::Client<Self::Connector, String> {
         #[cfg(feature = "hyper-rustls")]
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
             .with_native_roots()
@@ -1033,26 +1033,25 @@ impl HyperClientBuilder for DefaultHyperClient {
         #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
         let connector = hyper_tls::HttpsConnector::new();
 
-        hyper::Client::builder()
+        hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
             .pool_max_idle_per_host(0)
-            .build::<_, hyper::Body>(connector)
+            .build::<_, String>(connector)
     }
 }
 
-impl<S> HyperClientBuilder for hyper::Client<S>
+impl<C> HyperClientBuilder for hyper_util::client::legacy::Client<C, String>
 where
-    S: Service<Uri> + Clone + Send + Sync + 'static,
-    S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    S::Future: Send + Unpin + 'static,
-    S::Error: Into<Box<dyn StdError + Send + Sync>>,
+    C: Connect + Clone + Send + Sync + 'static,
 {
-    type Connector = S;
+    type Connector = C;
 
-    fn build_hyper_client(self) -> Result<hyper::Client<S>, Error> {
+    fn build_hyper_client(self) -> Result<hyper_util::client::legacy::Client<C, String>, Error> {
         Ok(self)
     }
 
-    fn build_test_hyper_client(self) -> hyper::Client<Self::Connector> {
+    fn build_test_hyper_client(
+        self,
+    ) -> hyper_util::client::legacy::Client<Self::Connector, String> {
         self
     }
 }

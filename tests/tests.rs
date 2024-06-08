@@ -11,8 +11,8 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 
+use http::Uri;
 use httptest::{matchers::*, responders::json_encoded, Expectation, Server};
-use hyper::Uri;
 use url::form_urlencoded;
 
 /// Utility function for parsing json. Useful in unit tests. Simply wrap the
@@ -55,6 +55,7 @@ async fn create_device_flow_auth(server: &Server) -> DefaultAuthenticator {
 #[tokio::test]
 async fn test_device_success() {
     let _ = env_logger::try_init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let server = Server::run();
     server.expect(
         Expectation::matching(all_of![
@@ -102,6 +103,7 @@ async fn test_device_success() {
 #[tokio::test]
 async fn test_device_no_code() {
     let _ = env_logger::try_init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let server = Server::run();
     server.expect(
         Expectation::matching(all_of![
@@ -126,6 +128,7 @@ async fn test_device_no_code() {
 #[tokio::test]
 async fn test_device_no_token() {
     let _ = env_logger::try_init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let server = Server::run();
     server.expect(
         Expectation::matching(all_of![
@@ -175,7 +178,12 @@ async fn create_installed_flow_auth(
         "client_secret": "iuMPN6Ne1PD7cos29Tk9rlqH",
         "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob","http://localhost"],
     });
-    struct FD(hyper::Client<<DefaultHyperClient as HyperClientBuilder>::Connector>);
+    struct FD(
+        hyper_util::client::legacy::Client<
+            <DefaultHyperClient as HyperClientBuilder>::Connector,
+            String,
+        >,
+    );
     impl InstalledFlowDelegate for FD {
         /// Depending on need_code, return the pre-set code or send the code to the server at
         /// the redirect_uri given in the url.
@@ -234,6 +242,7 @@ async fn create_installed_flow_auth(
 #[tokio::test]
 async fn test_installed_interactive_success() {
     let _ = env_logger::try_init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let server = Server::run();
     let auth =
         create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
@@ -266,6 +275,7 @@ async fn test_installed_interactive_success() {
 #[tokio::test]
 async fn test_installed_redirect_success() {
     let _ = env_logger::try_init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let server = Server::run();
     let auth =
         create_installed_flow_auth(&server, InstalledFlowReturnMethod::HTTPRedirect, None).await;
@@ -298,6 +308,7 @@ async fn test_installed_redirect_success() {
 #[tokio::test]
 async fn test_installed_error() {
     let _ = env_logger::try_init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let server = Server::run();
     let auth =
         create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
@@ -346,6 +357,7 @@ async fn create_service_account_auth(server: &Server) -> DefaultAuthenticator {
 async fn test_service_account_success() {
     use time::OffsetDateTime;
     let _ = env_logger::try_init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let server = Server::run();
     let auth = create_service_account_auth(&server).await;
 
@@ -373,6 +385,7 @@ async fn test_service_account_success() {
 #[tokio::test]
 async fn test_service_account_error() {
     let _ = env_logger::try_init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let server = Server::run();
     let auth = create_service_account_auth(&server).await;
     server.expect(
@@ -392,6 +405,7 @@ async fn test_service_account_error() {
 #[tokio::test]
 async fn test_refresh() {
     let _ = env_logger::try_init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let server = Server::run();
     let auth =
         create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
@@ -507,6 +521,7 @@ async fn test_refresh() {
 #[tokio::test]
 async fn test_memory_storage() {
     let _ = env_logger::try_init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let server = Server::run();
     let auth =
         create_installed_flow_auth(&server, InstalledFlowReturnMethod::Interactive, None).await;
@@ -574,6 +589,7 @@ async fn test_memory_storage() {
 #[tokio::test]
 async fn test_disk_storage() {
     let _ = env_logger::try_init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let server = Server::run();
     let tempdir = tempfile::tempdir().unwrap();
     let storage_path = tempdir.path().join("tokenstorage.json");
@@ -646,6 +662,7 @@ async fn test_disk_storage() {
 async fn test_default_application_credentials_from_metadata_server() {
     use yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
     let _ = env_logger::try_init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let server = Server::run();
     server.expect(
         Expectation::matching(all_of![

@@ -5,22 +5,14 @@
 //!
 //! It is also a better use of resources (memory, sockets, etc.)
 
-use std::error::Error as StdError;
+use hyper_util::client::legacy::connect::Connect;
 
-use http::Uri;
-use hyper::client::connect::Connection;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tower_service::Service;
-
-async fn r#use<S>(
-    client: hyper::Client<S>,
-    authenticator: yup_oauth2::authenticator::Authenticator<S>,
+async fn r#use<C>(
+    client: hyper_util::client::legacy::Client<C, String>,
+    authenticator: yup_oauth2::authenticator::Authenticator<C>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 where
-    S: Service<Uri> + Clone + Send + Sync + 'static,
-    S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    S::Future: Send + Unpin + 'static,
-    S::Error: Into<Box<dyn StdError + Send + Sync>>,
+    C: Connect + Clone + Send + Sync + 'static,
 {
     let access_token = authenticator.token(&["email"]).await?;
     let request = http::Request::get("https://example.com")
@@ -28,7 +20,7 @@ where
             http::header::AUTHORIZATION,
             format!("Bearer {}", access_token.token().ok_or("no access token")?),
         )
-        .body(hyper::body::Body::empty())?;
+        .body(String::new())?;
     let response = client.request(request).await?;
     drop(response); // Implementing handling of the response is left as an exercise for the reader.
     Ok(())
@@ -41,15 +33,16 @@ async fn main() {
     let secret = yup_oauth2::read_service_account_key(google_credentials)
         .await
         .expect("$GOOGLE_APPLICATION_CREDENTIALS is not a valid service account key");
-    let client = hyper::Client::builder().build(
-        hyper_rustls::HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .expect("failed to find native root certificates")
-            .https_only()
-            .enable_http1()
-            .enable_http2()
-            .build(),
-    );
+    let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+        .build(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .expect("failed to find native root certificates")
+                .https_only()
+                .enable_http1()
+                .enable_http2()
+                .build(),
+        );
     let authenticator =
         yup_oauth2::ServiceAccountAuthenticator::with_client(secret, client.clone())
             .build()

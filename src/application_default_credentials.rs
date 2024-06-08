@@ -1,10 +1,7 @@
 use crate::error::Error;
 use crate::types::TokenInfo;
-use http::Uri;
-use hyper::client::connect::Connection;
-use std::error::Error as StdError;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tower_service::Service;
+use http_body_util::BodyExt;
+use hyper_util::client::legacy::connect::Connect;
 
 /// Provide options for the Application Default Credential Flow, mostly used for testing
 #[derive(Default, Clone, Debug)]
@@ -23,27 +20,24 @@ impl ApplicationDefaultCredentialsFlow {
         ApplicationDefaultCredentialsFlow { metadata_url }
     }
 
-    pub(crate) async fn token<S, T>(
+    pub(crate) async fn token<C, T>(
         &self,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<C, String>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        S: Service<Uri> + Clone + Send + Sync + 'static,
-        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-        S::Future: Send + Unpin + 'static,
-        S::Error: Into<Box<dyn StdError + Send + Sync>>,
+        C: Connect + Clone + Send + Sync + 'static,
     {
         let scope = crate::helper::join(scopes, ",");
         let token_uri = format!("{}?scopes={}", self.metadata_url, scope);
-        let request = hyper::Request::get(token_uri)
+        let request = http::Request::get(token_uri)
             .header("Metadata-Flavor", "Google")
-            .body(hyper::Body::from(String::new())) // why body is needed?
+            .body(String::new()) // why body is needed?
             .unwrap();
         log::debug!("requesting token from metadata server: {:?}", request);
         let (head, body) = hyper_client.request(request).await?.into_parts();
-        let body = hyper::body::to_bytes(body).await?;
+        let body = body.collect().await?.to_bytes();
         log::debug!("received response; head: {:?}, body: {:?}", head, body);
         TokenInfo::from_json(&body)
     }

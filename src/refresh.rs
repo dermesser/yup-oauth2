@@ -1,12 +1,9 @@
 use crate::error::Error;
 use crate::types::{ApplicationSecret, TokenInfo};
 
-use http::Uri;
-use hyper::client::connect::Connection;
-use hyper::header;
-use std::error::Error as StdError;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tower_service::Service;
+use http::header;
+use http_body_util::BodyExt;
+use hyper_util::client::legacy::connect::Connect;
 use url::form_urlencoded;
 
 /// Implements the [OAuth2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
@@ -31,16 +28,13 @@ impl RefreshFlow {
     ///
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub(crate) async fn refresh_token<S>(
-        client: &hyper::Client<S>,
+    pub(crate) async fn refresh_token<C>(
+        client: &hyper_util::client::legacy::Client<C, String>,
         client_secret: &ApplicationSecret,
         refresh_token: &str,
     ) -> Result<TokenInfo, Error>
     where
-        S: Service<Uri> + Clone + Send + Sync + 'static,
-        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-        S::Future: Send + Unpin + 'static,
-        S::Error: Into<Box<dyn StdError + Send + Sync>>,
+        C: Connect + Clone + Send + Sync + 'static,
     {
         log::debug!(
             "refreshing access token with refresh token: {}",
@@ -55,13 +49,13 @@ impl RefreshFlow {
             ])
             .finish();
 
-        let request = hyper::Request::post(&client_secret.token_uri)
+        let request = http::Request::post(&client_secret.token_uri)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body(hyper::Body::from(req))
+            .body(req)
             .unwrap();
         log::debug!("Sending request: {:?}", request);
         let (head, body) = client.request(request).await?.into_parts();
-        let body = hyper::body::to_bytes(body).await?;
+        let body = body.collect().await?.to_bytes();
         log::debug!("Received response; head: {:?}, body: {:?}", head, body);
         let mut token = TokenInfo::from_json(&body)?;
         // If the refresh result contains a refresh_token use it, otherwise

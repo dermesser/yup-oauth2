@@ -4,12 +4,10 @@
 //! Resources:
 //! - [service account impersonation](https://cloud.google.com/iam/docs/create-short-lived-credentials-direct#sa-credentials-oauth)
 
-use http::{header, Uri};
-use hyper::client::connect::Connection;
+use http::header;
+use http_body_util::BodyExt;
+use hyper_util::client::legacy::connect::Connect;
 use serde::Serialize;
-use std::error::Error as StdError;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tower_service::Service;
 
 use crate::{
     authorized_user::{AuthorizedUserFlow, AuthorizedUserSecret},
@@ -121,17 +119,14 @@ impl ServiceAccountImpersonationFlow {
         }
     }
 
-    pub(crate) async fn token<S, T>(
+    pub(crate) async fn token<C, T>(
         &self,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<C, String>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        S: Service<Uri> + Clone + Send + Sync + 'static,
-        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-        S::Future: Send + Unpin + 'static,
-        S::Error: Into<Box<dyn StdError + Send + Sync>>,
+        C: Connect + Clone + Send + Sync + 'static,
     {
         let inner_token = self
             .inner_flow
@@ -158,18 +153,18 @@ fn access_request(
     uri: &str,
     inner_token: &str,
     scopes: &[&str],
-) -> Result<hyper::Request<hyper::Body>, Error> {
+) -> Result<http::Request<String>, Error> {
     let req_body = Request {
         scope: scopes,
         // Max validity is 1h.
         lifetime: "3600s",
     };
-    let req_body = serde_json::to_vec(&req_body)?;
-    Ok(hyper::Request::post(uri)
+    let req_body = serde_json::to_string(&req_body)?;
+    Ok(http::Request::post(uri)
         .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
         .header(header::CONTENT_LENGTH, req_body.len())
         .header(header::AUTHORIZATION, format!("Bearer {}", inner_token))
-        .body(req_body.into())
+        .body(req_body)
         .unwrap())
 }
 
@@ -177,24 +172,24 @@ fn id_request(
     uri: &str,
     inner_token: &str,
     scopes: &[&str],
-) -> Result<hyper::Request<hyper::Body>, Error> {
+) -> Result<http::Request<String>, Error> {
     // Only one audience is supported.
     let audience = scopes.first().unwrap_or(&"");
     let req_body = IdRequest {
         audience,
         include_email: true,
     };
-    let req_body = serde_json::to_vec(&req_body)?;
-    Ok(hyper::Request::post(uri)
+    let req_body = serde_json::to_string(&req_body)?;
+    Ok(http::Request::post(uri)
         .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
         .header(header::CONTENT_LENGTH, req_body.len())
         .header(header::AUTHORIZATION, format!("Bearer {}", inner_token))
-        .body(req_body.into())
+        .body(req_body)
         .unwrap())
 }
 
-pub(crate) async fn token_impl<S, T>(
-    hyper_client: &hyper::Client<S>,
+pub(crate) async fn token_impl<C, T>(
+    hyper_client: &hyper_util::client::legacy::Client<C, String>,
     uri: &str,
     access_token: bool,
     inner_token: &str,
@@ -202,10 +197,7 @@ pub(crate) async fn token_impl<S, T>(
 ) -> Result<TokenInfo, Error>
 where
     T: AsRef<str>,
-    S: Service<Uri> + Clone + Send + Sync + 'static,
-    S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    S::Future: Send + Unpin + 'static,
-    S::Error: Into<Box<dyn StdError + Send + Sync>>,
+    C: Connect + Clone + Send + Sync + 'static,
 {
     let scopes: Vec<_> = scopes.iter().map(|s| s.as_ref()).collect();
     let request = if access_token {
@@ -216,7 +208,7 @@ where
 
     log::debug!("requesting impersonated token {:?}", request);
     let (head, body) = hyper_client.request(request).await?.into_parts();
-    let body = hyper::body::to_bytes(body).await?;
+    let body = body.collect().await?.to_bytes();
     log::debug!("received response; head: {:?}, body: {:?}", head, body);
 
     if access_token {

@@ -7,11 +7,7 @@
 //! access token of the other service by generating a new token.
 use crate::error::Error;
 use crate::types::TokenInfo;
-use http::Uri;
-use hyper::client::connect::Connection;
-use std::error::Error as StdError;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tower_service::Service;
+use hyper_util::client::legacy::connect::Connect;
 
 /// the flow for the access token authenticator
 pub struct AccessTokenFlow {
@@ -20,17 +16,14 @@ pub struct AccessTokenFlow {
 
 impl AccessTokenFlow {
     /// just return the access token
-    pub(crate) async fn token<S, T>(
+    pub(crate) async fn token<C, B, T>(
         &self,
-        _hyper_client: &hyper::Client<S>,
+        _hyper_client: &hyper_util::client::legacy::Client<C, B>,
         _scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        S: Service<Uri> + Clone + Send + Sync + 'static,
-        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-        S::Future: Send + Unpin + 'static,
-        S::Error: Into<Box<dyn StdError + Send + Sync>>,
+        C: Connect + Clone + Send + Sync + 'static,
     {
         Ok(TokenInfo {
             access_token: Some(self.access_token.clone()),

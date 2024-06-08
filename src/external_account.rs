@@ -7,13 +7,10 @@
 //!
 use crate::error::Error;
 use crate::types::TokenInfo;
-use http::Uri;
-use hyper::client::connect::Connection;
-use hyper::header;
+use http::header;
+use http_body_util::BodyExt;
+use hyper_util::client::legacy::connect::Connect;
 use serde::{Deserialize, Serialize};
-use std::error::Error as StdError;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tower_service::Service;
 use url::form_urlencoded;
 
 /// JSON schema of external account secret.
@@ -58,17 +55,14 @@ pub struct ExternalAccountFlow {
 
 impl ExternalAccountFlow {
     /// Send a request for a new Bearer token to the OAuth provider.
-    pub(crate) async fn token<S, T>(
+    pub(crate) async fn token<C, T>(
         &self,
-        hyper_client: &hyper::Client<S>,
+        hyper_client: &hyper_util::client::legacy::Client<C, String>,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        S: Service<Uri> + Clone + Send + Sync + 'static,
-        S::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-        S::Future: Send + Unpin + 'static,
-        S::Error: Into<Box<dyn StdError + Send + Sync>>,
+        C: Connect + Clone + Send + Sync + 'static,
     {
         let subject_token = match &self.secret.credential_source {
             CredentialSource::File { file } => tokio::fs::read_to_string(file).await?,
@@ -102,14 +96,14 @@ impl ExternalAccountFlow {
             ])
             .finish();
 
-        let request = hyper::Request::post(&self.secret.token_url)
+        let request = http::Request::post(&self.secret.token_url)
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .body(hyper::Body::from(req))
+            .body(req)
             .unwrap();
 
         log::debug!("requesting token from external account: {:?}", request);
         let (head, body) = hyper_client.request(request).await?.into_parts();
-        let body = hyper::body::to_bytes(body).await?;
+        let body = body.collect().await?.to_bytes();
         log::debug!("received response; head: {:?}, body: {:?}", head, body);
 
         let token_info = TokenInfo::from_json(&body)?;
