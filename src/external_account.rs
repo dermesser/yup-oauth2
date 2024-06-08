@@ -42,37 +42,42 @@ pub struct ExternalAccountSecret {
 pub enum CredentialSource {
     /// file-sourced credentials
     File {
-        /// file
+        /// File name of a file containing a subject token.
         file: String,
     },
-    /// Microsoft Azure and URL-sourced credentials
+
+    //// [Microsoft Azure and URL-sourced
+    ///credentials](https://google.aip.dev/auth/4117#determining-the-subject-token-in-microsoft-azure-and-url-sourced-credentials)
     Url {
-        /// url
+        /// This defines the local metadata server to retrieve the external credentials from. For
+        /// Azure, this should be the Azure Instance Metadata Service (IMDS) URL used to retrieve
+        /// the Azure AD access token.
         url: String,
-        /// headers
+        /// This defines the headers to append to the GET request to credential_source.url.
         headers: Option<HashMap<String, String>>,
-        /// format
+        /// See struct documentation.
         format: UrlCredentialSourceFormat,
     },
     // TODO: executable-sourced credentials
 }
 
 /// JSON schema of URL-sourced credentials' format.
+/// This indicates the format of the URL response. This can be either "text" or "json". The default should be "text".
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum UrlCredentialSourceFormat {
-    /// text
+    /// Response is text.
     #[serde(rename = "text")]
     Text,
-    /// json
+    /// Response is JSON.
     #[serde(rename = "json")]
     Json {
-        /// subject_token_field_name
+        /// Required for JSON URL responses. This indicates the JSON field name where the subject_token should be stored.
         subject_token_field_name: String,
     },
 }
 
-/// ExternalAccountFlow can fetch oauth tokens using an external account secret.
+/// An ExternalAccountFlow can fetch OAuth tokens using an external account secret.
 pub struct ExternalAccountFlow {
     pub(crate) secret: ExternalAccountSecret,
 }
