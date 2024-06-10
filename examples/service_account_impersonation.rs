@@ -2,7 +2,7 @@ use yup_oauth2::{read_authorized_user_secret, ServiceAccountImpersonationAuthent
 
 #[tokio::main]
 async fn main() {
-    let svc_email = std::env::args().skip(1).next().unwrap();
+    let svc_email = std::env::args().nth(1).unwrap();
     let home = std::env::var("HOME").unwrap();
 
     let user_secret = read_authorized_user_secret(format!(

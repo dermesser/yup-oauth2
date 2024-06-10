@@ -41,7 +41,7 @@ fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKeyDer, io::Error> {
     let private_key = rustls_pemfile::pkcs8_private_keys(&mut pem_pkcs8.as_bytes()).next();
 
     match private_key {
-        Some(Ok(key)) => Ok(PrivateKeyDer::Pkcs8(key.into())),
+        Some(Ok(key)) => Ok(PrivateKeyDer::Pkcs8(key)),
         None => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "Not enough private keys in PEM",
@@ -164,7 +164,7 @@ pub(crate) enum FlowOptsKey {
     /// A path at which the key can be read from disk
     Path(PathBuf),
     /// An already initialized key
-    Key(ServiceAccountKey),
+    Key(Box<ServiceAccountKey>),
 }
 
 /// ServiceAccountFlow can fetch oauth tokens using a service account.
@@ -178,7 +178,7 @@ impl ServiceAccountFlow {
     pub(crate) async fn new(opts: ServiceAccountFlowOpts) -> Result<Self, io::Error> {
         let key = match opts.key {
             FlowOptsKey::Path(path) => crate::read_service_account_key(path).await?,
-            FlowOptsKey::Key(key) => key,
+            FlowOptsKey::Key(key) => *key,
         };
 
         let signer = JWTSigner::new(&key.private_key)?;
@@ -227,7 +227,7 @@ mod tests {
     use crate::helper::read_service_account_key;
 
     // Valid but deactivated key.
-    const TEST_PRIVATE_KEY_PATH: &'static str = "examples/Sanguine-69411a0c0eea.json";
+    const TEST_PRIVATE_KEY_PATH: &str = "examples/Sanguine-69411a0c0eea.json";
 
     // Uncomment this test to verify that we can successfully obtain tokens.
     // #[tokio::test]
@@ -301,7 +301,7 @@ mod tests {
 
         let signature = signature.unwrap();
         assert_eq!(
-            signature.split(".").nth(0).unwrap(),
+            signature.split('.').next().unwrap(),
             "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9"
         );
     }

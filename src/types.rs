@@ -178,7 +178,7 @@ pub struct ConsoleApplicationSecret {
 pub mod tests {
     use super::*;
 
-    pub const SECRET: &'static str =
+    pub const SECRET: &str =
         "{\"installed\":{\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\
          \"client_secret\":\"UqkDJd5RFwnHoiG5x5Rub8SI\",\"token_uri\":\"https://accounts.google.\
          com/o/oauth2/token\",\"client_email\":\"\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:\

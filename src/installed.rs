@@ -495,7 +495,7 @@ mod tests {
                 //assert!(response.status().is_success());
             }
             Result::Err(err) => {
-                assert!(false, "Failed to request from local server: {:?}", err);
+                panic!("Failed to request from local server: {:?}", err);
             }
         }
 
@@ -511,7 +511,7 @@ mod tests {
                 assert!(response.status().is_success());
             }
             Result::Err(err) => {
-                assert!(false, "Failed to request from local server: {:?}", err);
+                panic!("Failed to request from local server: {:?}", err);
             }
         }
 

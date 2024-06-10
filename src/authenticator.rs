@@ -283,7 +283,7 @@ impl ServiceAccountAuthenticator {
     ) -> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
         AuthenticatorBuilder::new(
             ServiceAccountFlowOpts {
-                key: service_account::FlowOptsKey::Key(service_account_key),
+                key: service_account::FlowOptsKey::Key(Box::new(service_account_key)),
                 subject: None,
             },
             client,
@@ -477,12 +477,7 @@ impl AccessTokenAuthenticator {
         access_token: String,
         client: C,
     ) -> AuthenticatorBuilder<C, AccessTokenFlow> {
-        AuthenticatorBuilder::new(
-            AccessTokenFlow {
-                access_token: access_token,
-            },
-            client,
-        )
+        AuthenticatorBuilder::new(AccessTokenFlow { access_token }, client)
     }
 }
 
@@ -878,6 +873,7 @@ mod private {
     use crate::service_account_impersonator::ServiceAccountImpersonationFlow;
     use crate::types::{ApplicationSecret, TokenInfo};
 
+    #[allow(clippy::enum_variant_names)]
     pub enum AuthFlow {
         DeviceFlow(DeviceFlow),
         InstalledFlow(InstalledFlow),

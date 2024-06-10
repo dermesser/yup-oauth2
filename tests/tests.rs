@@ -199,7 +199,7 @@ async fn create_installed_flow_auth(
                 } else {
                     // Parse presented url to obtain redirect_uri with location of local
                     // code-accepting server.
-                    let uri = Uri::from_str(url.as_ref()).unwrap();
+                    let uri = Uri::from_str(url).unwrap();
                     let query = uri.query().unwrap();
                     let parsed = form_urlencoded::parse(query.as_bytes()).into_owned();
                     let mut rduri = None;

@@ -64,11 +64,7 @@ pub(crate) struct ScopeSet<'a, T> {
 // Clone to be implemented regardless of whether T is Clone or not.
 impl<'a, T> Clone for ScopeSet<'a, T> {
     fn clone(&self) -> Self {
-        ScopeSet {
-            hash: self.hash,
-            filter: self.filter,
-            scopes: self.scopes,
-        }
+        *self
     }
 }
 impl<'a, T> Copy for ScopeSet<'a, T> {}

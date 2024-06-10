@@ -15,7 +15,7 @@ use crate::{
     Error,
 };
 
-const IAM_CREDENTIALS_ENDPOINT: &'static str = "https://iamcredentials.googleapis.com";
+const IAM_CREDENTIALS_ENDPOINT: &str = "https://iamcredentials.googleapis.com";
 
 fn uri(email: &str) -> String {
     format!(
