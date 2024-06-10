@@ -28,7 +28,7 @@ required-features = ["hyper-rustls", "service_account"]
 
 [features]
 default = ["hyper-rustls", "service_account"]
-service_account = ["hyper-rustls", "rustls", "rustls-pemfile"]
+service_account = ["hyper-rustls", "hyper-rustls/rustls-native-certs", "rustls", "rustls-pemfile"]
 
 [dependencies]
 anyhow = "1.0.38"
