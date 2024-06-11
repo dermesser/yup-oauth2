@@ -5,7 +5,6 @@
 pub use crate::types::TokenInfo;
 
 use futures::lock::Mutex;
-use itertools::Itertools;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -138,20 +137,15 @@ impl Storage {
             Storage::Memory { tokens } => Ok(tokens.lock().await.set(scopes, token)?),
             Storage::Disk(disk_storage) => Ok(disk_storage.set(scopes, token).await?),
             Storage::Custom(custom_storage) => {
-                let str_scopes: Vec<_> = scopes
+                let mut str_scopes = scopes
                     .scopes
                     .iter()
                     .map(|scope| scope.as_ref())
-                    .sorted()
-                    .unique()
-                    .collect();
+                    .collect::<Vec<_>>();
+                str_scopes.sort_unstable();
+                str_scopes.dedup();
 
-                custom_storage
-                    .set(
-                        &str_scopes[..], // TODO: sorted, unique
-                        token,
-                    )
-                    .await
+                custom_storage.set(&str_scopes[..], token).await
             }
         }
     }
@@ -164,13 +158,13 @@ impl Storage {
             Storage::Memory { tokens } => tokens.lock().await.get(scopes),
             Storage::Disk(disk_storage) => disk_storage.get(scopes).await,
             Storage::Custom(custom_storage) => {
-                let str_scopes: Vec<_> = scopes
+                let mut str_scopes = scopes
                     .scopes
                     .iter()
                     .map(|scope| scope.as_ref())
-                    .sorted()
-                    .unique()
-                    .collect();
+                    .collect::<Vec<_>>();
+                str_scopes.sort_unstable();
+                str_scopes.dedup();
 
                 custom_storage.get(&str_scopes[..]).await
             }
