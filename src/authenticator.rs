@@ -463,7 +463,10 @@ impl ExternalAccountAuthenticator {
 /// #     .expect("failed to create authenticator");
 /// # }
 /// ```
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 pub struct AccessTokenAuthenticator;
+
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 impl AccessTokenAuthenticator {
     /// the builder pattern for the authenticator
     pub fn builder(
@@ -576,6 +579,7 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     }
 
     fn new(auth_flow: F, hyper_client_builder: C) -> AuthenticatorBuilder<C, F> {
+        install_crypto_provider_if_not_set();
         AuthenticatorBuilder {
             hyper_client_builder,
             storage_type: StorageType::Memory,
@@ -1061,6 +1065,16 @@ enum StorageType {
     /// Implement your own storage provider
     Custom(Box<dyn TokenStorage>),
 }
+
+#[cfg(feature = "hyper-rustls")]
+fn install_crypto_provider_if_not_set() {
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    }
+}
+
+#[cfg(not(feature = "hyper-rustls"))]
+fn install_crypto_provider_if_not_set() {}
 
 #[cfg(test)]
 mod tests {
