@@ -1,4 +1,4 @@
-#![cfg(feature = "service_account")]
+#![cfg(feature = "service-account")]
 
 //! This module provides a flow that obtains tokens for service accounts.
 //!

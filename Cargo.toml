@@ -16,7 +16,7 @@ required-features = ["hyper-rustls", "ring"]
 
 [[example]]
 name = "custom_client"
-required-features = ["hyper-rustls", "service_account", "ring"]
+required-features = ["hyper-rustls", "service-account", "ring"]
 
 [[example]]
 name = "custom_storage"
@@ -24,11 +24,12 @@ required-features = ["hyper-rustls", "ring"]
 
 [[test]]
 name = "tests"
-required-features = ["hyper-rustls", "service_account"]
+required-features = ["hyper-rustls", "service-account"]
 
 [features]
-default = ["hyper-rustls", "rustls", "service_account", "ring"]
-service_account = ["hyper-rustls", "rustls", "rustls-pemfile"]
+default = ["hyper-rustls", "rustls", "service-account", "ring"]
+service_account = ["service-account"]
+service-account = ["hyper-rustls", "rustls", "rustls-pemfile"]
 hyper-rustls = ["dep:hyper-rustls", "rustls"]
 ring = ["rustls/ring", "hyper-rustls?/ring"]
 aws-lc-rs = ["rustls/aws_lc_rs", "hyper-rustls?/aws-lc-rs"]

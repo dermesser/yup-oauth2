@@ -11,7 +11,7 @@ use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
 use crate::refresh::RefreshFlow;
 use crate::service_account_impersonator::ServiceAccountImpersonationFlow;
 
-#[cfg(feature = "service_account")]
+#[cfg(feature = "service-account")]
 use crate::service_account::{self, ServiceAccountFlow, ServiceAccountFlowOpts, ServiceAccountKey};
 use crate::storage::{self, Storage, TokenStorage};
 use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
@@ -263,10 +263,10 @@ impl DeviceFlowAuthenticator {
 ///         .expect("failed to create authenticator");
 /// # }
 /// ```
-#[cfg(feature = "service_account")]
+#[cfg(feature = "service-account")]
 pub struct ServiceAccountAuthenticator;
 
-#[cfg(feature = "service_account")]
+#[cfg(feature = "service-account")]
 impl ServiceAccountAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses a service account.
     #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
@@ -297,7 +297,7 @@ impl ServiceAccountAuthenticator {
 
 /// Create an authenticator that uses a application default credentials.
 /// ```
-/// # #[cfg(all(any(feature = "hyper-rustls", feature = "hyper-tls"), feature = "service_account"))]
+/// # #[cfg(all(any(feature = "hyper-rustls", feature = "hyper-tls"), feature = "service-account"))]
 /// # async fn foo() {
 /// #    use yup_oauth2::ApplicationDefaultCredentialsAuthenticator;
 /// #    use yup_oauth2::ApplicationDefaultCredentialsFlowOpts;
@@ -319,7 +319,7 @@ impl ServiceAccountAuthenticator {
 pub struct ApplicationDefaultCredentialsAuthenticator;
 impl ApplicationDefaultCredentialsAuthenticator {
     /// Try to build ServiceAccountFlowOpts from the environment
-    #[cfg(feature = "service_account")]
+    #[cfg(feature = "service-account")]
     pub async fn from_environment() -> Result<ServiceAccountFlowOpts, std::env::VarError> {
         let key_path = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")?;
 
@@ -331,7 +331,7 @@ impl ApplicationDefaultCredentialsAuthenticator {
 
     /// Use the builder pattern to deduce which model of authenticator should be used:
     /// Service account one or GCE instance metadata kind
-    #[cfg(feature = "service_account")]
+    #[cfg(feature = "service-account")]
     #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
     #[cfg_attr(
         yup_oauth2_docsrs,
@@ -344,7 +344,7 @@ impl ApplicationDefaultCredentialsAuthenticator {
     }
 
     /// Use the builder pattern to deduce which model of authenticator should be used and allow providing a hyper client
-    #[cfg(feature = "service_account")]
+    #[cfg(feature = "service-account")]
     pub async fn with_client<C>(
         opts: ApplicationDefaultCredentialsFlowOpts,
         client: C,
@@ -370,7 +370,7 @@ where
     C: HyperClientBuilder,
 {
     /// Service account based authenticator signature
-    #[cfg(feature = "service_account")]
+    #[cfg(feature = "service-account")]
     ServiceAccount(AuthenticatorBuilder<C, ServiceAccountFlowOpts>),
     /// GCE Instance Metadata based authenticator signature
     InstanceMetadata(AuthenticatorBuilder<C, ApplicationDefaultCredentialsFlowOpts>),
@@ -749,7 +749,7 @@ impl<C> AuthenticatorBuilder<C, InstalledFlow> {
 ///     .expect("failed to create authenticator");
 /// # }
 /// ```
-#[cfg(feature = "service_account")]
+#[cfg(feature = "service-account")]
 impl<C> AuthenticatorBuilder<C, ServiceAccountFlowOpts> {
     /// Use the provided subject.
     pub fn subject(self, subject: impl Into<String>) -> Self {
@@ -875,7 +875,7 @@ mod private {
     use crate::error::Error;
     use crate::external_account::ExternalAccountFlow;
     use crate::installed::InstalledFlow;
-    #[cfg(feature = "service_account")]
+    #[cfg(feature = "service-account")]
     use crate::service_account::ServiceAccountFlow;
     use crate::service_account_impersonator::ServiceAccountImpersonationFlow;
     use crate::types::{ApplicationSecret, TokenInfo};
@@ -884,7 +884,7 @@ mod private {
     pub enum AuthFlow {
         DeviceFlow(DeviceFlow),
         InstalledFlow(InstalledFlow),
-        #[cfg(feature = "service_account")]
+        #[cfg(feature = "service-account")]
         ServiceAccountFlow(ServiceAccountFlow),
         ServiceAccountImpersonationFlow(ServiceAccountImpersonationFlow),
         ApplicationDefaultCredentialsFlow(ApplicationDefaultCredentialsFlow),
@@ -898,7 +898,7 @@ mod private {
             match self {
                 AuthFlow::DeviceFlow(device_flow) => Some(&device_flow.app_secret),
                 AuthFlow::InstalledFlow(installed_flow) => Some(&installed_flow.app_secret),
-                #[cfg(feature = "service_account")]
+                #[cfg(feature = "service-account")]
                 AuthFlow::ServiceAccountFlow(_) => None,
                 AuthFlow::ServiceAccountImpersonationFlow(_) => None,
                 AuthFlow::ApplicationDefaultCredentialsFlow(_) => None,
@@ -922,7 +922,7 @@ mod private {
                 AuthFlow::InstalledFlow(installed_flow) => {
                     installed_flow.token(hyper_client, scopes).await
                 }
-                #[cfg(feature = "service_account")]
+                #[cfg(feature = "service-account")]
                 AuthFlow::ServiceAccountFlow(service_account_flow) => {
                     service_account_flow.token(hyper_client, scopes).await
                 }
