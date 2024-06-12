@@ -16,6 +16,10 @@ use crate::service_account::{self, ServiceAccountFlow, ServiceAccountFlowOpts, S
 use crate::storage::{self, Storage, TokenStorage};
 use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
 use private::AuthFlow;
+#[cfg(all(feature = "aws-lc-rs", feature = "hyper-rustls", not(feature = "ring")))]
+use rustls::crypto::aws_lc_rs::default_provider as default_crypto_provider;
+#[cfg(all(feature = "ring", feature = "hyper-rustls"))]
+use rustls::crypto::ring::default_provider as default_crypto_provider;
 
 use crate::access_token::AccessTokenFlow;
 
@@ -1003,7 +1007,7 @@ impl HyperClientBuilder for DefaultHyperClient {
     ) -> Result<hyper_util::client::legacy::Client<Self::Connector, String>, Error> {
         #[cfg(feature = "hyper-rustls")]
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_provider_and_native_roots(rustls::crypto::ring::default_provider())?
+            .with_provider_and_native_roots(default_crypto_provider())?
             .https_or_http()
             .enable_http1()
             .enable_http2()
@@ -1023,7 +1027,7 @@ impl HyperClientBuilder for DefaultHyperClient {
     ) -> hyper_util::client::legacy::Client<Self::Connector, String> {
         #[cfg(feature = "hyper-rustls")]
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_provider_and_native_roots(rustls::crypto::ring::default_provider())
+            .with_provider_and_native_roots(default_crypto_provider())
             .unwrap()
             .https_or_http()
             .enable_http1()

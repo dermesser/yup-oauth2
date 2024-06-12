@@ -23,7 +23,11 @@ use base64::Engine as _;
 use http::header;
 use http_body_util::BodyExt;
 use hyper_util::client::legacy::connect::Connect;
-use rustls::{self, crypto::ring::sign, pki_types::PrivateKeyDer, sign::SigningKey};
+#[cfg(all(feature = "aws-lc-rs", not(feature = "ring")))]
+use rustls::crypto::aws_lc_rs as crypto_provider;
+#[cfg(feature = "ring")]
+use rustls::crypto::ring as crypto_provider;
+use rustls::{self, pki_types::PrivateKeyDer, sign::SigningKey};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use url::form_urlencoded;
@@ -125,7 +129,7 @@ pub(crate) struct JWTSigner {
 impl JWTSigner {
     fn new(private_key: &str) -> Result<Self, io::Error> {
         let key = decode_rsa_key(private_key)?;
-        let signing_key = sign::RsaSigningKey::new(&key)
+        let signing_key = crypto_provider::sign::RsaSigningKey::new(&key)
             .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't initialize signer"))?;
         let signer = signing_key
             .choose_scheme(&[rustls::SignatureScheme::RSA_PKCS1_SHA256])
@@ -243,7 +247,7 @@ mod tests {
             hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
                 .build(
                     hyper_rustls::HttpsConnectorBuilder::new()
-                        .with_provider_and_native_roots(rustls::crypto::ring::default_provider())
+                        .with_provider_and_native_roots(crypto_provider::default_provider())
                         .unwrap()
                         .https_only()
                         .enable_http1()

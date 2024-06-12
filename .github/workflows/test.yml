@@ -9,7 +9,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        features: ["service_account,hyper-rustls", "service_account,hyper-tls", "service_account", "hyper-rustls"]
+        features: ["service_account,hyper-rustls,ring",
+        "service_account,hyper-rustls,aws-lc-rs",
+        "service_account,hyper-tls,ring", "service_account,hyper-tls,aws-lc-rs"
+        "service_account,ring", "hyper-rustls,ring"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
