@@ -9,27 +9,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        features: ["service_account,hyper-rustls", "service_account", "hyper-rustls"]
+        features: ["service_account,hyper-rustls", "service_account,hyper-tls", "service_account", "hyper-rustls"]
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          profile: minimal
-          default: true
       - run: cargo test --no-default-features --features ${{ matrix.features }}
 
   doc:
     name: yup-oauth2
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: nightly
-          profile: minimal
-          default: true
-      - run: cargo doc --no-deps
+      - run: cargo doc --no-deps --all-features
         env:
           RUSTDOCFLAGS: --cfg yup_oauth2_docsrs
 
@@ -37,10 +33,8 @@ jobs:
     name: yup-oauth2
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          profile: minimal
-          default: true
       - run: cargo fmt -- --check
