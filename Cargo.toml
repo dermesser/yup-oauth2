@@ -33,6 +33,7 @@ service-account = ["hyper-rustls", "rustls", "rustls-pemfile"]
 hyper-rustls = ["dep:hyper-rustls", "rustls"]
 ring = ["rustls/ring", "hyper-rustls?/ring"]
 aws-lc-rs = ["rustls/aws_lc_rs", "hyper-rustls?/aws-lc-rs"]
+hyper-tls = ["dep:hyper-tls"]
 
 [dependencies]
 anyhow = "1.0.38"
