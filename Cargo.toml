@@ -27,8 +27,9 @@ name = "tests"
 required-features = ["hyper-rustls", "service_account"]
 
 [features]
-default = ["hyper-rustls", "service_account"]
+default = ["hyper-rustls", "rustls", "service_account"]
 service_account = ["hyper-rustls", "rustls", "rustls-pemfile"]
+hyper-rustls = ["dep:hyper-rustls", "rustls"]
 
 [dependencies]
 anyhow = "1.0.38"
@@ -39,11 +40,11 @@ http = "1"
 http-body-util = "0.1"
 hyper = "1"
 hyper-util = { version = "0.1.5", features = ["client-legacy", "server-auto", "http1", "http2", "server-graceful"] }
-hyper-rustls = { version = "0.27", optional = true, default-features = false, features = ["http1", "http2", "rustls-native-certs", "ring"] }
+hyper-rustls = { version = "0.27", optional = true, default-features = false, features = ["http1", "http2", "rustls-native-certs", "ring", "native-tokio"] }
 hyper-tls = { version = "0.6.0", optional = true }
 log = "0.4"
 percent-encoding = "2"
-rustls = { version = "^0.23", optional = true, features = ["ring"] }
+rustls = { version = "^0.23", optional = true, default-features = false, features = ["ring", "std"] }
 rustls-pemfile = { version = "2.0.0", optional = true }
 seahash = "4"
 serde = { version = "1.0", features = ["derive"] }

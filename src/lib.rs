@@ -102,11 +102,15 @@ pub use hyper_rustls;
 #[cfg(feature = "service_account")]
 #[doc(inline)]
 pub use crate::authenticator::ServiceAccountAuthenticator;
+
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+pub use crate::authenticator::AccessTokenAuthenticator;
+
 #[doc(inline)]
 pub use crate::authenticator::{
-    AccessTokenAuthenticator, ApplicationDefaultCredentialsAuthenticator,
-    AuthorizedUserAuthenticator, DeviceFlowAuthenticator, ExternalAccountAuthenticator,
-    InstalledFlowAuthenticator, ServiceAccountImpersonationAuthenticator,
+    ApplicationDefaultCredentialsAuthenticator, AuthorizedUserAuthenticator,
+    DeviceFlowAuthenticator, ExternalAccountAuthenticator, InstalledFlowAuthenticator,
+    ServiceAccountImpersonationAuthenticator,
 };
 
 pub use crate::helper::*;
