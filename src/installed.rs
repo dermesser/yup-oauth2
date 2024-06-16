@@ -17,6 +17,7 @@ use hyper_util::client::legacy::connect::Connect;
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
 use tokio::sync::oneshot;
 use url::form_urlencoded;
+use url::quirks::port;
 
 const QUERY_SET: AsciiSet = CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');
 
@@ -192,7 +193,7 @@ impl InstalledFlow {
         // by certain providers.
         let redirect_uri: Cow<str> = match self.flow_delegate.redirect_uri() {
             Some(uri) => uri.into(),
-            None => format!("http://{}", server_addr).into(),
+            None => format!("http://localhost:{}", server_addr.port()).into(),
         };
         let url = build_authentication_request_url(
             &app_secret.auth_uri,
@@ -240,7 +241,7 @@ impl InstalledFlow {
         use std::borrow::Cow;
         let redirect_uri: Cow<str> = match (custom_redirect_uri, server_addr) {
             (Some(uri), _) => uri.into(),
-            (None, Some(addr)) => format!("http://{}", addr).into(),
+            (None, Some(addr)) => format!("http://localhost:{}", addr.port()).into(),
             (None, None) => OOB_REDIRECT_URI.into(),
         };
 
