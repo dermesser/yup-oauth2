@@ -11,8 +11,8 @@ jobs:
       matrix:
         features: ["service_account,hyper-rustls,ring",
         "service_account,hyper-rustls,aws-lc-rs",
-        "service_account,hyper-tls,ring", "service_account,hyper-tls,aws-lc-rs"
-        "service_account,ring", "hyper-rustls,ring"]
+        "service_account,hyper-tls,ring", "service_account,hyper-tls,aws-lc-rs",
+        "hyper-rustls,ring"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
