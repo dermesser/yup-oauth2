@@ -243,7 +243,7 @@ mod tests {
             hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
                 .build(
                     hyper_rustls::HttpsConnectorBuilder::new()
-                        .with_native_roots()
+                        .with_provider_and_native_roots(rustls::crypto::ring::default_provider())
                         .unwrap()
                         .https_only()
                         .enable_http1()
