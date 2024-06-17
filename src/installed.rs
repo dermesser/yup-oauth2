@@ -17,7 +17,6 @@ use hyper_util::client::legacy::connect::Connect;
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
 use tokio::sync::oneshot;
 use url::form_urlencoded;
-use url::quirks::port;
 
 const QUERY_SET: AsciiSet = CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');
 
