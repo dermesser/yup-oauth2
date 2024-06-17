@@ -579,7 +579,6 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     }
 
     fn new(auth_flow: F, hyper_client_builder: C) -> AuthenticatorBuilder<C, F> {
-        install_crypto_provider_if_not_set();
         AuthenticatorBuilder {
             hyper_client_builder,
             storage_type: StorageType::Memory,
@@ -1004,7 +1003,7 @@ impl HyperClientBuilder for DefaultHyperClient {
     ) -> Result<hyper_util::client::legacy::Client<Self::Connector, String>, Error> {
         #[cfg(feature = "hyper-rustls")]
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_native_roots()?
+            .with_provider_and_native_roots(rustls::crypto::ring::default_provider())?
             .https_or_http()
             .enable_http1()
             .enable_http2()
@@ -1024,7 +1023,7 @@ impl HyperClientBuilder for DefaultHyperClient {
     ) -> hyper_util::client::legacy::Client<Self::Connector, String> {
         #[cfg(feature = "hyper-rustls")]
         let connector = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_native_roots()
+            .with_provider_and_native_roots(rustls::crypto::ring::default_provider())
             .unwrap()
             .https_or_http()
             .enable_http1()
@@ -1065,16 +1064,6 @@ enum StorageType {
     /// Implement your own storage provider
     Custom(Box<dyn TokenStorage>),
 }
-
-#[cfg(feature = "hyper-rustls")]
-fn install_crypto_provider_if_not_set() {
-    if rustls::crypto::CryptoProvider::get_default().is_none() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    }
-}
-
-#[cfg(not(feature = "hyper-rustls"))]
-fn install_crypto_provider_if_not_set() {}
 
 #[cfg(test)]
 mod tests {
