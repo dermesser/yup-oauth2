@@ -85,7 +85,7 @@ mod installed;
 mod refresh;
 pub mod service_account_impersonator;
 
-#[cfg(feature = "service_account")]
+#[cfg(feature = "service-account")]
 mod service_account;
 
 /// Interface for storing tokens so that they can be re-used. There are built-in memory and
@@ -99,7 +99,7 @@ pub use hyper;
 #[cfg(feature = "hyper-rustls")]
 pub use hyper_rustls;
 
-#[cfg(feature = "service_account")]
+#[cfg(feature = "service-account")]
 #[doc(inline)]
 pub use crate::authenticator::ServiceAccountAuthenticator;
 
@@ -117,7 +117,7 @@ pub use crate::helper::*;
 pub use crate::installed::InstalledFlowReturnMethod;
 
 pub use crate::application_default_credentials::ApplicationDefaultCredentialsFlowOpts;
-#[cfg(feature = "service_account")]
+#[cfg(feature = "service-account")]
 pub use crate::service_account::ServiceAccountKey;
 
 #[doc(inline)]
