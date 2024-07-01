@@ -1,8 +1,7 @@
 //! Demonstrating how to create a custom token store
-use anyhow::anyhow;
 use async_trait::async_trait;
-use std::sync::RwLock;
-use yup_oauth2::storage::{TokenInfo, TokenStorage};
+use std::{borrow::Cow, sync::RwLock};
+use yup_oauth2::storage::{TokenInfo, TokenStorage, TokenStorageError};
 
 struct ExampleTokenStore {
     store: RwLock<Vec<StoredToken>>,
@@ -25,15 +24,14 @@ fn scopes_covered_by(scopes: &[&str], possible_match_or_superset: &[&str]) -> bo
 /// to disk, an OS keychain, a database or whatever suits your use-case
 #[async_trait]
 impl TokenStorage for ExampleTokenStore {
-    async fn set(&self, scopes: &[&str], token: TokenInfo) -> anyhow::Result<()> {
+    async fn set(&self, scopes: &[&str], token: TokenInfo) -> Result<(), TokenStorageError> {
         let data = serde_json::to_string(&token).unwrap();
 
         println!("Storing token for scopes {:?}", scopes);
 
-        let mut store = self
-            .store
-            .write()
-            .map_err(|_| anyhow!("Unable to lock store for writing"))?;
+        let mut store = self.store.write().map_err(|_| {
+            TokenStorageError::Other(Cow::Borrowed("Unable to lock store for writing"))
+        })?;
 
         store.push(StoredToken {
             scopes: scopes.iter().map(|str| str.to_string()).collect(),

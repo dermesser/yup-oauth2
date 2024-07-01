@@ -116,15 +116,27 @@ impl ExternalAccountFlow {
 
                 match format {
                     UrlCredentialSourceFormat::Text => {
-                        String::from_utf8(body.to_vec()).map_err(anyhow::Error::from)?
+                        String::from_utf8(body.to_vec()).map_err(|e| {
+                            Error::CredentialSourceError(format!(
+                                "Failed to parse credential source: {e}"
+                            ))
+                        })?
                     }
                     UrlCredentialSourceFormat::Json {
                         subject_token_field_name,
                     } => serde_json::from_slice::<HashMap<String, serde_json::Value>>(&body)?
                         .remove(subject_token_field_name)
-                        .ok_or_else(|| anyhow::format_err!("missing {subject_token_field_name}"))?
+                        .ok_or_else(|| {
+                            Error::CredentialSourceError(format!(
+                                "missing {subject_token_field_name}"
+                            ))
+                        })?
                         .as_str()
-                        .ok_or_else(|| anyhow::format_err!("invalid type"))?
+                        .ok_or_else(|| {
+                            Error::CredentialSourceError(format!(
+                                "could not convert {subject_token_field_name} to string"
+                            ))
+                        })?
                         .to_string(),
                 }
             }
