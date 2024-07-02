@@ -6,10 +6,10 @@ use std::fmt;
 use std::io;
 
 use hyper::Error as HyperError;
-use hyper_util::client::legacy::Error as LegacyHyperError;
 use serde::Deserialize;
 use thiserror::Error as ThisError;
 
+pub use crate::client::SendError;
 pub use crate::external_account::CredentialSourceError;
 pub use crate::storage::TokenStorageError;
 
@@ -155,7 +155,7 @@ pub enum Error {
     HttpError(#[from] HyperError),
     /// Indicates connection failure
     #[error("Connection failure: {0}")]
-    HttpClientError(#[from] LegacyHyperError),
+    HttpClientError(#[from] SendError),
     /// The server returned an error.
     #[error("Server error: {0}")]
     AuthError(#[from] AuthError),

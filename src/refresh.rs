@@ -1,9 +1,9 @@
+use crate::client::SendRequest;
 use crate::error::Error;
 use crate::types::{ApplicationSecret, TokenInfo};
 
 use http::header;
 use http_body_util::BodyExt;
-use hyper_util::client::legacy::connect::Connect;
 use url::form_urlencoded;
 
 /// Implements the [OAuth2 Refresh Token Flow](https://developers.google.com/youtube/v3/guides/authentication#devices).
@@ -28,14 +28,12 @@ impl RefreshFlow {
     ///
     /// # Examples
     /// Please see the crate landing page for an example.
-    pub(crate) async fn refresh_token<C>(
-        client: &hyper_util::client::legacy::Client<C, String>,
+    pub(crate) async fn refresh_token(
+        client: &impl SendRequest,
         client_secret: &ApplicationSecret,
         refresh_token: &str,
     ) -> Result<TokenInfo, Error>
-    where
-        C: Connect + Clone + Send + Sync + 'static,
-    {
+where {
         log::debug!(
             "refreshing access token with refresh token: {}",
             refresh_token

@@ -13,6 +13,7 @@
 //!
 //! Copyright (c) 2016 Google Inc (lewinb@google.com).
 
+use crate::client::SendRequest;
 use crate::error::Error;
 use crate::types::TokenInfo;
 
@@ -22,7 +23,6 @@ use base64::Engine as _;
 
 use http::header;
 use http_body_util::BodyExt;
-use hyper_util::client::legacy::connect::Connect;
 #[cfg(all(feature = "aws-lc-rs", not(feature = "ring")))]
 use rustls::crypto::aws_lc_rs as crypto_provider;
 #[cfg(feature = "ring")]
@@ -194,14 +194,13 @@ impl ServiceAccountFlow {
     }
 
     /// Send a request for a new Bearer token to the OAuth provider.
-    pub(crate) async fn token<C, T>(
+    pub(crate) async fn token<T>(
         &self,
-        hyper_client: &hyper_util::client::legacy::Client<C, String>,
+        hyper_client: &impl SendRequest,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: Connect + Clone + Send + Sync + 'static,
     {
         let claims = Claims::new(&self.key, scopes, self.subject.as_deref());
         let signed = self.signer.sign_claims(&claims).map_err(|_| {
@@ -244,7 +243,7 @@ mod tests {
         })
         .await
         .unwrap();
-        let client =
+        let client = crate::client::HttpClient::new(
             hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
                 .build(
                     hyper_rustls::HttpsConnectorBuilder::new()
@@ -254,7 +253,9 @@ mod tests {
                         .enable_http1()
                         .enable_http2()
                         .build(),
-                );
+                ),
+            None,
+        );
         println!(
             "{:?}",
             acc.token(&client, &["https://www.googleapis.com/auth/pubsub"])
