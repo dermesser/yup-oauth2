@@ -4,11 +4,11 @@
 //! Resources:
 //! - [gcloud auth application-default login](https://cloud.google.com/sdk/gcloud/reference/auth/application-default/login)
 //!
+use crate::client::SendRequest;
 use crate::error::Error;
 use crate::types::TokenInfo;
 use http::header;
 use http_body_util::BodyExt;
-use hyper_util::client::legacy::connect::Connect;
 use serde::{Deserialize, Serialize};
 
 use url::form_urlencoded;
@@ -40,14 +40,13 @@ pub struct AuthorizedUserFlow {
 
 impl AuthorizedUserFlow {
     /// Send a request for a new Bearer token to the OAuth provider.
-    pub(crate) async fn token<C, T>(
+    pub(crate) async fn token<T>(
         &self,
-        hyper_client: &hyper_util::client::legacy::Client<C, String>,
+        hyper_client: &impl SendRequest,
         _scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: Connect + Clone + Send + Sync + 'static,
     {
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[

@@ -3,6 +3,7 @@
 // Refer to the project root for licensing information.
 //
 use crate::authenticator_delegate::{DefaultInstalledFlowDelegate, InstalledFlowDelegate};
+use crate::client::SendRequest;
 use crate::error::Error;
 use crate::types::{ApplicationSecret, TokenInfo};
 
@@ -13,7 +14,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use http::header;
-use hyper_util::client::legacy::connect::Connect;
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
 use tokio::sync::oneshot;
 use url::form_urlencoded;
@@ -119,14 +119,13 @@ impl InstalledFlow {
     /// . Return that token
     ///
     /// It's recommended not to use the DefaultInstalledFlowDelegate, but a specialized one.
-    pub(crate) async fn token<C, T>(
+    pub(crate) async fn token<T>(
         &self,
-        hyper_client: &hyper_util::client::legacy::Client<C, String>,
+        hyper_client: &impl SendRequest,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: Connect + Clone + Send + Sync + 'static,
     {
         match self.method {
             InstalledFlowReturnMethod::HTTPRedirect => {
@@ -144,15 +143,14 @@ impl InstalledFlow {
         }
     }
 
-    async fn ask_auth_code_interactively<C, T>(
+    async fn ask_auth_code_interactively<T>(
         &self,
-        hyper_client: &hyper_util::client::legacy::Client<C, String>,
+        hyper_client: &impl SendRequest,
         app_secret: &ApplicationSecret,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: Connect + Clone + Send + Sync + 'static,
     {
         let url = build_authentication_request_url(
             &app_secret.auth_uri,
@@ -172,16 +170,15 @@ impl InstalledFlow {
             .await
     }
 
-    async fn ask_auth_code_via_http<C, T>(
+    async fn ask_auth_code_via_http<T>(
         &self,
-        hyper_client: &hyper_util::client::legacy::Client<C, String>,
+        hyper_client: &impl SendRequest,
         port: Option<u16>,
         app_secret: &ApplicationSecret,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: Connect + Clone + Send + Sync + 'static,
     {
         use std::borrow::Cow;
         let server = InstalledFlowServer::run(port)?;
@@ -211,16 +208,13 @@ impl InstalledFlow {
             .await
     }
 
-    async fn exchange_auth_code<C>(
+    async fn exchange_auth_code(
         &self,
         authcode: &str,
-        hyper_client: &hyper_util::client::legacy::Client<C, String>,
+        hyper_client: &impl SendRequest,
         app_secret: &ApplicationSecret,
         server_addr: Option<SocketAddr>,
-    ) -> Result<TokenInfo, Error>
-    where
-        C: Connect + Clone + Send + Sync + 'static,
-    {
+    ) -> Result<TokenInfo, Error> {
         let redirect_uri = self.flow_delegate.redirect_uri();
         let request = Self::request_token(app_secret, authcode, redirect_uri, server_addr);
         log::debug!("Sending request: {:?}", request);
@@ -419,6 +413,8 @@ mod installed_flow_server {
 
 #[cfg(test)]
 mod tests {
+    use crate::client::LegacyClient;
+
     use super::*;
     use http::Uri;
 
@@ -479,11 +475,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_server() {
-        let client: hyper_util::client::legacy::Client<
-            hyper_util::client::legacy::connect::HttpConnector,
-            String,
-        > = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
-            .build_http();
+        let client: LegacyClient<hyper_util::client::legacy::connect::HttpConnector> =
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+                .build_http();
         let server = InstalledFlowServer::run(None).unwrap();
 
         let response = client

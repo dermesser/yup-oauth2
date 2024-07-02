@@ -1,6 +1,7 @@
 use crate::authenticator_delegate::{
     DefaultDeviceFlowDelegate, DeviceAuthResponse, DeviceFlowDelegate,
 };
+use crate::client::SendRequest;
 use crate::error::{AuthError, Error};
 use crate::types::{ApplicationSecret, TokenInfo};
 
@@ -9,7 +10,6 @@ use std::time::Duration;
 
 use http::header;
 use http_body_util::BodyExt;
-use hyper_util::client::legacy::connect::Connect;
 use url::form_urlencoded;
 
 pub const GOOGLE_DEVICE_CODE_URL: &str = "https://accounts.google.com/o/oauth2/device/code";
@@ -40,14 +40,13 @@ impl DeviceFlow {
         }
     }
 
-    pub(crate) async fn token<C, T>(
+    pub(crate) async fn token<T>(
         &self,
-        hyper_client: &hyper_util::client::legacy::Client<C, String>,
+        hyper_client: &impl SendRequest,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: Connect + Clone + Send + Sync + 'static,
     {
         let device_auth_resp = Self::request_code(
             &self.app_secret,
@@ -69,16 +68,13 @@ impl DeviceFlow {
         .await
     }
 
-    async fn wait_for_device_token<C>(
+    async fn wait_for_device_token(
         &self,
-        hyper_client: &hyper_util::client::legacy::Client<C, String>,
+        hyper_client: &impl SendRequest,
         app_secret: &ApplicationSecret,
         device_auth_resp: &DeviceAuthResponse,
         grant_type: &str,
-    ) -> Result<TokenInfo, Error>
-    where
-        C: Connect + Clone + Send + Sync + 'static,
-    {
+    ) -> Result<TokenInfo, Error> {
         let mut interval = device_auth_resp.interval;
         log::debug!("Polling every {:?} for device token", interval);
         loop {
@@ -126,15 +122,14 @@ impl DeviceFlow {
     /// * If called after a successful result was returned at least once.
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    async fn request_code<C, T>(
+    async fn request_code<T>(
         application_secret: &ApplicationSecret,
-        client: &hyper_util::client::legacy::Client<C, String>,
+        client: &impl SendRequest,
         device_code_url: &str,
         scopes: &[T],
     ) -> Result<DeviceAuthResponse, Error>
     where
         T: AsRef<str>,
-        C: Connect + Clone + Send + Sync + 'static,
     {
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
@@ -174,15 +169,13 @@ impl DeviceFlow {
     ///
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    async fn poll_token<'a, C>(
+    async fn poll_token<'a>(
         application_secret: &ApplicationSecret,
-        client: &hyper_util::client::legacy::Client<C, String>,
+        client: &impl SendRequest,
         device_code: &str,
         grant_type: &str,
     ) -> Result<TokenInfo, Error>
-    where
-        C: Connect + Clone + Send + Sync + 'static,
-    {
+where {
         // We should be ready for a new request
         let req = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[
