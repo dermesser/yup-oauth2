@@ -415,6 +415,8 @@ async fn open_writeable_file(
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     #[test]
@@ -453,10 +455,10 @@ mod tests {
             .tempdir()
             .unwrap();
 
+        let filename = tempdir.path().join("tokenstorage.json");
+
         {
-            let storage = DiskStorage::new(tempdir.path().join("tokenstorage.json"))
-                .await
-                .unwrap();
+            let storage = DiskStorage::new(&filename).await.unwrap();
             assert!(storage.get(scope_set).await.is_none());
             storage
                 .set(scope_set, new_token("my_access_token"))
@@ -467,11 +469,24 @@ mod tests {
                 Some(new_token("my_access_token"))
             );
         }
+        async fn find_file(path: &Path) {
+            loop {
+                if tokio::fs::metadata(path).await.is_ok() {
+                    break;
+                }
+            }
+        }
+
+        tokio::time::timeout(Duration::from_secs(1), find_file(&filename))
+            .await
+            .expect(&format!(
+                "File not created at {}",
+                filename.to_string_lossy()
+            ));
+
         {
             // Create a new DiskStorage instance and verify the tokens were read from disk correctly.
-            let storage = DiskStorage::new(tempdir.path().join("tokenstorage.json"))
-                .await
-                .unwrap();
+            let storage = DiskStorage::new(&filename).await.unwrap();
             assert_eq!(
                 storage.get(scope_set).await,
                 Some(new_token("my_access_token"))
