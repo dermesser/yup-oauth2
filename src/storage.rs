@@ -8,6 +8,7 @@ use futures::lock::Mutex;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
+use thiserror::Error;
 
 use async_trait::async_trait;
 
@@ -106,13 +107,24 @@ where
     }
 }
 
+#[derive(Debug, Error)]
+/// Errors that occur while caching tokens in storage
+pub enum TokenStorageError {
+    /// Error while performing an I/O action
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+    /// Other errors
+    #[error("{0}")]
+    Other(std::borrow::Cow<'static, str>),
+}
+
 /// Implement your own token storage solution by implementing this trait. You need a way to
 /// store and retrieve tokens, each keyed by a set of scopes.
 #[async_trait]
 pub trait TokenStorage: Send + Sync {
     /// Store a token for the given set of scopes so that it can be retrieved later by get()
     /// TokenInfo can be serialized with serde.
-    async fn set(&self, scopes: &[&str], token: TokenInfo) -> anyhow::Result<()>;
+    async fn set(&self, scopes: &[&str], token: TokenInfo) -> Result<(), TokenStorageError>;
 
     /// Retrieve a token stored by set for the given set of scopes
     async fn get(&self, scopes: &[&str]) -> Option<TokenInfo>;
@@ -129,7 +141,7 @@ impl Storage {
         &self,
         scopes: ScopeSet<'_, T>,
         token: TokenInfo,
-    ) -> anyhow::Result<()>
+    ) -> Result<(), TokenStorageError>
     where
         T: AsRef<str>,
     {

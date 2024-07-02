@@ -5,7 +5,13 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io;
 
+use hyper::Error as HyperError;
+use hyper_util::client::legacy::Error as LegacyHyperError;
 use serde::Deserialize;
+use thiserror::Error as ThisError;
+
+pub use crate::external_account::CredentialSourceError;
+pub use crate::storage::TokenStorageError;
 
 /// Error returned by the authorization server.
 ///
@@ -142,104 +148,35 @@ impl<T> AuthErrorOr<T> {
 }
 
 /// Encapsulates all possible results of the `token(...)` operation
-#[derive(Debug)]
+#[derive(Debug, ThisError)]
 pub enum Error {
     /// Indicates connection failure
-    HttpError(hyper::Error),
+    #[error("Connection failure: {0}")]
+    HttpError(#[from] HyperError),
     /// Indicates connection failure
-    HttpClientError(hyper_util::client::legacy::Error),
+    #[error("Connection failure: {0}")]
+    HttpClientError(#[from] LegacyHyperError),
     /// The server returned an error.
-    AuthError(AuthError),
+    #[error("Server error: {0}")]
+    AuthError(#[from] AuthError),
     /// Error while decoding a JSON response.
-    JSONError(serde_json::Error),
+    #[error("JSON Error; this might be a bug with unexpected server responses! {0}")]
+    JSONError(#[from] serde_json::Error),
     /// Error within user input.
+    #[error("Invalid user input: {0}")]
     UserError(String),
     /// A lower level IO error.
-    LowLevelError(io::Error),
+    #[error("Low level error: {0}")]
+    LowLevelError(#[from] io::Error),
     /// We required an access token, but received a response that didn't contain one.
+    #[error("Expected an access token, but received a response without one")]
     MissingAccessToken,
-    /// Other errors produced by a storage provider
-    OtherError(anyhow::Error),
-}
-
-impl From<hyper::Error> for Error {
-    fn from(error: hyper::Error) -> Error {
-        Error::HttpError(error)
-    }
-}
-
-impl From<hyper_util::client::legacy::Error> for Error {
-    fn from(error: hyper_util::client::legacy::Error) -> Error {
-        Error::HttpClientError(error)
-    }
-}
-
-impl From<AuthError> for Error {
-    fn from(value: AuthError) -> Error {
-        Error::AuthError(value)
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(value: serde_json::Error) -> Error {
-        Error::JSONError(value)
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(value: io::Error) -> Error {
-        Error::LowLevelError(value)
-    }
-}
-
-impl From<anyhow::Error> for Error {
-    fn from(value: anyhow::Error) -> Error {
-        match value.downcast::<io::Error>() {
-            Ok(io_error) => Error::LowLevelError(io_error),
-            Err(err) => Error::OtherError(err),
-        }
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match *self {
-            Error::HttpError(ref err) => err.fmt(f),
-            Error::HttpClientError(ref err) => err.fmt(f),
-            Error::AuthError(ref err) => err.fmt(f),
-            Error::JSONError(ref e) => {
-                write!(
-                    f,
-                    "JSON Error; this might be a bug with unexpected server responses! {}",
-                    e
-                )?;
-                Ok(())
-            }
-            Error::UserError(ref s) => s.fmt(f),
-            Error::LowLevelError(ref e) => e.fmt(f),
-            Error::MissingAccessToken => {
-                write!(
-                    f,
-                    "Expected an access token, but received a response without one"
-                )?;
-                Ok(())
-            }
-            Error::OtherError(ref e) => e.fmt(f),
-        }
-    }
-}
-
-impl StdError for Error {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match *self {
-            Error::HttpError(ref err) => Some(err),
-            Error::HttpClientError(ref err) => Some(err),
-            Error::AuthError(ref err) => Some(err),
-            Error::JSONError(ref err) => Some(err),
-            Error::LowLevelError(ref err) => Some(err),
-            _ => None,
-        }
-    }
+    /// Produced by storage provider
+    #[error("Error while setting token in cache: {0}")]
+    StorageError(#[from] TokenStorageError),
+    /// Error while parsing credential source
+    #[error("Credential source is invalid: {0}")]
+    CredentialSourceError(CredentialSourceError),
 }
 
 #[cfg(test)]

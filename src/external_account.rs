@@ -12,6 +12,7 @@ use http_body_util::BodyExt;
 use hyper_util::client::legacy::connect::Connect;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use thiserror::Error;
 use url::form_urlencoded;
 
 /// JSON schema of external account secret.
@@ -77,6 +78,23 @@ pub enum UrlCredentialSourceFormat {
     },
 }
 
+#[derive(Debug, Error)]
+/// Errors that can happen when parsing a Credential source
+pub enum CredentialSourceError {
+    /// Parsing credential text source failed
+    #[error("Failed to parse credential text source: {0}")]
+    CredentialSourceTextInvalid(std::string::FromUtf8Error),
+    /// Failed to parse JSON
+    #[error("JSON credential source is invalid: {0}")]
+    JsonInvalid(#[source] serde_json::Error),
+    /// JSON is missing this field
+    #[error("JSON credential source is missing field {0}")]
+    MissingJsonField(String),
+    /// This field of JSON is invalid
+    #[error("JSON credential source could not convert field {0} to string")]
+    InvalidJsonField(String),
+}
+
 /// An ExternalAccountFlow can fetch OAuth tokens using an external account secret.
 pub struct ExternalAccountFlow {
     pub(crate) secret: ExternalAccountSecret,
@@ -116,15 +134,30 @@ impl ExternalAccountFlow {
 
                 match format {
                     UrlCredentialSourceFormat::Text => {
-                        String::from_utf8(body.to_vec()).map_err(anyhow::Error::from)?
+                        String::from_utf8(body.to_vec()).map_err(|e| {
+                            Error::CredentialSourceError(
+                                CredentialSourceError::CredentialSourceTextInvalid(e),
+                            )
+                        })?
                     }
                     UrlCredentialSourceFormat::Json {
                         subject_token_field_name,
-                    } => serde_json::from_slice::<HashMap<String, serde_json::Value>>(&body)?
+                    } => serde_json::from_slice::<HashMap<String, serde_json::Value>>(&body)
+                        .map_err(|e| {
+                            Error::CredentialSourceError(CredentialSourceError::JsonInvalid(e))
+                        })?
                         .remove(subject_token_field_name)
-                        .ok_or_else(|| anyhow::format_err!("missing {subject_token_field_name}"))?
+                        .ok_or_else(|| {
+                            Error::CredentialSourceError(CredentialSourceError::MissingJsonField(
+                                subject_token_field_name.to_owned(),
+                            ))
+                        })?
                         .as_str()
-                        .ok_or_else(|| anyhow::format_err!("invalid type"))?
+                        .ok_or_else(|| {
+                            Error::CredentialSourceError(CredentialSourceError::InvalidJsonField(
+                                subject_token_field_name.to_owned(),
+                            ))
+                        })?
                         .to_string(),
                 }
             }
