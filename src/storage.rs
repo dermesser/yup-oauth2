@@ -346,7 +346,8 @@ pub(crate) struct DiskStorage {
 }
 
 impl DiskStorage {
-    pub(crate) async fn new(filename: PathBuf) -> Result<Self, io::Error> {
+    pub(crate) async fn new(filename: impl Into<PathBuf>) -> Result<Self, io::Error> {
+        let filename = filename.into();
         let tokens = match JSONTokens::load_from_file(&filename).await {
             Ok(tokens) => tokens,
             Err(e) if e.kind() == io::ErrorKind::NotFound => JSONTokens::new(),
