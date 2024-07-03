@@ -964,10 +964,6 @@ pub trait HyperClientBuilder {
 
     /// Create a hyper::Client
     fn build_hyper_client(self) -> Result<HttpClient<Self::Connector>, Error>;
-
-    /// Create a `hyper_util::client::legacy::Client` for tests (HTTPS not required)
-    #[doc(hidden)]
-    fn build_test_hyper_client(self) -> HttpClient<Self::Connector>;
 }
 
 #[cfg(feature = "hyper-rustls")]
@@ -1035,10 +1031,6 @@ where
     fn build_hyper_client(self) -> Result<HttpClient<Self::Connector>, Error> {
         Ok(self.client)
     }
-
-    fn build_test_hyper_client(self) -> HttpClient<Self::Connector> {
-        self.client
-    }
 }
 
 #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
@@ -1085,26 +1077,6 @@ impl HyperClientBuilder for DefaultHyperClient {
             self.timeout,
         ))
     }
-
-    fn build_test_hyper_client(self) -> HttpClient<Self::Connector> {
-        #[cfg(feature = "hyper-rustls")]
-        let connector = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_provider_and_native_roots(default_crypto_provider())
-            .unwrap()
-            .https_or_http()
-            .enable_http1()
-            .enable_http2()
-            .build();
-        #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
-        let connector = hyper_tls::HttpsConnector::new();
-
-        HttpClient::new(
-            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
-                .pool_max_idle_per_host(0)
-                .build::<_, String>(connector),
-            self.timeout,
-        )
-    }
 }
 
 impl<C> HyperClientBuilder for HttpClient<C>
@@ -1120,10 +1092,6 @@ where
 
     fn build_hyper_client(self) -> Result<HttpClient<Self::Connector>, Error> {
         Ok(self)
-    }
-
-    fn build_test_hyper_client(self) -> HttpClient<Self::Connector> {
-        self
     }
 }
 

@@ -61,12 +61,17 @@ async fn create_device_flow_auth_with_timeout(
         client = client.with_timeout(duration);
     }
 
-    DeviceFlowAuthenticator::with_client(app_secret, client.build_test_hyper_client())
-        .flow_delegate(Box::new(FD))
-        .device_code_url(server.url_str("/code"))
-        .build()
-        .await
-        .unwrap()
+    DeviceFlowAuthenticator::with_client(
+        app_secret,
+        client
+            .build_hyper_client()
+            .expect("Hyper client to be built"),
+    )
+    .flow_delegate(Box::new(FD))
+    .device_code_url(server.url_str("/code"))
+    .build()
+    .await
+    .unwrap()
 }
 
 #[tokio::test]
@@ -270,7 +275,9 @@ async fn create_installed_flow_auth(
         }
     }
 
-    let client = DefaultHyperClient::default().build_test_hyper_client();
+    let client = DefaultHyperClient::default()
+        .build_hyper_client()
+        .expect("Hyper client to be built");
     let mut builder = InstalledFlowAuthenticator::with_client(app_secret, method, client.clone())
         .flow_delegate(Box::new(FD(client)));
 
@@ -390,7 +397,9 @@ async fn create_service_account_auth(server: &Server) -> DefaultAuthenticator {
 
     ServiceAccountAuthenticator::with_client(
         key,
-        DefaultHyperClient::default().build_test_hyper_client(),
+        DefaultHyperClient::default()
+            .build_hyper_client()
+            .expect("Hyper client to be built"),
     )
     .build()
     .await
@@ -723,7 +732,9 @@ async fn test_default_application_credentials_from_metadata_server() {
     };
     let authenticator = match ApplicationDefaultCredentialsAuthenticator::with_client(
         opts,
-        DefaultHyperClient::default().build_test_hyper_client(),
+        DefaultHyperClient::default()
+            .build_hyper_client()
+            .expect("Hyper client to be built"),
     )
     .await
     {
