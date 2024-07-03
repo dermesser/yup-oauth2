@@ -462,10 +462,8 @@ mod tests {
         let scope_set = ScopeSet::from(&["myscope"]);
 
         let tempdir = tempfile::Builder::new()
-            .prefix("yup-oauth2-tests_")
-            .rand_bytes(15)
             .tempdir()
-            .unwrap();
+            .expect("Tempdir to be created");
 
         let filename = tempdir.path().join("tokenstorage.json");
 
