@@ -491,10 +491,7 @@ mod tests {
 
         tokio::time::timeout(Duration::from_secs(1), find_file(&filename))
             .await
-            .expect(&format!(
-                "File not created at {}",
-                filename.to_string_lossy()
-            ));
+            .unwrap_or_else(|_| panic!("File not created at {}", filename.to_string_lossy()));
 
         {
             // Create a new DiskStorage instance and verify the tokens were read from disk correctly.
