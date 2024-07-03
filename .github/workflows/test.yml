@@ -4,7 +4,7 @@ name: Actions CI
 
 jobs:
   build_and_test:
-    name: yup-oauth2
+    name: Run tests
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -21,7 +21,7 @@ jobs:
       - run: cargo test --no-default-features --features ${{ matrix.features }}
 
   doc:
-    name: yup-oauth2
+    name: Create docs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +33,7 @@ jobs:
           RUSTDOCFLAGS: --cfg yup_oauth2_docsrs
 
   fmt:
-    name: yup-oauth2
+    name: Check formatting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,3 +41,14 @@ jobs:
         with:
           toolchain: stable
       - run: cargo fmt -- --check
+  
+  clippy:
+    name: Run clippy lints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: clippy
+      - run: cargo clippy --all-features --all-targets -- -D warnings
