@@ -70,7 +70,7 @@
 //! ```
 //!
 #![deny(missing_docs)]
-#![cfg_attr(yup_oauth2_docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod access_token;
 mod application_default_credentials;

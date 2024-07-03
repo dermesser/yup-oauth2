@@ -30,7 +30,7 @@ jobs:
           toolchain: nightly
       - run: cargo doc --no-deps --all-features
         env:
-          RUSTDOCFLAGS: --cfg yup_oauth2_docsrs
+          RUSTDOCFLAGS: --cfg docsrs -D warnings
 
   fmt:
     name: Check formatting

@@ -205,10 +205,7 @@ pub struct InstalledFlowAuthenticator;
 impl InstalledFlowAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses the installed flow.
     #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(
-        yup_oauth2_docsrs,
-        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
-    )]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
     pub fn builder(
         app_secret: ApplicationSecret,
         method: InstalledFlowReturnMethod,
@@ -241,10 +238,7 @@ pub struct DeviceFlowAuthenticator;
 impl DeviceFlowAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses the device flow.
     #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(
-        yup_oauth2_docsrs,
-        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
-    )]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
     pub fn builder(
         app_secret: ApplicationSecret,
     ) -> AuthenticatorBuilder<DefaultHyperClient, DeviceFlow> {
@@ -278,10 +272,7 @@ pub struct ServiceAccountAuthenticator;
 impl ServiceAccountAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses a service account.
     #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(
-        yup_oauth2_docsrs,
-        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
-    )]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
     pub fn builder(
         service_account_key: ServiceAccountKey,
     ) -> AuthenticatorBuilder<DefaultHyperClient, ServiceAccountFlowOpts> {
@@ -341,10 +332,7 @@ impl ApplicationDefaultCredentialsAuthenticator {
     /// Service account one or GCE instance metadata kind
     #[cfg(feature = "service-account")]
     #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(
-        yup_oauth2_docsrs,
-        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
-    )]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
     pub async fn builder(
         opts: ApplicationDefaultCredentialsFlowOpts,
     ) -> ApplicationDefaultCredentialsTypes<DefaultHyperClient> {
@@ -400,10 +388,7 @@ pub struct AuthorizedUserAuthenticator;
 impl AuthorizedUserAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses an authorized user.
     #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(
-        yup_oauth2_docsrs,
-        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
-    )]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
     pub fn builder(
         authorized_user_secret: AuthorizedUserSecret,
     ) -> AuthenticatorBuilder<DefaultHyperClient, AuthorizedUserFlow> {
@@ -440,10 +425,7 @@ pub struct ExternalAccountAuthenticator;
 impl ExternalAccountAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses an external account.
     #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(
-        yup_oauth2_docsrs,
-        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
-    )]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
     pub fn builder(
         external_account_secret: ExternalAccountSecret,
     ) -> AuthenticatorBuilder<DefaultHyperClient, ExternalAccountFlow> {
@@ -515,10 +497,7 @@ pub struct ServiceAccountImpersonationAuthenticator;
 impl ServiceAccountImpersonationAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses the device flow.
     #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(
-        yup_oauth2_docsrs,
-        doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
-    )]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
     pub fn builder(
         authorized_user_secret: AuthorizedUserSecret,
         service_account_email: &str,
@@ -967,29 +946,20 @@ pub trait HyperClientBuilder {
 }
 
 #[cfg(feature = "hyper-rustls")]
-#[cfg_attr(
-    yup_oauth2_docsrs,
-    doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
-)]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
 /// Default authenticator type
 pub type DefaultAuthenticator =
     Authenticator<hyper_rustls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>;
 
 #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
-#[cfg_attr(
-    yup_oauth2_docsrs,
-    doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
-)]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
 /// Default authenticator type
 pub type DefaultAuthenticator =
     Authenticator<hyper_tls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>;
 
 /// The builder value used when the default hyper client should be used.
 #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-#[cfg_attr(
-    yup_oauth2_docsrs,
-    doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
-)]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
 #[derive(Default)]
 pub struct DefaultHyperClient {
     timeout: Option<Duration>,
@@ -1043,10 +1013,7 @@ impl DefaultHyperClient {
 }
 
 #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-#[cfg_attr(
-    yup_oauth2_docsrs,
-    doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls")))
-)]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
 impl HyperClientBuilder for DefaultHyperClient {
     #[cfg(feature = "hyper-rustls")]
     type Connector =

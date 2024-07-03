@@ -71,4 +71,4 @@ members = ["examples/test-installed/", "examples/test-svc-acct/", "examples/test
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "yup_oauth2_docsrs"]
+rustdoc-args = ["--cfg", "docsrs"]
