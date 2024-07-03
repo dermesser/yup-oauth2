@@ -1,5 +1,3 @@
-#![cfg(feature = "service-account")]
-
 //! This module provides a flow that obtains tokens for service accounts.
 //!
 //! Service accounts are usually used by software (i.e., non-human actors) to get access to
