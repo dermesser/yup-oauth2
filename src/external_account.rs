@@ -47,8 +47,7 @@ pub enum CredentialSource {
         file: String,
     },
 
-    //// [Microsoft Azure and URL-sourced
-    ///credentials](https://google.aip.dev/auth/4117#determining-the-subject-token-in-microsoft-azure-and-url-sourced-credentials)
+    /// [Microsoft Azure and URL-sourced credentials](https://google.aip.dev/auth/4117#determining-the-subject-token-in-microsoft-azure-and-url-sourced-credentials)
     Url {
         /// This defines the local metadata server to retrieve the external credentials from. For
         /// Azure, this should be the Azure Instance Metadata Service (IMDS) URL used to retrieve
