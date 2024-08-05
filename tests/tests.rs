@@ -1,7 +1,7 @@
 use yup_oauth2::{
     authenticator::DefaultAuthenticator,
     authenticator_delegate::{DeviceAuthResponse, DeviceFlowDelegate, InstalledFlowDelegate},
-    client::{DefaultHyperClient, HttpClient, HyperClientBuilder},
+    client::{DefaultHyperClientBuilder, HttpClient, HyperClientBuilder},
     error::SendError,
     AccessTokenAuthenticator, ApplicationDefaultCredentialsAuthenticator,
     ApplicationDefaultCredentialsFlowOpts, ApplicationSecret, DeviceFlowAuthenticator,
@@ -57,7 +57,7 @@ async fn create_device_flow_auth_with_timeout(
         }
     }
 
-    let mut client = DefaultHyperClient::default();
+    let mut client = DefaultHyperClientBuilder::default();
     if let Some(duration) = timeout {
         client = client.with_timeout(duration);
     }
@@ -233,7 +233,7 @@ async fn create_installed_flow_auth(
         "client_secret": "iuMPN6Ne1PD7cos29Tk9rlqH",
         "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob","http://localhost"],
     });
-    struct FD(HttpClient<<DefaultHyperClient as HyperClientBuilder>::Connector>);
+    struct FD(HttpClient<<DefaultHyperClientBuilder as HyperClientBuilder>::Connector>);
     impl InstalledFlowDelegate for FD {
         /// Depending on need_code, return the pre-set code or send the code to the server at
         /// the redirect_uri given in the url.
@@ -276,7 +276,7 @@ async fn create_installed_flow_auth(
         }
     }
 
-    let client = DefaultHyperClient::default()
+    let client = DefaultHyperClientBuilder::default()
         .build_hyper_client()
         .expect("Hyper client to be built");
     let mut builder = InstalledFlowAuthenticator::with_client(app_secret, method, client.clone())
@@ -398,7 +398,7 @@ async fn create_service_account_auth(server: &Server) -> DefaultAuthenticator {
 
     ServiceAccountAuthenticator::with_client(
         key,
-        DefaultHyperClient::default()
+        DefaultHyperClientBuilder::default()
             .build_hyper_client()
             .expect("Hyper client to be built"),
     )
@@ -733,7 +733,7 @@ async fn test_default_application_credentials_from_metadata_server() {
     };
     let authenticator = match ApplicationDefaultCredentialsAuthenticator::with_client(
         opts,
-        DefaultHyperClient::default()
+        DefaultHyperClientBuilder::default()
             .build_hyper_client()
             .expect("Hyper client to be built"),
     )
@@ -754,11 +754,13 @@ async fn test_default_application_credentials_from_metadata_server() {
 
 #[tokio::test]
 async fn test_token() {
-    let authenticator =
-        AccessTokenAuthenticator::with_client("0815".to_string(), DefaultHyperClient::default())
-            .build()
-            .await
-            .unwrap();
+    let authenticator = AccessTokenAuthenticator::with_client(
+        "0815".to_string(),
+        DefaultHyperClientBuilder::default(),
+    )
+    .build()
+    .await
+    .unwrap();
     let access_token = authenticator
         .token(&["https://googleapis.com/some/scope"])
         .await

@@ -113,12 +113,12 @@ pub(crate) trait SendRequest {
 #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
 #[derive(Default)]
-pub struct DefaultHyperClient {
+pub struct DefaultHyperClientBuilder {
     timeout: Option<Duration>,
 }
 
 #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-impl DefaultHyperClient {
+impl DefaultHyperClientBuilder {
     /// Set the duration after which a request times out
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
@@ -128,7 +128,7 @@ impl DefaultHyperClient {
 
 #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
-impl HyperClientBuilder for DefaultHyperClient {
+impl HyperClientBuilder for DefaultHyperClientBuilder {
     #[cfg(feature = "hyper-rustls")]
     type Connector =
         hyper_rustls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>;
@@ -161,8 +161,8 @@ impl HyperClientBuilder for DefaultHyperClient {
 }
 
 /// Intended for using an existing hyper client with `yup-oauth2`. Instantiate
-/// with [`CustomHyperClient::from`]
-pub struct CustomHyperClient<C>
+/// with [`CustomHyperClientBuilder::from`]
+pub struct CustomHyperClientBuilder<C>
 where
     C: Connect + Clone + Send + Sync + 'static,
 {
@@ -170,7 +170,7 @@ where
     timeout: Option<Duration>,
 }
 
-impl<C> From<LegacyClient<C>> for CustomHyperClient<C>
+impl<C> From<LegacyClient<C>> for CustomHyperClientBuilder<C>
 where
     C: Connect + Clone + Send + Sync + 'static,
 {
@@ -182,7 +182,7 @@ where
     }
 }
 
-impl<C> HyperClientBuilder for CustomHyperClient<C>
+impl<C> HyperClientBuilder for CustomHyperClientBuilder<C>
 where
     C: Connect + Clone + Send + Sync + 'static,
 {

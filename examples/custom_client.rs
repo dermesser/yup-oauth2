@@ -48,7 +48,8 @@ async fn main() {
         );
     let authenticator = yup_oauth2::ServiceAccountAuthenticator::with_client(
         secret,
-        yup_oauth2::CustomHyperClient::from(client.clone()).with_timeout(Duration::from_secs(10)),
+        yup_oauth2::CustomHyperClientBuilder::from(client.clone())
+            .with_timeout(Duration::from_secs(10)),
     )
     .build()
     .await

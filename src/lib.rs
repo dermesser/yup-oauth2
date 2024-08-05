@@ -108,8 +108,8 @@ pub use crate::authenticator::ServiceAccountAuthenticator;
 pub use crate::authenticator::AccessTokenAuthenticator;
 
 #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-pub use crate::client::DefaultHyperClient;
-pub use crate::client::{CustomHyperClient, HttpClient, HyperClientBuilder};
+pub use crate::client::DefaultHyperClientBuilder;
+pub use crate::client::{CustomHyperClientBuilder, HttpClient, HyperClientBuilder};
 
 #[doc(inline)]
 pub use crate::authenticator::{
