@@ -8,7 +8,7 @@
 use std::time::Duration;
 
 use hyper_util::client::legacy::connect::Connect;
-use yup_oauth2::authenticator::HyperClientBuilder;
+use yup_oauth2::HyperClientBuilder;
 
 async fn r#use<C>(
     client: hyper_util::client::legacy::Client<C, String>,

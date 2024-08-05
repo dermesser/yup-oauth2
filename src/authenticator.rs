@@ -4,7 +4,9 @@ use crate::application_default_credentials::{
 };
 use crate::authenticator_delegate::{DeviceFlowDelegate, InstalledFlowDelegate};
 use crate::authorized_user::{AuthorizedUserFlow, AuthorizedUserSecret};
-use crate::client::{HttpClient, LegacyClient};
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+use crate::client::DefaultHyperClient;
+use crate::client::{HttpClient, HyperClientBuilder};
 use crate::device::DeviceFlow;
 use crate::error::Error;
 use crate::external_account::{ExternalAccountFlow, ExternalAccountSecret};
@@ -17,10 +19,6 @@ use crate::service_account::{self, ServiceAccountFlow, ServiceAccountFlowOpts, S
 use crate::storage::{self, Storage, TokenStorage};
 use crate::types::{AccessToken, ApplicationSecret, TokenInfo};
 use private::AuthFlow;
-#[cfg(all(feature = "aws-lc-rs", feature = "hyper-rustls", not(feature = "ring")))]
-use rustls::crypto::aws_lc_rs::default_provider as default_crypto_provider;
-#[cfg(all(feature = "ring", feature = "hyper-rustls"))]
-use rustls::crypto::ring::default_provider as default_crypto_provider;
 
 use crate::access_token::AccessTokenFlow;
 
@@ -933,18 +931,6 @@ mod private {
     }
 }
 
-/// A trait implemented for any hyper_util::client::legacy::Client as well as the DefaultHyperClient.
-pub trait HyperClientBuilder {
-    /// The hyper connector that the resulting hyper client will use.
-    type Connector: Connect + Clone + Send + Sync + 'static;
-
-    /// Sets duration after which a request times out
-    fn with_timeout(self, timeout: Duration) -> Self;
-
-    /// Create a hyper::Client
-    fn build_hyper_client(self) -> Result<HttpClient<Self::Connector>, Error>;
-}
-
 #[cfg(feature = "hyper-rustls")]
 #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
 /// Default authenticator type
@@ -956,111 +942,6 @@ pub type DefaultAuthenticator =
 /// Default authenticator type
 pub type DefaultAuthenticator =
     Authenticator<hyper_tls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>;
-
-/// The builder value used when the default hyper client should be used.
-#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
-#[derive(Default)]
-pub struct DefaultHyperClient {
-    timeout: Option<Duration>,
-}
-
-/// Intended for using an existing hyper client with `yup-oauth2`. Instantiate
-/// with [`CustomHyperClient::from`]
-pub struct CustomHyperClient<C>
-where
-    C: Connect + Clone + Send + Sync + 'static,
-{
-    client: HttpClient<C>,
-    timeout: Option<Duration>,
-}
-
-impl<C> From<LegacyClient<C>> for CustomHyperClient<C>
-where
-    C: Connect + Clone + Send + Sync + 'static,
-{
-    fn from(client: LegacyClient<C>) -> Self {
-        Self {
-            client: HttpClient::new(client, None),
-            timeout: None,
-        }
-    }
-}
-
-impl<C> HyperClientBuilder for CustomHyperClient<C>
-where
-    C: Connect + Clone + Send + Sync + 'static,
-{
-    type Connector = C;
-
-    fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
-        self
-    }
-
-    fn build_hyper_client(self) -> Result<HttpClient<Self::Connector>, Error> {
-        Ok(self.client)
-    }
-}
-
-#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-impl DefaultHyperClient {
-    /// Set the duration after which a request times out
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
-        self
-    }
-}
-
-#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
-impl HyperClientBuilder for DefaultHyperClient {
-    #[cfg(feature = "hyper-rustls")]
-    type Connector =
-        hyper_rustls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>;
-    #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
-    type Connector = hyper_tls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>;
-
-    fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
-        self
-    }
-
-    fn build_hyper_client(self) -> Result<HttpClient<Self::Connector>, Error> {
-        #[cfg(feature = "hyper-rustls")]
-        let connector = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_provider_and_native_roots(default_crypto_provider())?
-            .https_or_http()
-            .enable_http1()
-            .enable_http2()
-            .build();
-        #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
-        let connector = hyper_tls::HttpsConnector::new();
-
-        Ok(HttpClient::new(
-            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
-                .pool_max_idle_per_host(0)
-                .build::<_, String>(connector),
-            self.timeout,
-        ))
-    }
-}
-
-impl<C> HyperClientBuilder for HttpClient<C>
-where
-    C: Connect + Clone + Send + Sync + 'static,
-{
-    type Connector = C;
-
-    fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.set_timeout(timeout);
-        self
-    }
-
-    fn build_hyper_client(self) -> Result<HttpClient<Self::Connector>, Error> {
-        Ok(self)
-    }
-}
 
 /// How should the acquired tokens be stored?
 enum StorageType {

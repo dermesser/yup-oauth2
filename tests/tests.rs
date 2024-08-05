@@ -1,9 +1,10 @@
 use yup_oauth2::{
-    authenticator::{DefaultAuthenticator, DefaultHyperClient, HyperClientBuilder},
+    authenticator::DefaultAuthenticator,
     authenticator_delegate::{DeviceAuthResponse, DeviceFlowDelegate, InstalledFlowDelegate},
+    client::{DefaultHyperClient, HttpClient, HyperClientBuilder},
     error::SendError,
     AccessTokenAuthenticator, ApplicationDefaultCredentialsAuthenticator,
-    ApplicationDefaultCredentialsFlowOpts, ApplicationSecret, DeviceFlowAuthenticator, HttpClient,
+    ApplicationDefaultCredentialsFlowOpts, ApplicationSecret, DeviceFlowAuthenticator,
     InstalledFlowAuthenticator, InstalledFlowReturnMethod, ServiceAccountAuthenticator,
     ServiceAccountKey,
 };

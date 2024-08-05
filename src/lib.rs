@@ -77,7 +77,7 @@ mod application_default_credentials;
 pub mod authenticator;
 pub mod authenticator_delegate;
 pub mod authorized_user;
-mod client;
+pub mod client;
 mod device;
 pub mod error;
 pub mod external_account;
@@ -108,11 +108,12 @@ pub use crate::authenticator::ServiceAccountAuthenticator;
 pub use crate::authenticator::AccessTokenAuthenticator;
 
 #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-pub use crate::client::HttpClient;
+pub use crate::client::DefaultHyperClient;
+pub use crate::client::{CustomHyperClient, HttpClient, HyperClientBuilder};
 
 #[doc(inline)]
 pub use crate::authenticator::{
-    ApplicationDefaultCredentialsAuthenticator, AuthorizedUserAuthenticator, CustomHyperClient,
+    ApplicationDefaultCredentialsAuthenticator, AuthorizedUserAuthenticator,
     DeviceFlowAuthenticator, ExternalAccountAuthenticator, InstalledFlowAuthenticator,
     ServiceAccountImpersonationAuthenticator,
 };
