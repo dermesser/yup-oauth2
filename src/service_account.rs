@@ -6,7 +6,7 @@
 //!
 //! Resources:
 //! - [Using OAuth 2.0 for Server to Server
-//! Applications](https://developers.google.com/identity/protocols/OAuth2ServiceAccount)
+//!   Applications](https://developers.google.com/identity/protocols/OAuth2ServiceAccount)
 //! - [JSON Web Tokens](https://jwt.io/)
 //!
 //! Copyright (c) 2016 Google Inc (lewinb@google.com).
