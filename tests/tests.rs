@@ -1,18 +1,24 @@
 use yup_oauth2::{
-    authenticator::{DefaultAuthenticator, DefaultHyperClient, HyperClientBuilder},
+    authenticator::DefaultAuthenticator,
     authenticator_delegate::{DeviceAuthResponse, DeviceFlowDelegate, InstalledFlowDelegate},
+    client::{DefaultHyperClientBuilder, HttpClient, HyperClientBuilder},
+    error::SendError,
     AccessTokenAuthenticator, ApplicationDefaultCredentialsAuthenticator,
     ApplicationDefaultCredentialsFlowOpts, ApplicationSecret, DeviceFlowAuthenticator,
     InstalledFlowAuthenticator, InstalledFlowReturnMethod, ServiceAccountAuthenticator,
     ServiceAccountKey,
 };
 
-use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::{future::Future, time::Duration};
 
 use http::Uri;
-use httptest::{matchers::*, responders::json_encoded, Expectation, Server};
+use httptest::{
+    matchers::*,
+    responders::{delay_and_then, json_encoded},
+    Expectation, Server,
+};
 use url::form_urlencoded;
 
 /// Utility function for parsing json. Useful in unit tests. Simply wrap the
@@ -24,6 +30,13 @@ macro_rules! parse_json {
 }
 
 async fn create_device_flow_auth(server: &Server) -> DefaultAuthenticator {
+    create_device_flow_auth_with_timeout(server, None).await
+}
+
+async fn create_device_flow_auth_with_timeout(
+    server: &Server,
+    timeout: Option<Duration>,
+) -> DefaultAuthenticator {
     let app_secret: ApplicationSecret = parse_json!({
         "client_id": "902216714886-k2v9uei3p1dk6h686jbsn9mo96tnbvto.apps.googleusercontent.com",
         "project_id": "yup-test-243420",
@@ -44,12 +57,22 @@ async fn create_device_flow_auth(server: &Server) -> DefaultAuthenticator {
         }
     }
 
-    DeviceFlowAuthenticator::with_client(app_secret, DefaultHyperClient.build_test_hyper_client())
-        .flow_delegate(Box::new(FD))
-        .device_code_url(server.url_str("/code"))
-        .build()
-        .await
-        .unwrap()
+    let mut client = DefaultHyperClientBuilder::default();
+    if let Some(duration) = timeout {
+        client = client.with_timeout(duration);
+    }
+
+    DeviceFlowAuthenticator::with_client(
+        app_secret,
+        client
+            .build_hyper_client()
+            .expect("Hyper client to be built"),
+    )
+    .flow_delegate(Box::new(FD))
+    .device_code_url(server.url_str("/code"))
+    .build()
+    .await
+    .unwrap()
 }
 
 #[tokio::test]
@@ -88,7 +111,7 @@ async fn test_device_success() {
         }))),
     );
 
-    let auth = create_device_flow_auth(&server).await;
+    let auth = create_device_flow_auth_with_timeout(&server, Some(Duration::from_secs(1))).await;
     let token = auth
         .token(&["https://www.googleapis.com/scope/1"])
         .await
@@ -97,6 +120,41 @@ async fn test_device_success() {
         "accesstoken",
         token.token().expect("should have access token")
     );
+}
+
+#[tokio::test]
+async fn test_device_delay() {
+    let _ = env_logger::try_init();
+    let server = Server::run();
+    let delay = Duration::from_micros(500);
+
+    server.expect(
+        Expectation::matching(all_of![
+            request::method_path("POST", "/code"),
+            request::body(url_decoded(contains((
+                "client_id",
+                matches("902216714886")
+            )))),
+        ])
+        .respond_with(delay_and_then(delay, || {
+            json_encoded(serde_json::json!({
+                "device_code": "devicecode",
+                "user_code": "usercode",
+                "verification_url": "https://example.com/verify",
+                "expires_in": 1234567,
+                "interval": 1
+            }))
+        })),
+    );
+
+    let auth =
+        create_device_flow_auth_with_timeout(&server, Some(delay - Duration::from_micros(1))).await;
+    let result = auth.token(&["https://www.googleapis.com/scope/1"]).await;
+
+    assert!(matches!(
+        result,
+        Err(yup_oauth2::Error::HttpClientError(SendError::Timeout))
+    ))
 }
 
 #[tokio::test]
@@ -175,12 +233,7 @@ async fn create_installed_flow_auth(
         "client_secret": "iuMPN6Ne1PD7cos29Tk9rlqH",
         "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob","http://localhost"],
     });
-    struct FD(
-        hyper_util::client::legacy::Client<
-            <DefaultHyperClient as HyperClientBuilder>::Connector,
-            String,
-        >,
-    );
+    struct FD(HttpClient<<DefaultHyperClientBuilder as HyperClientBuilder>::Connector>);
     impl InstalledFlowDelegate for FD {
         /// Depending on need_code, return the pre-set code or send the code to the server at
         /// the redirect_uri given in the url.
@@ -223,7 +276,9 @@ async fn create_installed_flow_auth(
         }
     }
 
-    let client = DefaultHyperClient.build_test_hyper_client();
+    let client = DefaultHyperClientBuilder::default()
+        .build_hyper_client()
+        .expect("Hyper client to be built");
     let mut builder = InstalledFlowAuthenticator::with_client(app_secret, method, client.clone())
         .flow_delegate(Box::new(FD(client)));
 
@@ -341,10 +396,15 @@ async fn create_service_account_auth(server: &Server) -> DefaultAuthenticator {
         "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/yup-test-sa-1%40yup-test-243420.iam.gserviceaccount.com"
     });
 
-    ServiceAccountAuthenticator::with_client(key, DefaultHyperClient.build_test_hyper_client())
-        .build()
-        .await
-        .unwrap()
+    ServiceAccountAuthenticator::with_client(
+        key,
+        DefaultHyperClientBuilder::default()
+            .build_hyper_client()
+            .expect("Hyper client to be built"),
+    )
+    .build()
+    .await
+    .unwrap()
 }
 
 #[tokio::test]
@@ -673,7 +733,9 @@ async fn test_default_application_credentials_from_metadata_server() {
     };
     let authenticator = match ApplicationDefaultCredentialsAuthenticator::with_client(
         opts,
-        DefaultHyperClient.build_test_hyper_client(),
+        DefaultHyperClientBuilder::default()
+            .build_hyper_client()
+            .expect("Hyper client to be built"),
     )
     .await
     {
@@ -692,11 +754,13 @@ async fn test_default_application_credentials_from_metadata_server() {
 
 #[tokio::test]
 async fn test_token() {
-    let authenticator =
-        AccessTokenAuthenticator::with_client("0815".to_string(), DefaultHyperClient)
-            .build()
-            .await
-            .unwrap();
+    let authenticator = AccessTokenAuthenticator::with_client(
+        "0815".to_string(),
+        DefaultHyperClientBuilder::default(),
+    )
+    .build()
+    .await
+    .unwrap();
     let access_token = authenticator
         .token(&["https://googleapis.com/some/scope"])
         .await

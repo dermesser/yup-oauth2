@@ -6,11 +6,11 @@
 
 use http::header;
 use http_body_util::BodyExt;
-use hyper_util::client::legacy::connect::Connect;
 use serde::Serialize;
 
 use crate::{
     authorized_user::{AuthorizedUserFlow, AuthorizedUserSecret},
+    client::SendRequest,
     storage::TokenInfo,
     Error,
 };
@@ -119,14 +119,13 @@ impl ServiceAccountImpersonationFlow {
         }
     }
 
-    pub(crate) async fn token<C, T>(
+    pub(crate) async fn token<T>(
         &self,
-        hyper_client: &hyper_util::client::legacy::Client<C, String>,
+        hyper_client: &impl SendRequest,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: Connect + Clone + Send + Sync + 'static,
     {
         let inner_token = self
             .inner_flow
@@ -188,8 +187,8 @@ fn id_request(
         .unwrap())
 }
 
-pub(crate) async fn token_impl<C, T>(
-    hyper_client: &hyper_util::client::legacy::Client<C, String>,
+pub(crate) async fn token_impl<T>(
+    hyper_client: &impl SendRequest,
     uri: &str,
     access_token: bool,
     inner_token: &str,
@@ -197,7 +196,6 @@ pub(crate) async fn token_impl<C, T>(
 ) -> Result<TokenInfo, Error>
 where
     T: AsRef<str>,
-    C: Connect + Clone + Send + Sync + 'static,
 {
     let scopes: Vec<_> = scopes.iter().map(|s| s.as_ref()).collect();
     let request = if access_token {

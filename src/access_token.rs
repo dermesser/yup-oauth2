@@ -5,9 +5,9 @@
 //! The intention behind this is that if two services using the
 //! same refresh token then each service will invalitate the
 //! access token of the other service by generating a new token.
+use crate::client::SendRequest;
 use crate::error::Error;
 use crate::types::TokenInfo;
-use hyper_util::client::legacy::connect::Connect;
 
 /// the flow for the access token authenticator
 pub struct AccessTokenFlow {
@@ -16,14 +16,13 @@ pub struct AccessTokenFlow {
 
 impl AccessTokenFlow {
     /// just return the access token
-    pub(crate) async fn token<C, B, T>(
+    pub(crate) async fn token<T>(
         &self,
-        _hyper_client: &hyper_util::client::legacy::Client<C, B>,
+        _hyper_client: &impl SendRequest,
         _scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: Connect + Clone + Send + Sync + 'static,
     {
         Ok(TokenInfo {
             access_token: Some(self.access_token.clone()),

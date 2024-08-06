@@ -70,13 +70,14 @@
 //! ```
 //!
 #![deny(missing_docs)]
-#![cfg_attr(yup_oauth2_docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod access_token;
 mod application_default_credentials;
 pub mod authenticator;
 pub mod authenticator_delegate;
 pub mod authorized_user;
+pub mod client;
 mod device;
 pub mod error;
 pub mod external_account;
@@ -105,6 +106,10 @@ pub use crate::authenticator::ServiceAccountAuthenticator;
 
 #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
 pub use crate::authenticator::AccessTokenAuthenticator;
+
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+pub use crate::client::DefaultHyperClientBuilder;
+pub use crate::client::{CustomHyperClientBuilder, HttpClient, HyperClientBuilder};
 
 #[doc(inline)]
 pub use crate::authenticator::{

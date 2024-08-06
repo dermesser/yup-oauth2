@@ -5,7 +5,10 @@
 //!
 //! It is also a better use of resources (memory, sockets, etc.)
 
+use std::time::Duration;
+
 use hyper_util::client::legacy::connect::Connect;
+use yup_oauth2::HyperClientBuilder;
 
 async fn r#use<C>(
     client: hyper_util::client::legacy::Client<C, String>,
@@ -43,11 +46,14 @@ async fn main() {
                 .enable_http2()
                 .build(),
         );
-    let authenticator =
-        yup_oauth2::ServiceAccountAuthenticator::with_client(secret, client.clone())
-            .build()
-            .await
-            .expect("could not create an authenticator");
+    let authenticator = yup_oauth2::ServiceAccountAuthenticator::with_client(
+        secret,
+        yup_oauth2::CustomHyperClientBuilder::from(client.clone())
+            .with_timeout(Duration::from_secs(10)),
+    )
+    .build()
+    .await
+    .expect("could not create an authenticator");
     r#use(client, authenticator)
         .await
         .expect("use is successful!");

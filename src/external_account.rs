@@ -5,11 +5,11 @@
 //! - [Workload identity federation](https://cloud.google.com/iam/docs/workload-identity-federation)
 //! - [External Account Credentials (Workload Identity Federation)](https://google.aip.dev/auth/4117)
 //!
+use crate::client::SendRequest;
 use crate::error::Error;
 use crate::types::TokenInfo;
 use http::header;
 use http_body_util::BodyExt;
-use hyper_util::client::legacy::connect::Connect;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -47,8 +47,7 @@ pub enum CredentialSource {
         file: String,
     },
 
-    //// [Microsoft Azure and URL-sourced
-    ///credentials](https://google.aip.dev/auth/4117#determining-the-subject-token-in-microsoft-azure-and-url-sourced-credentials)
+    /// [Microsoft Azure and URL-sourced credentials](https://google.aip.dev/auth/4117#determining-the-subject-token-in-microsoft-azure-and-url-sourced-credentials)
     Url {
         /// This defines the local metadata server to retrieve the external credentials from. For
         /// Azure, this should be the Azure Instance Metadata Service (IMDS) URL used to retrieve
@@ -102,14 +101,13 @@ pub struct ExternalAccountFlow {
 
 impl ExternalAccountFlow {
     /// Send a request for a new Bearer token to the OAuth provider.
-    pub(crate) async fn token<C, T>(
+    pub(crate) async fn token<T>(
         &self,
-        hyper_client: &hyper_util::client::legacy::Client<C, String>,
+        hyper_client: &impl SendRequest,
         scopes: &[T],
     ) -> Result<TokenInfo, Error>
     where
         T: AsRef<str>,
-        C: Connect + Clone + Send + Sync + 'static,
     {
         let subject_token = match &self.secret.credential_source {
             CredentialSource::File { file } => tokio::fs::read_to_string(file).await?,
