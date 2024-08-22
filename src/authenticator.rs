@@ -4,7 +4,7 @@ use crate::application_default_credentials::{
 };
 use crate::authenticator_delegate::{DeviceFlowDelegate, InstalledFlowDelegate};
 use crate::authorized_user::{AuthorizedUserFlow, AuthorizedUserSecret};
-#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-rustls-webpki", feature = "hyper-tls"))]
 use crate::client::DefaultHyperClientBuilder;
 use crate::client::{HttpClient, HyperClientBuilder};
 use crate::device::DeviceFlow;
@@ -185,7 +185,7 @@ pub struct AuthenticatorBuilder<C, F> {
 
 /// Create an authenticator that uses the installed flow.
 /// ```
-/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-rustls-webpki", feature = "hyper-tls"))]
 /// # async fn foo() {
 /// # use yup_oauth2::InstalledFlowReturnMethod;
 /// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultInstalledFlowDelegate;
@@ -202,8 +202,8 @@ pub struct AuthenticatorBuilder<C, F> {
 pub struct InstalledFlowAuthenticator;
 impl InstalledFlowAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses the installed flow.
-    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-rustls-webpki", feature = "hyper-tls"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-rustls-webpki", feature = "hyper-tls"))))]
     pub fn builder(
         app_secret: ApplicationSecret,
         method: InstalledFlowReturnMethod,
@@ -223,7 +223,7 @@ impl InstalledFlowAuthenticator {
 
 /// Create an authenticator that uses the device flow.
 /// ```
-/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki" ))]
 /// # async fn foo() {
 /// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::DeviceFlowAuthenticator::builder(app_secret)
@@ -235,8 +235,8 @@ impl InstalledFlowAuthenticator {
 pub struct DeviceFlowAuthenticator;
 impl DeviceFlowAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses the device flow.
-    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))))]
     pub fn builder(
         app_secret: ApplicationSecret,
     ) -> AuthenticatorBuilder<DefaultHyperClientBuilder, DeviceFlow> {
@@ -254,7 +254,7 @@ impl DeviceFlowAuthenticator {
 
 /// Create an authenticator that uses a service account.
 /// ```
-/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
 /// # async fn foo() {
 /// # let service_account_key = yup_oauth2::read_service_account_key("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(service_account_key)
@@ -269,8 +269,8 @@ pub struct ServiceAccountAuthenticator;
 #[cfg(feature = "service-account")]
 impl ServiceAccountAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses a service account.
-    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))))]
     pub fn builder(
         service_account_key: ServiceAccountKey,
     ) -> AuthenticatorBuilder<DefaultHyperClientBuilder, ServiceAccountFlowOpts> {
@@ -294,7 +294,7 @@ impl ServiceAccountAuthenticator {
 
 /// Create an authenticator that uses a application default credentials.
 /// ```
-/// # #[cfg(all(any(feature = "hyper-rustls", feature = "hyper-tls"), feature = "service-account"))]
+/// # #[cfg(all(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"), feature = "service-account"))]
 /// # async fn foo() {
 /// #    use yup_oauth2::ApplicationDefaultCredentialsAuthenticator;
 /// #    use yup_oauth2::ApplicationDefaultCredentialsFlowOpts;
@@ -329,8 +329,8 @@ impl ApplicationDefaultCredentialsAuthenticator {
     /// Use the builder pattern to deduce which model of authenticator should be used:
     /// Service account one or GCE instance metadata kind
     #[cfg(feature = "service-account")]
-    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))))]
     pub async fn builder(
         opts: ApplicationDefaultCredentialsFlowOpts,
     ) -> ApplicationDefaultCredentialsTypes<DefaultHyperClientBuilder> {
@@ -372,7 +372,7 @@ where
 
 /// Create an authenticator that uses an authorized user credentials.
 /// ```
-/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
 /// # async fn foo() {
 /// # use yup_oauth2::authenticator::AuthorizedUserAuthenticator;
 /// # let secret = yup_oauth2::read_authorized_user_secret("/tmp/foo").await.unwrap();
@@ -385,8 +385,8 @@ where
 pub struct AuthorizedUserAuthenticator;
 impl AuthorizedUserAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses an authorized user.
-    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))))]
     pub fn builder(
         authorized_user_secret: AuthorizedUserSecret,
     ) -> AuthenticatorBuilder<DefaultHyperClientBuilder, AuthorizedUserFlow> {
@@ -409,7 +409,7 @@ impl AuthorizedUserAuthenticator {
 
 /// Create an authenticator that uses an external account credentials.
 /// ```
-/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
 /// # async fn foo() {
 /// # use yup_oauth2::authenticator::ExternalAccountAuthenticator;
 /// # let secret = yup_oauth2::read_external_account_secret("/tmp/foo").await.unwrap();
@@ -422,8 +422,8 @@ impl AuthorizedUserAuthenticator {
 pub struct ExternalAccountAuthenticator;
 impl ExternalAccountAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses an external account.
-    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))))]
     pub fn builder(
         external_account_secret: ExternalAccountSecret,
     ) -> AuthenticatorBuilder<DefaultHyperClientBuilder, ExternalAccountFlow> {
@@ -458,10 +458,10 @@ impl ExternalAccountAuthenticator {
 /// #     .expect("failed to create authenticator");
 /// # }
 /// ```
-#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
 pub struct AccessTokenAuthenticator;
 
-#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
 impl AccessTokenAuthenticator {
     /// the builder pattern for the authenticator
     pub fn builder(
@@ -483,7 +483,7 @@ impl AccessTokenAuthenticator {
 /// a service account.
 ///
 /// ```
-/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
 /// # async fn foo() {
 /// # use yup_oauth2::authenticator::AuthorizedUserAuthenticator;
 /// # let secret = yup_oauth2::read_authorized_user_secret("/tmp/foo").await.unwrap();
@@ -497,8 +497,8 @@ impl AccessTokenAuthenticator {
 pub struct ServiceAccountImpersonationAuthenticator;
 impl ServiceAccountImpersonationAuthenticator {
     /// Use the builder pattern to create an Authenticator that uses the device flow.
-    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))))]
     pub fn builder(
         authorized_user_secret: AuthorizedUserSecret,
         service_account_email: &str,
@@ -608,7 +608,7 @@ where
 
 /// ## Methods available when building a device flow Authenticator.
 /// ```
-/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
 /// # async fn foo() {
 /// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultDeviceFlowDelegate;
 /// # let app_secret = yup_oauth2::read_application_secret("/tmp/foo").await.unwrap();
@@ -671,7 +671,7 @@ impl<C> AuthenticatorBuilder<C, DeviceFlow> {
 
 /// ## Methods available when building an installed flow Authenticator.
 /// ```
-/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
 /// # async fn foo() {
 /// # use yup_oauth2::InstalledFlowReturnMethod;
 /// # let custom_flow_delegate = yup_oauth2::authenticator_delegate::DefaultInstalledFlowDelegate;
@@ -724,7 +724,7 @@ impl<C> AuthenticatorBuilder<C, InstalledFlow> {
 
 /// ## Methods available when building a service account authenticator.
 /// ```
-/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+/// # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
 /// # async fn foo() {
 /// # let service_account_key = yup_oauth2::read_service_account_key("/tmp/foo").await.unwrap();
 ///     let authenticator = yup_oauth2::ServiceAccountAuthenticator::builder(
@@ -934,14 +934,14 @@ mod private {
     }
 }
 
-#[cfg(feature = "hyper-rustls")]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-rustls-webpki"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))))]
 /// Default authenticator type
 pub type DefaultAuthenticator =
     Authenticator<hyper_rustls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>;
 
-#[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
+#[cfg(all(not(feature = "hyper-rustls"), not(feature = "hyper-rustls-webpki"), feature = "hyper-tls"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki" ))))]
 /// Default authenticator type
 pub type DefaultAuthenticator =
     Authenticator<hyper_tls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>;
@@ -959,7 +959,7 @@ enum StorageType {
 #[cfg(test)]
 mod tests {
     #[test]
-    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
     fn ensure_send_sync() {
         use super::*;
         fn is_send_sync<T: Send + Sync>() {}
