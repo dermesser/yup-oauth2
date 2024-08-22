@@ -30,7 +30,8 @@ required-features = ["hyper-rustls", "service-account"]
 default = ["hyper-rustls", "service-account", "ring"]
 service_account = ["service-account"]
 service-account = ["rustls-pemfile"]
-hyper-rustls = ["dep:hyper-rustls", "__rustls"]
+hyper-rustls = ["dep:hyper-rustls", "hyper-rustls?/native-tokio", "__rustls"]
+hyper-rustls-webpki = ["dep:hyper-rustls", "hyper-rustls?/webpki-tokio", "__rustls"]
 ring = ["rustls/ring", "hyper-rustls?/ring"]
 aws-lc-rs = ["rustls/aws_lc_rs", "hyper-rustls?/aws-lc-rs"]
 hyper-tls = ["dep:hyper-tls", "__rustls"]
@@ -45,7 +46,7 @@ http = "1"
 http-body-util = "0.1"
 hyper = "1"
 hyper-util = { version = "0.1.5", features = ["client-legacy", "server-auto", "http1", "http2", "server-graceful"] }
-hyper-rustls = { version = "0.27", optional = true, default-features = false, features = ["http1", "http2", "rustls-native-certs", "native-tokio"] }
+hyper-rustls = { version = "0.27", optional = true, default-features = false, features = ["http1", "http2"] }
 hyper-tls = { version = "0.6.0", optional = true }
 log = "0.4"
 percent-encoding = "2"
