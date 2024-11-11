@@ -8,6 +8,8 @@ use hyper_util::client::legacy::{connect::Connect, Error as LegacyHyperError};
 use rustls::crypto::aws_lc_rs::default_provider as default_crypto_provider;
 #[cfg(all(feature = "ring", feature = "hyper-rustls"))]
 use rustls::crypto::ring::default_provider as default_crypto_provider;
+#[cfg(all(feature = "hyper-rustls", not(any(feature = "ring", feature = "aws-lc-rs"))))]
+compile_error!("The `hyper-rustls` feature requires either the `ring` or `aws-lc-rs` feature to be enabled");
 use thiserror::Error as ThisError;
 
 use crate::Error;
