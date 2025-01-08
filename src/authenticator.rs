@@ -79,9 +79,10 @@ where
     where
         T: AsRef<str>,
     {
-        self.find_token_info(scopes, /* force_refresh = */ false)
-            .await
-            .map(|info| info.into())
+        Ok(self
+            .find_token_info(scopes, /* force_refresh = */ false)
+            .await?
+            .into())
     }
 
     /// Return a token for the provided scopes, but don't reuse cached tokens. Instead,
@@ -109,7 +110,7 @@ where
     }
 
     /// Return a cached token or fetch a new one from the server.
-    async fn find_token_info<'a, T>(
+    pub(crate) async fn find_token_info<'a, T>(
         &'a self,
         scopes: &'a [T],
         force_refresh: bool,
@@ -174,6 +175,10 @@ where
                 Ok(token_info)
             }
         }
+    }
+
+    pub(crate) fn app_secret(&self) -> Option<&ApplicationSecret> {
+        self.inner.auth_flow.app_secret()
     }
 }
 
