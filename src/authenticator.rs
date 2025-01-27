@@ -51,7 +51,7 @@ where
 }
 
 struct DisplayScopes<'a, T>(&'a [T]);
-impl<'a, T> fmt::Display for DisplayScopes<'a, T>
+impl<T> fmt::Display for DisplayScopes<'_, T>
 where
     T: AsRef<str>,
 {

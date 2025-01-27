@@ -102,7 +102,7 @@ impl From<String> for AuthErrorCode {
     }
 }
 
-impl<'a> From<&'a str> for AuthErrorCode {
+impl From<&str> for AuthErrorCode {
     fn from(s: &str) -> Self {
         AuthErrorCode::from_string(s)
     }
@@ -114,7 +114,7 @@ impl<'de> Deserialize<'de> for AuthErrorCode {
         D: serde::Deserializer<'de>,
     {
         struct V;
-        impl<'de> serde::de::Visitor<'de> for V {
+        impl serde::de::Visitor<'_> for V {
             type Value = AuthErrorCode;
             fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 f.write_str("any string")

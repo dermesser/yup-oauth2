@@ -62,12 +62,12 @@ pub(crate) struct ScopeSet<'a, T> {
 
 // Implement Clone manually. Auto derive fails to work correctly because we want
 // Clone to be implemented regardless of whether T is Clone or not.
-impl<'a, T> Clone for ScopeSet<'a, T> {
+impl<T> Clone for ScopeSet<'_, T> {
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<'a, T> Copy for ScopeSet<'a, T> {}
+impl<T> Copy for ScopeSet<'_, T> {}
 
 impl<'a, T> ScopeSet<'a, T>
 where
