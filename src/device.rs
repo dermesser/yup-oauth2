@@ -169,7 +169,7 @@ impl DeviceFlow {
     ///
     /// # Examples
     /// See test-cases in source code for a more complete example.
-    async fn poll_token<'a>(
+    async fn poll_token(
         application_secret: &ApplicationSecret,
         client: &impl SendRequest,
         device_code: &str,
