@@ -11,6 +11,7 @@ use crate::device::DeviceFlow;
 use crate::error::Error;
 use crate::external_account::{ExternalAccountFlow, ExternalAccountSecret};
 use crate::installed::{InstalledFlow, InstalledFlowReturnMethod};
+use crate::noninteractive::{NoninteractiveFlow, NoninteractiveTokens};
 use crate::refresh::RefreshFlow;
 use crate::service_account_impersonator::ServiceAccountImpersonationFlow;
 
@@ -78,9 +79,10 @@ where
     where
         T: AsRef<str>,
     {
-        self.find_token_info(scopes, /* force_refresh = */ false)
-            .await
-            .map(|info| info.into())
+        Ok(self
+            .find_token_info(scopes, /* force_refresh = */ false)
+            .await?
+            .into())
     }
 
     /// Return a token for the provided scopes, but don't reuse cached tokens. Instead,
@@ -108,7 +110,7 @@ where
     }
 
     /// Return a cached token or fetch a new one from the server.
-    async fn find_token_info<'a, T>(
+    pub(crate) async fn find_token_info<'a, T>(
         &'a self,
         scopes: &'a [T],
         force_refresh: bool,
@@ -173,6 +175,10 @@ where
                 Ok(token_info)
             }
         }
+    }
+
+    pub(crate) fn app_secret(&self) -> Option<&ApplicationSecret> {
+        self.inner.auth_flow.app_secret()
     }
 }
 
@@ -523,6 +529,35 @@ impl ServiceAccountImpersonationAuthenticator {
     }
 }
 
+/// Create an authenticator that uses a pre-constructed `NoninteractiveTokens` to authenticate.
+/// This authenticator is guaranteed to be non-interactive, the tokens can be created in advance.
+pub struct NoninteractiveAuthenticator;
+impl NoninteractiveAuthenticator {
+    /// Use the builder pattern to create an Authenticator that uses previously constructed
+    /// `NoninteractiveTokens`.
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
+    pub fn builder(
+        tokens: NoninteractiveTokens,
+    ) -> AuthenticatorBuilder<DefaultHyperClientBuilder, NoninteractiveFlow> {
+        Self::with_client(
+            tokens,
+            DefaultHyperClientBuilder::default(),
+        )
+    }
+
+    /// Construct a new Authenticator that uses the installed flow and the provided http client.
+    pub fn with_client<C>(
+        tokens: NoninteractiveTokens,
+        client: C,
+    ) -> AuthenticatorBuilder<C, NoninteractiveFlow> {
+        AuthenticatorBuilder::new(
+            NoninteractiveFlow(tokens),
+            client,
+        )
+    }
+}
+
 /// ## Methods available when building any Authenticator.
 /// ```
 /// # async fn foo() {
@@ -853,6 +888,23 @@ impl<C> AuthenticatorBuilder<C, AccessTokenFlow> {
         .await
     }
 }
+
+/// ## Methods available when building a noninteractive flow Authenticator.
+impl<C> AuthenticatorBuilder<C, NoninteractiveFlow> {
+    /// Create the authenticator.
+    pub async fn build(self) -> io::Result<Authenticator<C::Connector>>
+    where
+        C: HyperClientBuilder,
+    {
+        Self::common_build(
+            self.hyper_client_builder,
+            self.storage_type,
+            AuthFlow::NoninteractiveFlow(self.auth_flow),
+        )
+        .await
+    }
+}
+
 mod private {
     use crate::access_token::AccessTokenFlow;
     use crate::application_default_credentials::ApplicationDefaultCredentialsFlow;
@@ -862,6 +914,7 @@ mod private {
     use crate::error::Error;
     use crate::external_account::ExternalAccountFlow;
     use crate::installed::InstalledFlow;
+    use crate::noninteractive::NoninteractiveFlow;
     #[cfg(feature = "service-account")]
     use crate::service_account::ServiceAccountFlow;
     use crate::service_account_impersonator::ServiceAccountImpersonationFlow;
@@ -878,6 +931,7 @@ mod private {
         AuthorizedUserFlow(AuthorizedUserFlow),
         ExternalAccountFlow(ExternalAccountFlow),
         AccessTokenFlow(AccessTokenFlow),
+        NoninteractiveFlow(NoninteractiveFlow),
     }
 
     impl AuthFlow {
@@ -892,6 +946,9 @@ mod private {
                 AuthFlow::AuthorizedUserFlow(_) => None,
                 AuthFlow::ExternalAccountFlow(_) => None,
                 AuthFlow::AccessTokenFlow(_) => None,
+                AuthFlow::NoninteractiveFlow(noninteractive_flow) => {
+                    Some(noninteractive_flow.app_secret())
+                }
             }
         }
 
@@ -928,6 +985,9 @@ mod private {
                 }
                 AuthFlow::AccessTokenFlow(access_token_flow) => {
                     access_token_flow.token(hyper_client, scopes).await
+                }
+                AuthFlow::NoninteractiveFlow(noninteractive_flow) => {
+                    noninteractive_flow.token(hyper_client, scopes).await
                 }
             }
         }
