@@ -4,11 +4,11 @@
 //
 pub use crate::types::TokenInfo;
 
-use futures::lock::Mutex;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
+use tokio::sync::Mutex;
 
 use async_trait::async_trait;
 
