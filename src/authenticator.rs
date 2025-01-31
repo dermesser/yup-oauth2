@@ -22,7 +22,6 @@ use private::AuthFlow;
 
 use crate::access_token::AccessTokenFlow;
 
-use futures::lock::Mutex;
 use hyper_util::client::legacy::connect::Connect;
 use std::borrow::Cow;
 use std::fmt;
@@ -30,6 +29,7 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 
 struct InnerAuthenticator<C>
 where
