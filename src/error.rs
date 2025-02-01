@@ -168,6 +168,9 @@ pub enum Error {
     /// A lower level IO error.
     #[error("Low level error: {0}")]
     LowLevelError(#[from] io::Error),
+    /// A lower level IO error.
+    #[error("Rustls error: {0}")]
+    RustlsError(#[from] rustls::Error),
     /// We required an access token, but received a response that didn't contain one.
     #[error("Expected an access token, but received a response without one")]
     MissingAccessToken,
