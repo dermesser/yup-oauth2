@@ -1,7 +1,6 @@
 //! Module containing the HTTP client used for sending requests
 use std::time::Duration;
 
-use futures::TryFutureExt;
 use http::Uri;
 use hyper_util::client::legacy::{connect::Connect, Error as LegacyHyperError};
 #[cfg(all(feature = "aws-lc-rs", feature = "hyper-rustls", not(feature = "ring")))]
@@ -101,11 +100,9 @@ where
     async fn request(&self, payload: http::Request<String>) -> Result<HyperResponse, SendError> {
         let future = self.client.request(payload);
         match self.timeout {
-            Some(duration) => {
-                tokio::time::timeout(duration, future)
-                    .map_err(|_| SendError::Timeout)
-                    .await?
-            }
+            Some(duration) => tokio::time::timeout(duration, future)
+                .await
+                .map_err(|_| SendError::Timeout)?,
             None => future.await,
         }
         .map_err(SendError::Hyper)

@@ -7,7 +7,6 @@ use crate::client::SendRequest;
 use crate::error::Error;
 use crate::types::{ApplicationSecret, TokenInfo};
 
-use futures::lock::Mutex;
 use http_body_util::BodyExt;
 use std::convert::AsRef;
 use std::net::SocketAddr;
@@ -15,7 +14,7 @@ use std::sync::Arc;
 
 use http::header;
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, Mutex};
 use url::form_urlencoded;
 
 const QUERY_SET: AsciiSet = CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');
@@ -349,10 +348,9 @@ impl InstalledFlowServer {
 }
 
 mod installed_flow_server {
-    use futures::lock::Mutex;
     use http::{Request, Response, StatusCode, Uri};
     use std::sync::Arc;
-    use tokio::sync::oneshot;
+    use tokio::sync::{oneshot, Mutex};
     use url::form_urlencoded;
 
     pub(super) async fn handle_req<B: hyper::body::Body>(

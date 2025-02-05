@@ -40,7 +40,6 @@ __rustls = ["dep:rustls"]
 [dependencies]
 async-trait = "^0.1"
 base64 = "0.22"
-futures = "0.3"
 http = "1"
 http-body-util = "0.1"
 hyper = "1"
