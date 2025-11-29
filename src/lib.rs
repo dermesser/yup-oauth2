@@ -26,8 +26,9 @@
 //! In order to use the interactive method, use the `Interactive` `InstalledFlowReturnMethod`;
 //! for the redirect method, use `HTTPRedirect`.
 //!
-//! You can implement your own `AuthenticatorDelegate` in order to customize the flow;
-//! the installed flow uses the `present_user_url` method.
+//! You can implement your own authenticator delegate in order to customize the flow;
+//! the installed flow uses the `present_user_url` method. See the `crate::authenticator_delegate`
+//! module.
 //!
 //! The returned `Token` will be stored in memory in order to authorize future
 //! API requests to the same scopes. The tokens can optionally be persisted to
