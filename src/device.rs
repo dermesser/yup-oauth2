@@ -114,10 +114,9 @@ impl DeviceFlow {
     /// # Arguments
     /// * `client_id` & `client_secret` - as obtained when [registering your application](https://developers.google.com/youtube/registering_an_application)
     /// * `scopes` - an iterator yielding String-like objects which are URLs defining what your
-    ///              application is able to do. It is considered good behaviour to authenticate
-    ///              only once, with all scopes you will ever require.
-    ///              However, you can also manage multiple tokens for different scopes, if your
-    ///              application is providing distinct read-only and write modes.
+    ///   application is able to do. It is considered good behaviour to authenticate only once, with
+    ///   all scopes you will ever require. However, you can also manage multiple tokens for different
+    ///   scopes, if your application is providing distinct read-only and write modes.
     /// # Panics
     /// * If called after a successful result was returned at least once.
     /// # Examples

@@ -22,7 +22,7 @@ impl RefreshFlow {
     ///
     /// # Arguments
     /// * `authentication_url` - URL matching the one used in the flow that obtained
-    ///                          your refresh_token in the first place.
+    ///   your refresh_token in the first place.
     /// * `client_id` & `client_secret` - as obtained when [registering your application](https://developers.google.com/youtube/registering_an_application)
     /// * `refresh_token` - obtained during previous call to `DeviceFlow::poll_token()` or equivalent
     ///

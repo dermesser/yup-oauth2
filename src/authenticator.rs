@@ -545,8 +545,7 @@ impl<C, F> AuthenticatorBuilder<C, F> {
         C: HyperClientBuilder,
     {
         let hyper_client = hyper_client_builder.build_hyper_client().map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::Other,
+            io::Error::other(
                 format!("failed to build hyper client: {}", err),
             )
         })?;

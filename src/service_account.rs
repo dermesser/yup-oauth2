@@ -39,7 +39,7 @@ fn append_base64<T: AsRef<[u8]> + ?Sized>(s: &T, out: &mut String) {
 }
 
 /// Decode a PKCS8 formatted RSA key.
-fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKeyDer, io::Error> {
+fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKeyDer<'_>, io::Error> {
     let private_key = rustls_pemfile::pkcs8_private_keys(&mut pem_pkcs8.as_bytes()).next();
 
     match private_key {
@@ -128,11 +128,11 @@ impl JWTSigner {
     fn new(private_key: &str) -> Result<Self, io::Error> {
         let key = decode_rsa_key(private_key)?;
         let signing_key = crypto_provider::sign::RsaSigningKey::new(&key)
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Couldn't initialize signer"))?;
+            .map_err(|_| io::Error::other("Couldn't initialize signer"))?;
         let signer = signing_key
             .choose_scheme(&[rustls::SignatureScheme::RSA_PKCS1_SHA256])
             .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::Other, "Couldn't choose signing scheme")
+                io::Error::other("Couldn't choose signing scheme")
             })?;
         Ok(JWTSigner { signer })
     }
@@ -202,8 +202,7 @@ impl ServiceAccountFlow {
     {
         let claims = Claims::new(&self.key, scopes, self.subject.as_deref());
         let signed = self.signer.sign_claims(&claims).map_err(|_| {
-            Error::LowLevelError(io::Error::new(
-                io::ErrorKind::Other,
+            Error::LowLevelError(io::Error::other(
                 "unable to sign claims",
             ))
         })?;
