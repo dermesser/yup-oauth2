@@ -131,9 +131,7 @@ impl JWTSigner {
             .map_err(|_| io::Error::other("Couldn't initialize signer"))?;
         let signer = signing_key
             .choose_scheme(&[rustls::SignatureScheme::RSA_PKCS1_SHA256])
-            .ok_or_else(|| {
-                io::Error::other("Couldn't choose signing scheme")
-            })?;
+            .ok_or_else(|| io::Error::other("Couldn't choose signing scheme"))?;
         Ok(JWTSigner { signer })
     }
 
@@ -201,11 +199,10 @@ impl ServiceAccountFlow {
         T: AsRef<str>,
     {
         let claims = Claims::new(&self.key, scopes, self.subject.as_deref());
-        let signed = self.signer.sign_claims(&claims).map_err(|_| {
-            Error::LowLevelError(io::Error::other(
-                "unable to sign claims",
-            ))
-        })?;
+        let signed = self
+            .signer
+            .sign_claims(&claims)
+            .map_err(|_| Error::LowLevelError(io::Error::other("unable to sign claims")))?;
         let rqbody = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&[("grant_type", GRANT_TYPE), ("assertion", signed.as_str())])
             .finish();

@@ -544,11 +544,9 @@ impl<C, F> AuthenticatorBuilder<C, F> {
     where
         C: HyperClientBuilder,
     {
-        let hyper_client = hyper_client_builder.build_hyper_client().map_err(|err| {
-            io::Error::other(
-                format!("failed to build hyper client: {}", err),
-            )
-        })?;
+        let hyper_client = hyper_client_builder
+            .build_hyper_client()
+            .map_err(|err| io::Error::other(format!("failed to build hyper client: {}", err)))?;
 
         let storage = match storage_type {
             StorageType::Memory => Storage::Memory {
