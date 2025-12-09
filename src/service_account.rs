@@ -227,7 +227,7 @@ mod tests {
     const TEST_PRIVATE_KEY_PATH: &str = "examples/Sanguine-69411a0c0eea.json";
 
     // Uncomment this test to verify that we can successfully obtain tokens.
-    #[cfg(feature = "hyper-rustls")]
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-rustls-webpki"))]
     // #[tokio::test]
     #[allow(dead_code)]
     async fn test_service_account_e2e() {

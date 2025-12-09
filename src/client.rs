@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use http::Uri;
 use hyper_util::client::legacy::{connect::Connect, Error as LegacyHyperError};
-#[cfg(all(feature = "aws-lc-rs", feature = "hyper-rustls", not(feature = "ring")))]
+#[cfg(all(feature = "aws-lc-rs", any(feature = "hyper-rustls", feature = "hyper-rustls-webpki"), not(feature = "ring")))]
 use rustls::crypto::aws_lc_rs::default_provider as default_crypto_provider;
-#[cfg(all(feature = "ring", feature = "hyper-rustls"))]
+#[cfg(all(feature = "ring", any(feature = "hyper-rustls", feature = "hyper-rustls-webpki")))]
 use rustls::crypto::ring::default_provider as default_crypto_provider;
 #[cfg(all(
     feature = "hyper-rustls",
@@ -114,14 +114,14 @@ pub(crate) trait SendRequest {
 }
 
 /// The builder value used when the default hyper client should be used.
-#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))))]
 #[derive(Default)]
 pub struct DefaultHyperClientBuilder {
     timeout: Option<Duration>,
 }
 
-#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
 impl DefaultHyperClientBuilder {
     /// Set the duration after which a request times out
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
@@ -130,13 +130,13 @@ impl DefaultHyperClientBuilder {
     }
 }
 
-#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))))]
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))))]
 impl HyperClientBuilder for DefaultHyperClientBuilder {
-    #[cfg(feature = "hyper-rustls")]
+    #[cfg(any(feature = "hyper-rustls", feature = "hyper-rustls-webpki"))]
     type Connector =
         hyper_rustls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>;
-    #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
+    #[cfg(all(not(feature = "hyper-rustls"), not(feature = "hyper-rustls-webpki"), feature = "hyper-tls"))]
     type Connector = hyper_tls::HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>;
 
     fn with_timeout(mut self, timeout: Duration) -> Self {
@@ -152,7 +152,14 @@ impl HyperClientBuilder for DefaultHyperClientBuilder {
             .enable_http1()
             .enable_http2()
             .build();
-        #[cfg(all(not(feature = "hyper-rustls"), feature = "hyper-tls"))]
+        #[cfg(feature = "hyper-rustls-webpki")]
+        let connector = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_provider_and_webpki_roots(default_crypto_provider())?
+            .https_or_http()
+            .enable_http1()
+            .enable_http2()
+            .build();
+        #[cfg(all(not(feature = "hyper-rustls"), not(feature = "hyper-rustls-webpki"), feature = "hyper-tls"))]
         let connector = hyper_tls::HttpsConnector::new();
 
         Ok(HttpClient::new(

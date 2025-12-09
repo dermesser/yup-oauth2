@@ -40,7 +40,7 @@
 //! ```test_harness,no_run
 //! use yup_oauth2::{InstalledFlowAuthenticator, InstalledFlowReturnMethod};
 //!
-//! # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+//! # #[cfg(any(feature = "hyper-rustls", feature = "hyper-tls", feature = "hyper-rustls-webpki"))]
 //! #[tokio::main]
 //! async fn main() {
 //!     // Read application secret from a file. Sometimes it's easier to compile it directly into
@@ -98,17 +98,17 @@ mod types;
 
 pub use hyper;
 
-#[cfg(feature = "hyper-rustls")]
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-rustls-webpki"))]
 pub use hyper_rustls;
 
 #[cfg(feature = "service-account")]
 #[doc(inline)]
 pub use crate::authenticator::ServiceAccountAuthenticator;
 
-#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-rustls-webpki", feature = "hyper-tls"))]
 pub use crate::authenticator::AccessTokenAuthenticator;
 
-#[cfg(any(feature = "hyper-rustls", feature = "hyper-tls"))]
+#[cfg(any(feature = "hyper-rustls", feature = "hyper-rustls-webpki", feature = "hyper-tls"))]
 pub use crate::client::DefaultHyperClientBuilder;
 pub use crate::client::{CustomHyperClientBuilder, HttpClient, HyperClientBuilder};
 
