@@ -25,6 +25,7 @@ use http_body_util::BodyExt;
 use rustls::crypto::aws_lc_rs as crypto_provider;
 #[cfg(feature = "ring")]
 use rustls::crypto::ring as crypto_provider;
+use rustls::pki_types::pem::PemObject;
 use rustls::{self, pki_types::PrivateKeyDer, sign::SigningKey};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -36,23 +37,6 @@ const GOOGLE_RS256_HEAD: &str = r#"{"alg":"RS256","typ":"JWT"}"#;
 /// Encodes s as Base64
 fn append_base64<T: AsRef<[u8]> + ?Sized>(s: &T, out: &mut String) {
     base64::engine::general_purpose::URL_SAFE.encode_string(s, out)
-}
-
-/// Decode a PKCS8 formatted RSA key.
-fn decode_rsa_key(pem_pkcs8: &str) -> Result<PrivateKeyDer<'_>, io::Error> {
-    let private_key = rustls_pemfile::pkcs8_private_keys(&mut pem_pkcs8.as_bytes()).next();
-
-    match private_key {
-        Some(Ok(key)) => Ok(PrivateKeyDer::Pkcs8(key)),
-        None => Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Not enough private keys in PEM",
-        )),
-        Some(Err(_)) => Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Error reading key from PEM",
-        )),
-    }
 }
 
 /// JSON schema of secret service account key.
@@ -126,7 +110,9 @@ pub(crate) struct JWTSigner {
 
 impl JWTSigner {
     fn new(private_key: &str) -> Result<Self, io::Error> {
-        let key = decode_rsa_key(private_key)?;
+        let key = PrivateKeyDer::from_pem_slice(private_key.as_bytes()).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "Error reading key from PEM")
+        })?;
         let signing_key = crypto_provider::sign::RsaSigningKey::new(&key)
             .map_err(|_| io::Error::other("Couldn't initialize signer"))?;
         let signer = signing_key
