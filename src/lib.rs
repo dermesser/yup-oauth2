@@ -84,6 +84,7 @@ pub mod error;
 pub mod external_account;
 mod helper;
 mod installed;
+pub mod noninteractive;
 mod refresh;
 pub mod service_account_impersonator;
 
@@ -116,7 +117,7 @@ pub use crate::client::{CustomHyperClientBuilder, HttpClient, HyperClientBuilder
 pub use crate::authenticator::{
     ApplicationDefaultCredentialsAuthenticator, AuthorizedUserAuthenticator,
     DeviceFlowAuthenticator, ExternalAccountAuthenticator, InstalledFlowAuthenticator,
-    ServiceAccountImpersonationAuthenticator,
+    NoninteractiveAuthenticator, ServiceAccountImpersonationAuthenticator,
 };
 
 pub use crate::helper::*;
