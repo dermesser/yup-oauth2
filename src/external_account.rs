@@ -209,9 +209,7 @@ impl ExternalAccountFlow {
             // "scope" is an audience string; rewrite in that case so `token_impl` sends the correct
             // JSON body.
             let mut iam_url = service_account_impersonation_url.clone();
-            let scopes_are_oauth_urls = scopes
-                .iter()
-                .any(|s| s.as_ref().starts_with("https://"));
+            let scopes_are_oauth_urls = scopes.iter().any(|s| s.as_ref().starts_with("https://"));
 
             let impersonate_access_token = if iam_url.contains("generateIdToken") {
                 false
