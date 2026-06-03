@@ -204,10 +204,28 @@ impl ExternalAccountFlow {
         if let Some(service_account_impersonation_url) =
             &self.secret.service_account_impersonation_url
         {
+            // IAM supports `generateAccessToken` (OAuth scope URLs) and `generateIdToken` (IAP-style
+            // audience). Credential files often use a `:generateAccessToken` URL even when the only
+            // "scope" is an audience string; rewrite in that case so `token_impl` sends the correct
+            // JSON body.
+            let mut iam_url = service_account_impersonation_url.clone();
+            let scopes_are_oauth_urls = scopes.iter().any(|s| s.as_ref().starts_with("https://"));
+
+            let impersonate_access_token = if iam_url.contains("generateIdToken") {
+                false
+            } else if iam_url.contains("generateAccessToken") && !scopes_are_oauth_urls {
+                iam_url = iam_url.replace(":generateAccessToken", ":generateIdToken");
+                false
+            } else if iam_url.contains("generateAccessToken") {
+                true
+            } else {
+                scopes_are_oauth_urls
+            };
+
             crate::service_account_impersonator::token_impl(
                 hyper_client,
-                service_account_impersonation_url,
-                true,
+                &iam_url,
+                impersonate_access_token,
                 &token_info.access_token.ok_or(Error::MissingAccessToken)?,
                 scopes,
             )
