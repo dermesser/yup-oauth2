@@ -171,7 +171,6 @@ where
     C: Connect + Clone + Send + Sync + 'static,
 {
     client: HttpClient<C>,
-    timeout: Option<Duration>,
 }
 
 impl<C> From<LegacyClient<C>> for CustomHyperClientBuilder<C>
@@ -181,7 +180,6 @@ where
     fn from(client: LegacyClient<C>) -> Self {
         Self {
             client: HttpClient::new(client, None),
-            timeout: None,
         }
     }
 }
@@ -193,7 +191,7 @@ where
     type Connector = C;
 
     fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
+        self.client.set_timeout(timeout);
         self
     }
 

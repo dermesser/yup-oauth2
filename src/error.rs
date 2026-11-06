@@ -29,7 +29,7 @@ pub struct AuthError {
 
 impl fmt::Display for AuthError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", &self.error.as_str())?;
+        write!(f, "{}", self.error.as_str())?;
         if let Some(desc) = &self.error_description {
             write!(f, ": {}", desc)?;
         }

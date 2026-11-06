@@ -12,7 +12,7 @@
 //! # Service account "flow"
 //! When using service account credentials, no user interaction is required. The access token
 //! can be obtained automatically using the private key of the client (which you can download
-//! from the API provider). See `examples/service_account/` for an example on how to use service
+//! from the API provider). See `examples/test-svc-acct/` for an example on how to use service
 //! account credentials. See
 //! [developers.google.com](https://developers.google.com/identity/protocols/OAuth2ServiceAccount)
 //! for a detailed description of the protocol. This crate implements OAuth for Service Accounts
